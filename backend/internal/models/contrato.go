@@ -29,6 +29,14 @@ type Contrato struct {
 	PortariaNomeacao string    `gorm:"type:varchar(255)"`
 	DataAssinatura   time.Time `gorm:"type:date;not null"`
 
+	// DataVigenciaFim alimenta o Radar de Alertas (Fase 1 do roadmap) —
+	// "faltam N dias pro fim do contrato". Nullable de propósito:
+	// contratos cadastrados antes desta coluna existir não têm esse dado,
+	// e não faz sentido travar retroativamente algo que não existia. Sem
+	// essa data, o contrato simplesmente não aparece no radar de vigência
+	// (não é tratado como vencido nem como OK).
+	DataVigenciaFim *time.Time `gorm:"type:date"`
+
 	ContratadaNome string `gorm:"type:varchar(255);not null"`
 	ContratadaCNPJ string `gorm:"type:varchar(18);not null;index"`
 

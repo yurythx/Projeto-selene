@@ -33,6 +33,9 @@ func (f *fakeProcessoPagamentoRepositoryOK) ListByContrato(ctx context.Context, 
 func (f *fakeProcessoPagamentoRepositoryOK) Update(ctx context.Context, p *models.ProcessoPagamento) error {
 	return nil
 }
+func (f *fakeProcessoPagamentoRepositoryOK) ListAtivosComContrato(ctx context.Context) ([]models.ProcessoPagamento, error) {
+	return nil, nil
+}
 
 // fakeTipoDocumentoRepositoryOK: idem, só FindByID precisa "achar" o tipo.
 type fakeTipoDocumentoRepositoryOK struct{}
@@ -106,7 +109,7 @@ func TestDocumentoServiceUpload_PathTraversal(t *testing.T) {
 
 	for _, nomeMalicioso := range nomesMaliciosos {
 		t.Run(nomeMalicioso, func(t *testing.T) {
-			doc, err := svc.Upload(context.Background(), processoID, 1, nomeMalicioso, []byte("conteúdo de teste"), uuid.New())
+			doc, err := svc.Upload(context.Background(), processoID, 1, nomeMalicioso, []byte("conteúdo de teste"), uuid.New(), nil)
 			if err != nil {
 				t.Fatalf("upload falhou inesperadamente: %v", err)
 			}

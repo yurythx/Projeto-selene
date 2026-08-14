@@ -220,6 +220,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/radar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista os itens em risco (Radar de Alertas)
+         * @description Varre contratos e processos ativos e retorna todo item que entra em algum dos 3 sinais de alerta: vigência de contrato perto do fim, certidão vencida/vencendo anexada a um processo em andamento, ou processo parado na mesma etapa do Kanban há muito tempo. Sem paginação — a lista é o conjunto completo de itens em risco.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ItemRadar"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contratos": {
         parameters: {
             query?: never;
@@ -699,6 +739,11 @@ export interface paths {
                         tipo_documento_id: number;
                         /** Format: binary */
                         arquivo: string;
+                        /**
+                         * Format: date
+                         * @description Opcional. Formato "AAAA-MM-DD" — só faz sentido pra tipos com ExigeValidade=true (certidões). Alimenta o Radar de Alertas.
+                         */
+                        data_validade?: string;
                     };
                 };
             };
@@ -930,6 +975,28 @@ export interface components {
             ID?: number;
             /** @example Nota de Empenho */
             Nome?: string;
+            /** @description true = tipo que vence (certidões) — o upload aceita 'data_validade'. */
+            ExigeValidade?: boolean;
+        };
+        /** @description Um alerta individual do Radar (Fase 1 do roadmap). */
+        ItemRadar: {
+            /** @enum {string} */
+            tipo?: "vigencia_contrato" | "certidao" | "processo_parado";
+            /** @enum {string} */
+            nivel?: "ATENCAO" | "CRITICO";
+            /** Format: uuid */
+            contrato_id?: string;
+            /** @example 125/2026 */
+            numero_contrato?: string;
+            /**
+             * Format: uuid
+             * @description Ausente pra alertas de tipo vigencia_contrato (o alerta é do contrato, não de um processo específico).
+             */
+            processo_id?: string | null;
+            /** @example Faltam 25 dias para o fim da vigência do contrato */
+            mensagem?: string;
+            /** @description Negativo quando o prazo já passou (vencido/parado há N dias). */
+            dias_restantes?: number;
         };
         /** @description KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI. */
         Usuario: {
@@ -965,6 +1032,11 @@ export interface components {
             TipoObjeto?: "CONSUMO" | "PERMANENTE" | "SERVICO";
             /** @description false = contrato encerrado (soft-close). */
             Ativo?: boolean;
+            /**
+             * Format: date
+             * @description Alimenta o Radar de Alertas — null se não cadastrada.
+             */
+            DataVigenciaFim?: string | null;
             /** Format: date-time */
             CreatedAt?: string;
             /** Format: date-time */
@@ -990,6 +1062,11 @@ export interface components {
             fiscal_id: string;
             /** @enum {string} */
             tipo_objeto: "CONSUMO" | "PERMANENTE" | "SERVICO";
+            /**
+             * Format: date
+             * @description Opcional. Formato "AAAA-MM-DD" — alimenta o Radar de Alertas.
+             */
+            data_vigencia_fim?: string;
         };
         AtualizarContratoRequest: {
             portaria_nomeacao?: string;
@@ -997,6 +1074,11 @@ export interface components {
             contratada_cnpj?: string;
             /** Format: email */
             contratada_email?: string;
+            /**
+             * Format: date
+             * @description Formato "AAAA-MM-DD". Enviar string vazia limpa a vigência cadastrada.
+             */
+            data_vigencia_fim?: string;
         };
         ProcessoPagamento: {
             /** Format: uuid */
@@ -1032,6 +1114,11 @@ export interface components {
             EnviadoPor?: components["schemas"]["Usuario"];
             /** Format: date-time */
             DataUpload?: string;
+            /**
+             * Format: date
+             * @description Só preenchida pra tipos com ExigeValidade=true (certidões).
+             */
+            DataValidade?: string | null;
         };
     };
     responses: {

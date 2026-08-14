@@ -22,6 +22,13 @@ type ContratoRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*models.Contrato, error)
 	List(ctx context.Context, pagina Pagina) (ResultadoPaginado[models.Contrato], error)
 	Update(ctx context.Context, contrato *models.Contrato) error
+	// ListAtivos retorna todos os contratos com Ativo=true, sem paginação
+	// — usado pelo RadarService (Fase 1 do roadmap) para varrer vigência
+	// de contrato. Não pagina de propósito: o radar precisa ver TODOS os
+	// contratos em risco, não uma página por vez; o volume esperado
+	// (contratos ativos de uma prefeitura) é pequeno o bastante pra isso
+	// ser seguro. Se deixar de ser, revisitar.
+	ListAtivos(ctx context.Context) ([]models.Contrato, error)
 }
 
 type gormContratoRepository struct {
@@ -80,6 +87,20 @@ func (r *gormContratoRepository) List(ctx context.Context, pagina Pagina) (Resul
 		Pagina:        pagina.Numero,
 		TamanhoPagina: pagina.Tamanho,
 	}, nil
+}
+
+func (r *gormContratoRepository) ListAtivos(ctx context.Context) ([]models.Contrato, error) {
+	var contratos []models.Contrato
+
+	err := r.db.WithContext(ctx).
+		Where("ativo = ?", true).
+		Order("numero_contrato").
+		Find(&contratos).Error
+	if err != nil {
+		return nil, fmt.Errorf("repository: listar contratos ativos: %w", err)
+	}
+
+	return contratos, nil
 }
 
 // Update salva as colunas próprias de Contrato, sem tocar na tabela

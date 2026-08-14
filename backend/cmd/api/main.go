@@ -92,6 +92,7 @@ func main() {
 	tipoDocRepo := repository.NewTipoDocumentoRepository(db)
 	processoRepo := repository.NewProcessoPagamentoRepository(db)
 	docRepo := repository.NewDocumentoAnexoRepository(db)
+	logRepo := repository.NewKanbanLogRepository(db)
 
 	// --- Services ---
 	userService := service.NewUserService(userRepo)
@@ -111,6 +112,8 @@ func main() {
 	if err != nil {
 		fatal("falha ao inicializar serviço de relatório", err)
 	}
+
+	radarService := service.NewRadarService(contratoRepo, processoRepo, docRepo, logRepo)
 
 	// --- Middleware de autenticação ---
 	// O contexto de fundo é usado apenas para o fetch inicial do JWKS na
@@ -149,6 +152,7 @@ func main() {
 	relatorioHandler := handler.NewRelatorioHandler(relatorioService)
 	userHandler := handler.NewUserHandler(userService)
 	kanbanRefHandler := handler.NewKanbanRefHandler(etapaRepo, tipoDocRepo)
+	radarHandler := handler.NewRadarHandler(radarService)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -202,6 +206,7 @@ func main() {
 		// Leitura: qualquer usuário autenticado pode consultar.
 		api.GET("/kanban/etapas", kanbanRefHandler.ListarEtapas)
 		api.GET("/kanban/tipos-documento", kanbanRefHandler.ListarTiposDocumento)
+		api.GET("/radar", radarHandler.Listar)
 		api.GET("/contratos", contratoHandler.Listar)
 		api.GET("/contratos/:id", contratoHandler.Buscar)
 		api.GET("/processos", processoHandler.Listar)

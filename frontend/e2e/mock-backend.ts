@@ -42,6 +42,9 @@ const etapas = [
 const tiposDocumento = [
   { ID: 1, Nome: "Ordem de Fornecimento (OF)" },
   { ID: 2, Nome: "Nota Fiscal / Fatura" },
+  // ExigeValidade=true testa o campo condicional "data_validade" no
+  // formulário de upload (ver components/kanban/processo-dialog.tsx).
+  { ID: 3, Nome: "CND Trabalhista", ExigeValidade: true },
 ];
 
 interface Contrato {
@@ -56,6 +59,7 @@ interface Contrato {
   Fiscal: Usuario;
   TipoObjeto: string;
   Ativo: boolean;
+  DataVigenciaFim: string | null;
   CreatedAt: string;
   UpdatedAt: string;
 }
@@ -113,6 +117,7 @@ function criarContratoSeed(): Contrato {
     Fiscal: usuarios[0],
     TipoObjeto: "SERVICO",
     Ativo: true,
+    DataVigenciaFim: null,
     CreatedAt: new Date().toISOString(),
     UpdatedAt: new Date().toISOString(),
   };
@@ -189,6 +194,13 @@ const server = createServer((req, res) => {
     if (pathname === "/api/v1/kanban/etapas") return json(res, 200, etapas);
     if (pathname === "/api/v1/kanban/tipos-documento") return json(res, 200, tiposDocumento);
 
+    // Radar de Alertas (Fase 1 do roadmap) — vazio por padrão: nenhum
+    // dos specs hoje depende de badges de alerta aparecendo, só de a
+    // chamada não quebrar o carregamento do Kanban.
+    if (pathname === "/api/v1/radar" && req.method === "GET") {
+      return json(res, 200, []);
+    }
+
     if (pathname === "/api/v1/contratos" && req.method === "GET") {
       return json(res, 200, paginado(contratos));
     }
@@ -207,6 +219,7 @@ const server = createServer((req, res) => {
         Fiscal: fiscal,
         TipoObjeto: corpo.tipo_objeto,
         Ativo: true,
+        DataVigenciaFim: corpo.data_vigencia_fim || null,
         CreatedAt: new Date().toISOString(),
         UpdatedAt: new Date().toISOString(),
       };
@@ -232,6 +245,10 @@ const server = createServer((req, res) => {
           ContratadaNome: corpo.contratada_nome ?? contrato.ContratadaNome,
           ContratadaCNPJ: corpo.contratada_cnpj ?? contrato.ContratadaCNPJ,
           ContratadaEmail: corpo.contratada_email ?? contrato.ContratadaEmail,
+          DataVigenciaFim:
+            corpo.data_vigencia_fim !== undefined
+              ? corpo.data_vigencia_fim || null
+              : contrato.DataVigenciaFim,
         });
         return json(res, 200, contrato);
       }

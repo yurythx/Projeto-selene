@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/kanban", label: "Kanban" },
   { href: "/contratos", label: "Contratos" },
+  { href: "/radar", label: "Radar" },
 ];
 
 export function Nav() {

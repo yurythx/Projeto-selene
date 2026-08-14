@@ -124,6 +124,16 @@ func (f *FakeContratoRepository) Update(ctx context.Context, contrato *models.Co
 	return nil
 }
 
+func (f *FakeContratoRepository) ListAtivos(ctx context.Context) ([]models.Contrato, error) {
+	var out []models.Contrato
+	for _, c := range f.Contratos {
+		if c.Ativo {
+			out = append(out, *c)
+		}
+	}
+	return out, nil
+}
+
 var _ repository.ContratoRepository = (*FakeContratoRepository)(nil)
 
 // --- TipoDocumentoRepository ---
@@ -267,6 +277,16 @@ func (f *FakeProcessoPagamentoRepository) ListByContrato(ctx context.Context, co
 func (f *FakeProcessoPagamentoRepository) Update(ctx context.Context, processo *models.ProcessoPagamento) error {
 	f.Processos[processo.ID] = processo
 	return nil
+}
+
+func (f *FakeProcessoPagamentoRepository) ListAtivosComContrato(ctx context.Context) ([]models.ProcessoPagamento, error) {
+	var out []models.ProcessoPagamento
+	for _, p := range f.Processos {
+		if p.Status == models.StatusProcessoAtivo {
+			out = append(out, *p)
+		}
+	}
+	return out, nil
 }
 
 var _ repository.ProcessoPagamentoRepository = (*FakeProcessoPagamentoRepository)(nil)

@@ -22,7 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { TipoDocumento, ProcessoPagamento, DocumentoAnexo } from "@/lib/api/client";
+import type { TipoDocumento, ProcessoPagamento, DocumentoAnexo, ItemRadar } from "@/lib/api/client";
+import { RadarNivelBadge } from "@/components/radar/radar-badge";
 import { TriangleAlertIcon } from "lucide-react";
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -37,12 +38,14 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 export function ProcessoDialog({
   processo,
   tiposDocumento,
+  alertasRadar = [],
   isFiscal,
   open,
   onOpenChange,
 }: {
   processo: ProcessoPagamento;
   tiposDocumento: TipoDocumento[];
+  alertasRadar?: ItemRadar[];
   isFiscal: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -51,6 +54,10 @@ export function ProcessoDialog({
   const queryClient = useQueryClient();
   const [tipoSelecionado, setTipoSelecionado] = useState<string>("");
   const [pendentes, setPendentes] = useState<string[] | null>(null);
+
+  const tipoDocumentoSelecionado = tiposDocumento.find(
+    (tipo) => String(tipo.ID) === tipoSelecionado
+  );
 
   const documentosQuery = useQuery({
     queryKey: ["documentos", processo.ID],
@@ -110,6 +117,12 @@ export function ProcessoDialog({
     const formData = new FormData();
     formData.append("tipo_documento_id", tipoSelecionado);
     formData.append("arquivo", arquivo);
+    if (tipoDocumentoSelecionado?.ExigeValidade) {
+      const dataValidadeInput = form.elements.namedItem("data_validade") as HTMLInputElement | null;
+      if (dataValidadeInput?.value) {
+        formData.append("data_validade", dataValidadeInput.value);
+      }
+    }
     uploadMutation.mutate(formData);
     form.reset();
   }
@@ -142,6 +155,20 @@ export function ProcessoDialog({
             </Badge>
           </p>
         </div>
+
+        {alertasRadar.length > 0 && (
+          <div className="space-y-1">
+            {alertasRadar.map((alerta, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm"
+              >
+                <span>{alerta.mensagem}</span>
+                {alerta.nivel && <RadarNivelBadge nivel={alerta.nivel} />}
+              </div>
+            ))}
+          </div>
+        )}
 
         {pendentes && pendentes.length > 0 && (
           <Alert variant="destructive">
@@ -203,6 +230,17 @@ export function ProcessoDialog({
                 accept="application/pdf,image/*"
               />
             </div>
+            {tipoDocumentoSelecionado?.ExigeValidade && (
+              <div className="space-y-1">
+                <Label htmlFor="data_validade">Validade</Label>
+                <input
+                  id="data_validade"
+                  name="data_validade"
+                  type="date"
+                  className="border-input h-9 rounded-md border bg-transparent px-2 text-sm"
+                />
+              </div>
+            )}
             <Button type="submit" variant="secondary" disabled={uploadMutation.isPending}>
               {uploadMutation.isPending ? "Enviando..." : "Anexar"}
             </Button>

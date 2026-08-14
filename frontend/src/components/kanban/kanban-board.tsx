@@ -4,7 +4,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import type { KanbanEtapa, TipoDocumento, Contrato, ProcessoPagamento } from "@/lib/api/client";
+import type {
+  KanbanEtapa,
+  TipoDocumento,
+  Contrato,
+  ProcessoPagamento,
+  ItemRadar,
+} from "@/lib/api/client";
+import { itensDoProcesso, nivelMaisCritico } from "@/lib/radar";
+import { RadarNivelBadge } from "@/components/radar/radar-badge";
 import { ProcessoDialog } from "./processo-dialog";
 import { NovoProcessoDialog } from "./novo-processo-dialog";
 
@@ -13,12 +21,14 @@ export function KanbanBoard({
   colunasIniciais,
   tiposDocumento,
   contratosAtivos,
+  radarItens,
   isFiscal,
 }: {
   etapas: KanbanEtapa[];
   colunasIniciais: ProcessoPagamento[][];
   tiposDocumento: TipoDocumento[];
   contratosAtivos: Contrato[];
+  radarItens: ItemRadar[];
   isFiscal: boolean;
 }) {
   const [selecionado, setSelecionado] = useState<ProcessoPagamento | null>(null);
@@ -41,24 +51,31 @@ export function KanbanBoard({
             </div>
 
             <div className="space-y-2">
-              {(colunasIniciais[i] ?? []).map((processo) => (
-                <Card
-                  key={processo.ID}
-                  className="cursor-pointer p-3 transition-colors hover:bg-accent"
-                  onClick={() => setSelecionado(processo)}
-                >
-                  <p className="text-sm font-medium">{processo.Contrato?.NumeroContrato}</p>
-                  <p className="text-muted-foreground text-xs">{processo.Contrato?.ContratadaNome}</p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-muted-foreground text-xs">{processo.MesReferencia}</span>
-                    {processo.Status === "Concluido" && (
-                      <Badge variant="default" className="text-xs">
-                        Pago
-                      </Badge>
-                    )}
-                  </div>
-                </Card>
-              ))}
+              {(colunasIniciais[i] ?? []).map((processo) => {
+                const alertas = itensDoProcesso(radarItens, processo);
+                const nivel = nivelMaisCritico(alertas);
+                return (
+                  <Card
+                    key={processo.ID}
+                    className="cursor-pointer p-3 transition-colors hover:bg-accent"
+                    onClick={() => setSelecionado(processo)}
+                  >
+                    <p className="text-sm font-medium">{processo.Contrato?.NumeroContrato}</p>
+                    <p className="text-muted-foreground text-xs">{processo.Contrato?.ContratadaNome}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground text-xs">{processo.MesReferencia}</span>
+                      <div className="flex items-center gap-1">
+                        {nivel && <RadarNivelBadge nivel={nivel} className="text-xs" />}
+                        {processo.Status === "Concluido" && (
+                          <Badge variant="default" className="text-xs">
+                            Pago
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
               {(colunasIniciais[i] ?? []).length === 0 && (
                 <p className="text-muted-foreground px-1 text-xs">Nenhum processo.</p>
               )}
@@ -71,6 +88,7 @@ export function KanbanBoard({
         <ProcessoDialog
           processo={selecionado}
           tiposDocumento={tiposDocumento}
+          alertasRadar={itensDoProcesso(radarItens, selecionado)}
           isFiscal={isFiscal}
           open={Boolean(selecionado)}
           onOpenChange={(open) => !open && setSelecionado(null)}

@@ -10,6 +10,7 @@ export type KanbanEtapa = components["schemas"]["KanbanEtapa"];
 export type TipoDocumento = components["schemas"]["TipoDocumento"];
 export type ProcessoPagamento = components["schemas"]["ProcessoPagamento"];
 export type DocumentoAnexo = components["schemas"]["DocumentoAnexo"];
+export type ItemRadar = components["schemas"]["ItemRadar"];
 
 /** Corpo do 422 de POST /processos/{id}/avancar quando o checklist da etapa não está completo. */
 export interface ChecklistIncompletoBody {
@@ -180,15 +181,26 @@ export function anexarDocumento(
   accessToken: string,
   processoId: string,
   tipoDocumentoId: number,
-  arquivo: File
+  arquivo: File,
+  // dataValidade ("AAAA-MM-DD") é opcional — só relevante pra tipos com
+  // ExigeValidade=true (certidões), mas o backend aceita pra qualquer
+  // tipo sem reclamar; quem decide se pede o campo é a UI.
+  dataValidade?: string
 ) {
   const formData = new FormData();
   formData.append("tipo_documento_id", String(tipoDocumentoId));
   formData.append("arquivo", arquivo);
+  if (dataValidade) {
+    formData.append("data_validade", dataValidade);
+  }
   return apiFetch<DocumentoAnexo>(`/api/v1/processos/${processoId}/documentos`, accessToken, {
     method: "POST",
     body: formData,
   });
+}
+
+export function listarRadar(accessToken: string) {
+  return apiFetch<ItemRadar[]>("/api/v1/radar", accessToken);
 }
 
 /**

@@ -17,6 +17,16 @@ import { z } from "zod";
  * defesa em profundidade, não redundância inútil.
  */
 
+// data_vigencia_fim ("AAAA-MM-DD") é opcional — alimenta o Radar de
+// Alertas (Fase 1 do roadmap); string vazia é aceita como "não informado"
+// nos dois schemas pra combinar com o <input type="date"> do form, que
+// emite "" quando o campo fica em branco.
+const dataOpcionalSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado: AAAA-MM-DD")
+  .optional()
+  .or(z.literal(""));
+
 export const novoContratoSchema = z.object({
   numero_contrato: z.string().trim().min(1, "obrigatório").max(50),
   portaria_nomeacao: z.string().trim().max(255).optional(),
@@ -25,6 +35,7 @@ export const novoContratoSchema = z.object({
   contratada_cnpj: z.string().trim().min(1, "obrigatório").max(20),
   contratada_email: z.string().trim().email("e-mail inválido").optional().or(z.literal("")),
   tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
+  data_vigencia_fim: dataOpcionalSchema,
 });
 
 export const atualizarContratoSchema = z.object({
@@ -32,6 +43,7 @@ export const atualizarContratoSchema = z.object({
   contratada_nome: z.string().trim().min(1, "obrigatório").max(255).optional(),
   contratada_cnpj: z.string().trim().min(1, "obrigatório").max(20).optional(),
   contratada_email: z.string().trim().email("e-mail inválido").optional().or(z.literal("")),
+  data_vigencia_fim: dataOpcionalSchema,
 });
 
 export const novoProcessoSchema = z.object({
@@ -48,3 +60,12 @@ export const atualizarUsuarioSchema = z.object({
 // tipo_documento_id chega como string (campo de FormData) — z.coerce
 // converte antes de validar como inteiro positivo.
 export const tipoDocumentoIdSchema = z.coerce.number().int().positive();
+
+// data_validade ("AAAA-MM-DD") também chega como campo de FormData,
+// sempre string — vazio/ausente é válido (nem todo tipo de documento
+// exige validade, ver TipoDocumento.ExigeValidade).
+export const dataValidadeSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado: AAAA-MM-DD")
+  .optional()
+  .or(z.literal(""));

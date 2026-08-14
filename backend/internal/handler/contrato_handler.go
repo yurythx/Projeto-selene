@@ -29,6 +29,10 @@ type criarContratoRequest struct {
 	ContratadaEmail  string            `json:"contratada_email"`
 	FiscalID         uuid.UUID         `json:"fiscal_id" binding:"required"`
 	TipoObjeto       models.TipoObjeto `json:"tipo_objeto" binding:"required"`
+	// DataVigenciaFim ("AAAA-MM-DD") é opcional — alimenta o Radar de
+	// Alertas (Fase 1 do roadmap); sem ela, o contrato não aparece no
+	// radar de vigência.
+	DataVigenciaFim string `json:"data_vigencia_fim"`
 }
 
 // Criar trata POST /api/v1/contratos.
@@ -48,6 +52,7 @@ func (h *ContratoHandler) Criar(c *gin.Context) {
 		ContratadaEmail:  req.ContratadaEmail,
 		FiscalID:         req.FiscalID,
 		TipoObjeto:       req.TipoObjeto,
+		DataVigenciaFim:  req.DataVigenciaFim,
 	})
 	if err != nil {
 		respondError(c, err)
@@ -90,6 +95,7 @@ type atualizarContratoRequest struct {
 	ContratadaNome   *string `json:"contratada_nome"`
 	ContratadaCNPJ   *string `json:"contratada_cnpj"`
 	ContratadaEmail  *string `json:"contratada_email"`
+	DataVigenciaFim  *string `json:"data_vigencia_fim"`
 }
 
 // Atualizar trata PATCH /api/v1/contratos/:id — só os campos presentes no
@@ -112,6 +118,7 @@ func (h *ContratoHandler) Atualizar(c *gin.Context) {
 		ContratadaNome:   req.ContratadaNome,
 		ContratadaCNPJ:   req.ContratadaCNPJ,
 		ContratadaEmail:  req.ContratadaEmail,
+		DataVigenciaFim:  req.DataVigenciaFim,
 	})
 	if err != nil {
 		respondError(c, err)

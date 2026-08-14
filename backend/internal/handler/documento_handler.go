@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -87,7 +88,22 @@ func (h *DocumentoHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	documento, err := h.documentoService.Upload(c.Request.Context(), processoID, tipoDocumentoID, arquivoHeader.Filename, conteudo, usuario.ID)
+	// "data_validade" é opcional — só faz sentido pra certidões (ver
+	// TipoDocumento.ExigeValidade). Formato "AAAA-MM-DD", igual
+	// Contrato.DataAssinatura no resto da API. Se vier ausente ou
+	// malformado, o documento é anexado do mesmo jeito, só sem entrar no
+	// radar de certidões (ver o comentário em DocumentoService.Upload).
+	var dataValidade *time.Time
+	if bruto := c.PostForm("data_validade"); bruto != "" {
+		if parsed, err := time.Parse("2006-01-02", bruto); err == nil {
+			dataValidade = &parsed
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "campo 'data_validade' precisa estar no formato AAAA-MM-DD"})
+			return
+		}
+	}
+
+	documento, err := h.documentoService.Upload(c.Request.Context(), processoID, tipoDocumentoID, arquivoHeader.Filename, conteudo, usuario.ID, dataValidade)
 	if err != nil {
 		respondError(c, err)
 		return

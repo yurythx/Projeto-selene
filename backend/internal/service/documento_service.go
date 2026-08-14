@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -56,6 +57,14 @@ func (s *DocumentoService) Upload(
 	nomeArquivo string,
 	conteudo []byte,
 	enviadoPorID uuid.UUID,
+	// dataValidade alimenta o Radar de Alertas (Fase 1 do roadmap) —
+	// nil quando o cliente não informou (ex: tipo de documento que não
+	// vence) ou quando optou por não preencher. Não é exigido mesmo
+	// quando TipoDocumento.ExigeValidade=true: sem essa data o
+	// documento simplesmente não aparece no radar de certidões, o que é
+	// preferível a travar o upload por um dado que o fiscal pode não ter
+	// em mãos naquele momento.
+	dataValidade *time.Time,
 ) (*models.DocumentoAnexo, error) {
 	// nomeArquivo vem direto do multipart do cliente (Content-Disposition
 	// da requisição) — NUNCA confiável. Sem sanitizar, um filename como
@@ -102,6 +111,7 @@ func (s *DocumentoService) Upload(
 		CaminhoStorage:      caminho,
 		HashArquivo:         hash,
 		EnviadoPorID:        enviadoPorID,
+		DataValidade:        dataValidade,
 	}
 	if err := s.docRepo.Create(ctx, documento); err != nil {
 		return nil, fmt.Errorf("service: registrar documento anexo: %w", err)

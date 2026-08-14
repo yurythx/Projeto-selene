@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -31,6 +32,11 @@ type NovoContratoInput struct {
 	ContratadaEmail  string
 	FiscalID         uuid.UUID
 	TipoObjeto       models.TipoObjeto
+	// DataVigenciaFim (formato "2006-01-02") alimenta o Radar de Alertas
+	// (Fase 1 do roadmap) — opcional: string vazia = não informado, o
+	// contrato simplesmente não aparece no radar de vigência (ver o
+	// comentário no campo do model).
+	DataVigenciaFim string
 }
 
 // ContratoService contém os casos de uso de cadastro/consulta de
@@ -69,6 +75,15 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 		return nil, fmt.Errorf("service: data de assinatura inválida: %w", err)
 	}
 
+	var dataVigenciaFim *time.Time
+	if input.DataVigenciaFim != "" {
+		parsed, err := parseData(input.DataVigenciaFim)
+		if err != nil {
+			return nil, fmt.Errorf("service: data de vigência inválida: %w", err)
+		}
+		dataVigenciaFim = &parsed
+	}
+
 	contrato := &models.Contrato{
 		NumeroContrato:   input.NumeroContrato,
 		PortariaNomeacao: input.PortariaNomeacao,
@@ -78,6 +93,7 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 		ContratadaEmail:  input.ContratadaEmail,
 		FiscalID:         input.FiscalID,
 		TipoObjeto:       input.TipoObjeto,
+		DataVigenciaFim:  dataVigenciaFim,
 		// Explícito, não implícito: o zero-value de bool em Go é false, e
 		// GORM.Create envia esse false para o banco em vez de deixar o
 		// DEFAULT true da coluna se aplicar (não há como o GORM
@@ -123,6 +139,11 @@ type AtualizarContratoInput struct {
 	ContratadaNome   *string
 	ContratadaCNPJ   *string
 	ContratadaEmail  *string
+	// DataVigenciaFim (formato "2006-01-02"), se não-nil, atualiza a
+	// vigência usada pelo Radar de Alertas. Ponteiro-pra-string (não
+	// ponteiro-pra-time.Time): distingue "não enviado" (nil) de "enviado
+	// vazio" (string vazia, que limpa a vigência cadastrada).
+	DataVigenciaFim *string
 }
 
 // Atualizar aplica as alterações de AtualizarContratoInput a um contrato
@@ -144,6 +165,17 @@ func (s *ContratoService) Atualizar(ctx context.Context, id uuid.UUID, input Atu
 	}
 	if input.ContratadaEmail != nil {
 		contrato.ContratadaEmail = *input.ContratadaEmail
+	}
+	if input.DataVigenciaFim != nil {
+		if *input.DataVigenciaFim == "" {
+			contrato.DataVigenciaFim = nil
+		} else {
+			parsed, err := parseData(*input.DataVigenciaFim)
+			if err != nil {
+				return nil, fmt.Errorf("service: data de vigência inválida: %w", err)
+			}
+			contrato.DataVigenciaFim = &parsed
+		}
 	}
 
 	if err := s.contratoRepo.Update(ctx, contrato); err != nil {

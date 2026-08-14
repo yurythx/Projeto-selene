@@ -38,6 +38,9 @@ const schema = z.object({
   contratada_email: z.string().email("E-mail inválido").optional().or(z.literal("")),
   portaria_nomeacao: z.string().optional(),
   tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
+  // Opcional — alimenta o Radar de Alertas (Fase 1 do roadmap). Sem essa
+  // data, o contrato simplesmente não aparece no radar de vigência.
+  data_vigencia_fim: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -56,6 +59,7 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
       contratada_email: "",
       portaria_nomeacao: "",
       tipo_objeto: "SERVICO",
+      data_vigencia_fim: "",
     },
   });
 
@@ -119,6 +123,14 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
                 </p>
               )}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="data_vigencia_fim">Fim da vigência (opcional)</Label>
+            <Input id="data_vigencia_fim" type="date" {...form.register("data_vigencia_fim")} />
+            <p className="text-muted-foreground text-xs">
+              Alimenta o Radar de Alertas de prazos legais.
+            </p>
           </div>
 
           <div className="space-y-2">

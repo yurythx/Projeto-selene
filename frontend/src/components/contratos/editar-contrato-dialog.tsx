@@ -29,6 +29,11 @@ const schema = z.object({
   contratada_nome: z.string().min(1, "Obrigatório"),
   contratada_cnpj: z.string().min(1, "Obrigatório"),
   contratada_email: z.string().email("E-mail inválido").optional().or(z.literal("")),
+  // Opcional — alimenta o Radar de Alertas (Fase 1 do roadmap). Campo
+  // vazio limpa a vigência cadastrada (ver AtualizarContratoInput no
+  // backend: ponteiro-pra-string distingue "não enviado" de "enviado
+  // vazio", e este form sempre envia o valor atual do input).
+  data_vigencia_fim: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -44,6 +49,7 @@ export function EditarContratoDialog({ contrato }: { contrato: Contrato }) {
       contratada_nome: contrato.ContratadaNome ?? "",
       contratada_cnpj: contrato.ContratadaCNPJ ?? "",
       contratada_email: contrato.ContratadaEmail ?? "",
+      data_vigencia_fim: contrato.DataVigenciaFim ?? "",
     },
   });
 
@@ -114,6 +120,14 @@ export function EditarContratoDialog({ contrato }: { contrato: Contrato }) {
           <div className="space-y-2">
             <Label htmlFor="portaria_nomeacao">Portaria de nomeação</Label>
             <Input id="portaria_nomeacao" {...form.register("portaria_nomeacao")} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="data_vigencia_fim">Fim da vigência (opcional)</Label>
+            <Input id="data_vigencia_fim" type="date" {...form.register("data_vigencia_fim")} />
+            <p className="text-muted-foreground text-xs">
+              Alimenta o Radar de Alertas de prazos legais. Deixe em branco pra limpar.
+            </p>
           </div>
 
           <DialogFooter>

@@ -5,6 +5,7 @@ import {
   listarTiposDocumento,
   listarProcessos,
   listarContratos,
+  listarRadar,
 } from "@/lib/api/client";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
 
@@ -16,12 +17,13 @@ export default async function KanbanPage() {
     return null;
   }
 
-  const [etapas, tiposDocumento, contratos] = await Promise.all([
+  const [etapas, tiposDocumento, contratos, radarItens] = await Promise.all([
     listarEtapas(accessToken),
     listarTiposDocumento(accessToken),
     // tamanho máximo permitido pela API — ver limitação documentada no
     // NovoProcessoDialog sobre contratos além da primeira página.
     listarContratos(accessToken, 1, 100),
+    listarRadar(accessToken),
   ]);
 
   const colunas = await Promise.all(
@@ -44,6 +46,7 @@ export default async function KanbanPage() {
         colunasIniciais={colunas.map((c) => c.dados)}
         tiposDocumento={tiposDocumento}
         contratosAtivos={contratosAtivos}
+        radarItens={radarItens}
         isFiscal={Boolean(session?.user?.isFiscal)}
       />
     </div>
