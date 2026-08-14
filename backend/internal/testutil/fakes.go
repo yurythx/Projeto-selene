@@ -351,3 +351,52 @@ func (f *FakeKanbanLogRepository) ListByProcesso(ctx context.Context, processoID
 }
 
 var _ repository.KanbanLogRepository = (*FakeKanbanLogRepository)(nil)
+
+// --- DocumentoEmitidoRepository ---
+
+type FakeDocumentoEmitidoRepository struct {
+	Documentos []models.DocumentoEmitido
+}
+
+func (f *FakeDocumentoEmitidoRepository) Create(ctx context.Context, documento *models.DocumentoEmitido) error {
+	if documento.ID == uuid.Nil {
+		documento.ID = uuid.New()
+	}
+	f.Documentos = append(f.Documentos, *documento)
+	return nil
+}
+
+func (f *FakeDocumentoEmitidoRepository) FindByCodigoVerificacao(ctx context.Context, codigo string) (*models.DocumentoEmitido, error) {
+	for _, d := range f.Documentos {
+		if d.CodigoVerificacao == codigo {
+			return &d, nil
+		}
+	}
+	return nil, repository.ErrDocumentoEmitidoNotFound
+}
+
+func (f *FakeDocumentoEmitidoRepository) ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.DocumentoEmitido, error) {
+	var out []models.DocumentoEmitido
+	for _, d := range f.Documentos {
+		if d.ContratoID == contratoID {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+func (f *FakeDocumentoEmitidoRepository) ListByContratoIDs(ctx context.Context, contratoIDs []uuid.UUID) ([]models.DocumentoEmitido, error) {
+	porID := make(map[uuid.UUID]bool, len(contratoIDs))
+	for _, id := range contratoIDs {
+		porID[id] = true
+	}
+	var out []models.DocumentoEmitido
+	for _, d := range f.Documentos {
+		if porID[d.ContratoID] {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
+var _ repository.DocumentoEmitidoRepository = (*FakeDocumentoEmitidoRepository)(nil)

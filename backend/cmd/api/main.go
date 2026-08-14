@@ -93,6 +93,7 @@ func main() {
 	processoRepo := repository.NewProcessoPagamentoRepository(db)
 	docRepo := repository.NewDocumentoAnexoRepository(db)
 	logRepo := repository.NewKanbanLogRepository(db)
+	docEmitidoRepo := repository.NewDocumentoEmitidoRepository(db)
 
 	// --- Services ---
 	userService := service.NewUserService(userRepo)
@@ -114,6 +115,8 @@ func main() {
 	}
 
 	radarService := service.NewRadarService(contratoRepo, processoRepo, docRepo, logRepo)
+
+	geradorDocumentosService := service.NewGeradorDocumentosService(contratoRepo, processoRepo, docEmitidoRepo, cfg.PublicURL)
 
 	// --- Middleware de autenticação ---
 	// O contexto de fundo é usado apenas para o fetch inicial do JWKS na
@@ -153,6 +156,7 @@ func main() {
 	userHandler := handler.NewUserHandler(userService)
 	kanbanRefHandler := handler.NewKanbanRefHandler(etapaRepo, tipoDocRepo)
 	radarHandler := handler.NewRadarHandler(radarService)
+	geradorDocumentosHandler := handler.NewGeradorDocumentosHandler(geradorDocumentosService)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -181,6 +185,14 @@ func main() {
 	// acesso a essa rota deve ser restrito por rede (VPC/firewall), não
 	// pela aplicação.
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Verificação de autenticidade de documentos emitidos (Módulo 2 do
+	// roadmap) — de propósito FORA do grupo /api/v1 autenticado abaixo:
+	// quem escaneia o QR code de um Atesto impresso não tem login no
+	// Selene. O backend não é publicamente exposto (só o frontend/BFF, ver
+	// DEPLOY.md), então isso não abre a API real ao público — só essa
+	// única rota de consulta, sempre chamada server-side pelo BFF.
+	router.GET("/api/v1/verificar/:codigo", geradorDocumentosHandler.Verificar)
 
 	api := router.Group("/api/v1")
 	api.Use(authMiddleware)
@@ -226,6 +238,11 @@ func main() {
 			fiscal.POST("/processos/:id/avancar", processoHandler.Avancar)
 			fiscal.POST("/processos/:id/concluir", processoHandler.Concluir)
 			fiscal.POST("/processos/:id/documentos", documentoHandler.Upload)
+
+			// Módulo 2 do roadmap: geração dos 3 documentos legais.
+			fiscal.POST("/contratos/:id/notificacao", geradorDocumentosHandler.GerarNotificacao)
+			fiscal.POST("/processos/:id/atesto", geradorDocumentosHandler.GerarAtesto)
+			fiscal.POST("/contratos/:id/minuta-aditivo", geradorDocumentosHandler.GerarMinutaAditivo)
 		}
 
 		// Administração de contas: restrita a administradores.

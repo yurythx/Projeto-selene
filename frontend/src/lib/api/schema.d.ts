@@ -457,6 +457,156 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/contratos/{id}/notificacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ContratoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera a Notificação de Descumprimento (PDF)
+         * @description Registra o histórico em DocumentoEmitido (Fase 2 do roadmap).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Motivo da notificação (texto livre). */
+                        motivo: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description PDF gerado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contratos/{id}/minuta-aditivo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ContratoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera a Minuta de Aditivo (PDF)
+         * @description Justificativa técnica preliminar a partir de um questionário curto — não substitui a formalização jurídica definitiva do termo aditivo. Registra o histórico em DocumentoEmitido.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MinutaAditivoRequest"];
+                };
+            };
+            responses: {
+                /** @description PDF gerado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/verificar/{codigo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                codigo: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Verifica a autenticidade de um documento emitido (QR code)
+         * @description Rota PÚBLICA — fora da autenticação Keycloak, propositalmente: quem escaneia o QR code de um Atesto impresso não tem login no Selene. Nunca responde 404 pra um código inexistente; sempre 200 com `valido=false`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    codigo: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK (mesmo para código inválido/inexistente — ver `valido`). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificarDocumentoResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/processos": {
         parameters: {
             query?: never;
@@ -825,6 +975,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/processos/{id}/atesto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera o Atesto do processo (PDF, com QR code de verificação)
+         * @description Folha de Rosto + Termo de Recebimento com QR code embutido, que aponta pra `PUBLIC_URL/verificar/{codigo}` (ou só o código em texto puro se `PUBLIC_URL` não estiver configurado). Registra o histórico em DocumentoEmitido.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description PDF gerado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -997,6 +1195,36 @@ export interface components {
             mensagem?: string;
             /** @description Negativo quando o prazo já passou (vencido/parado há N dias). */
             dias_restantes?: number;
+        };
+        MinutaAditivoRequest: {
+            /** @enum {string} */
+            tipo_aditivo: "VALOR" | "PRAZO" | "VALOR_E_PRAZO";
+            /** @description Justificativa técnica da necessidade do aditivo. */
+            justificativa: string;
+            /** @description Opcional, texto livre (ex: "R$ 150.000,00"). Preenchido quando tipo_aditivo inclui VALOR. */
+            novo_valor?: string;
+            /** @description Opcional, texto livre (ex: "31/12/2026"). Preenchido quando tipo_aditivo inclui PRAZO. */
+            novo_prazo?: string;
+        };
+        /** @description Resposta de GET /verificar/{codigo} (Fase 2 do roadmap) — rota pública. */
+        VerificarDocumentoResponse: {
+            /** @description false = código inexistente/inválido; os demais campos ficam ausentes nesse caso. */
+            valido?: boolean;
+            /** @enum {string} */
+            tipo?: "NOTIFICACAO_DESCUMPRIMENTO" | "ATESTO" | "MINUTA_ADITIVO";
+            /** @example 125/2026 */
+            numero_contrato?: string;
+            contratada_nome?: string;
+            /**
+             * @description Presente só pra documentos amarrados a um processo (ex: Atesto).
+             * @example 07/2026
+             */
+            mes_referencia?: string;
+            gerado_por_nome?: string;
+            /** @example 13/08/2026 14:32 */
+            criado_em?: string;
+            /** @example SEL-A1B2C3D4E5F60708 */
+            codigo_verificacao?: string;
         };
         /** @description KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI. */
         Usuario: {

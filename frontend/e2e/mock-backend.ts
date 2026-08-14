@@ -333,6 +333,32 @@ const server = createServer((req, res) => {
       return res.end(pdfFalso);
     }
 
+    // Módulo 2 do roadmap (Gerador de Documentos) — os 3 geradores só
+    // precisam devolver um PDF fake pra exercitar o fluxo do frontend
+    // (abrir numa aba nova); nenhum spec hoje verifica o conteúdo do PDF.
+    const notificacaoMatch = pathname.match(/^\/api\/v1\/contratos\/([^/]+)\/notificacao$/);
+    if (notificacaoMatch && req.method === "POST") {
+      const pdfFalso = Buffer.from("%PDF-1.4 notificacao de teste");
+      res.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": pdfFalso.length });
+      return res.end(pdfFalso);
+    }
+    const minutaAditivoMatch = pathname.match(/^\/api\/v1\/contratos\/([^/]+)\/minuta-aditivo$/);
+    if (minutaAditivoMatch && req.method === "POST") {
+      const pdfFalso = Buffer.from("%PDF-1.4 minuta de aditivo de teste");
+      res.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": pdfFalso.length });
+      return res.end(pdfFalso);
+    }
+    const atestoMatch = pathname.match(/^\/api\/v1\/processos\/([^/]+)\/atesto$/);
+    if (atestoMatch && req.method === "POST") {
+      const pdfFalso = Buffer.from("%PDF-1.4 atesto de teste");
+      res.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": pdfFalso.length });
+      return res.end(pdfFalso);
+    }
+    const verificarMatch = pathname.match(/^\/api\/v1\/verificar\/([^/]+)$/);
+    if (verificarMatch && req.method === "GET") {
+      return json(res, 200, { valido: false });
+    }
+
     if (pathname === "/api/v1/admin/users" && req.method === "GET") {
       return json(res, 200, usuarios);
     }

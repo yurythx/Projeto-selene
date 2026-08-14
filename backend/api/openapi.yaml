@@ -41,6 +41,11 @@ tags:
     description: Geração do Relatório de Pagamento (PDF).
   - name: Radar
     description: Alertas de vigência de contrato, certidão vencida/vencendo e processo parado (Fase 1 do roadmap de módulos).
+  - name: Gerador de Documentos
+    description: >
+      Geração de PDFs oficiais (Notificação de Descumprimento, Atesto,
+      Minuta de Aditivo) e verificação pública de autenticidade via QR code
+      (Fase 2 do roadmap de módulos).
   - name: Administração
     description: Gestão de contas de usuário — restrito a administradores.
 
@@ -256,6 +261,83 @@ paths:
         "404": { $ref: "#/components/responses/NaoEncontrado" }
         "429": { $ref: "#/components/responses/MuitasRequisicoes" }
 
+  /api/v1/contratos/{id}/notificacao:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    post:
+      tags: [Gerador de Documentos]
+      summary: Gera a Notificação de Descumprimento (PDF)
+      description: Registra o histórico em DocumentoEmitido (Fase 2 do roadmap).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, description: "Motivo da notificação (texto livre)." }
+      responses:
+        "200":
+          description: PDF gerado.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/contratos/{id}/minuta-aditivo:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    post:
+      tags: [Gerador de Documentos]
+      summary: Gera a Minuta de Aditivo (PDF)
+      description: >
+        Justificativa técnica preliminar a partir de um questionário curto
+        — não substitui a formalização jurídica definitiva do termo
+        aditivo. Registra o histórico em DocumentoEmitido.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MinutaAditivoRequest" }
+      responses:
+        "200":
+          description: PDF gerado.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/verificar/{codigo}:
+    parameters:
+      - name: codigo
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Gerador de Documentos]
+      summary: Verifica a autenticidade de um documento emitido (QR code)
+      description: >
+        Rota PÚBLICA — fora da autenticação Keycloak, propositalmente: quem
+        escaneia o QR code de um Atesto impresso não tem login no Selene.
+        Nunca responde 404 pra um código inexistente; sempre 200 com
+        `valido=false`.
+      security: []
+      responses:
+        "200":
+          description: OK (mesmo para código inválido/inexistente — ver `valido`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerificarDocumentoResponse" }
+
   /api/v1/processos:
     get:
       tags: [Processos de Pagamento]
@@ -439,6 +521,29 @@ paths:
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
 
+  /api/v1/processos/{id}/atesto:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    post:
+      tags: [Gerador de Documentos]
+      summary: Gera o Atesto do processo (PDF, com QR code de verificação)
+      description: >
+        Folha de Rosto + Termo de Recebimento com QR code embutido, que
+        aponta pra `PUBLIC_URL/verificar/{codigo}` (ou só o código em texto
+        puro se `PUBLIC_URL` não estiver configurado). Registra o histórico
+        em DocumentoEmitido.
+      responses:
+        "200":
+          description: PDF gerado.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
   /api/v1/admin/users:
     get:
       tags: [Administração]
@@ -599,6 +704,28 @@ components:
         processo_id: { type: string, format: uuid, nullable: true, description: "Ausente pra alertas de tipo vigencia_contrato (o alerta é do contrato, não de um processo específico)." }
         mensagem: { type: string, example: "Faltam 25 dias para o fim da vigência do contrato" }
         dias_restantes: { type: integer, description: "Negativo quando o prazo já passou (vencido/parado há N dias)." }
+
+    MinutaAditivoRequest:
+      type: object
+      required: [tipo_aditivo, justificativa]
+      properties:
+        tipo_aditivo: { type: string, enum: [VALOR, PRAZO, VALOR_E_PRAZO] }
+        justificativa: { type: string, description: "Justificativa técnica da necessidade do aditivo." }
+        novo_valor: { type: string, description: 'Opcional, texto livre (ex: "R$ 150.000,00"). Preenchido quando tipo_aditivo inclui VALOR.' }
+        novo_prazo: { type: string, description: 'Opcional, texto livre (ex: "31/12/2026"). Preenchido quando tipo_aditivo inclui PRAZO.' }
+
+    VerificarDocumentoResponse:
+      type: object
+      description: Resposta de GET /verificar/{codigo} (Fase 2 do roadmap) — rota pública.
+      properties:
+        valido: { type: boolean, description: "false = código inexistente/inválido; os demais campos ficam ausentes nesse caso." }
+        tipo: { type: string, enum: [NOTIFICACAO_DESCUMPRIMENTO, ATESTO, MINUTA_ADITIVO] }
+        numero_contrato: { type: string, example: "125/2026" }
+        contratada_nome: { type: string }
+        mes_referencia: { type: string, example: "07/2026", description: "Presente só pra documentos amarrados a um processo (ex: Atesto)." }
+        gerado_por_nome: { type: string }
+        criado_em: { type: string, example: "13/08/2026 14:32" }
+        codigo_verificacao: { type: string, example: "SEL-A1B2C3D4E5F60708" }
 
     Usuario:
       type: object

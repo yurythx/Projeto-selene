@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { TipoDocumento, ProcessoPagamento, DocumentoAnexo, ItemRadar } from "@/lib/api/client";
 import { RadarNivelBadge } from "@/components/radar/radar-badge";
+import { abrirPDFDeResposta } from "@/lib/abrir-pdf";
 import { TriangleAlertIcon } from "lucide-react";
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -101,6 +102,22 @@ export function ProcessoDialog({
       toast.success("Processo marcado como pago.");
       onOpenChange(false);
       router.refresh();
+    },
+    onError: (erro: Error) => toast.error(erro.message),
+  });
+
+  const atestoMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/processos/${processo.ID}/atesto`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Não foi possível gerar o atesto.");
+      }
+      return res;
+    },
+    onSuccess: async (res) => {
+      await abrirPDFDeResposta(res);
+      toast.success("Atesto gerado.");
     },
     onError: (erro: Error) => toast.error(erro.message),
   });
@@ -258,6 +275,13 @@ export function ProcessoDialog({
           </a>
           {isFiscal && (
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => atestoMutation.mutate()}
+                disabled={atestoMutation.isPending}
+              >
+                {atestoMutation.isPending ? "Gerando..." : "Gerar Atesto"}
+              </Button>
               {podeAvancar && (
                 <Button onClick={() => avancarMutation.mutate()} disabled={avancarMutation.isPending}>
                   {avancarMutation.isPending ? "Avançando..." : "Avançar etapa"}

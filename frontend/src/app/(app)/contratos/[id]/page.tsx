@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EditarContratoDialog } from "@/components/contratos/editar-contrato-dialog";
 import { EncerrarContratoButton } from "@/components/contratos/encerrar-contrato-button";
+import { GerarNotificacaoDialog } from "@/components/contratos/gerar-notificacao-dialog";
+import { GerarMinutaAditivoDialog } from "@/components/contratos/gerar-minuta-aditivo-dialog";
 
 const TIPO_OBJETO_LABEL: Record<string, string> = {
   CONSUMO: "Consumo",
@@ -90,9 +92,11 @@ export default async function ContratoDetalhePage({
       </Card>
 
       {isFiscal && (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <EditarContratoDialog contrato={contrato} />
           {contrato.Ativo && <EncerrarContratoButton contratoId={contrato.ID!} />}
+          <GerarNotificacaoDialog contratoId={contrato.ID!} />
+          <GerarMinutaAditivoDialog contratoId={contrato.ID!} />
         </div>
       )}
     </div>

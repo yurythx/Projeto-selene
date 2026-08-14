@@ -11,6 +11,8 @@ export type TipoDocumento = components["schemas"]["TipoDocumento"];
 export type ProcessoPagamento = components["schemas"]["ProcessoPagamento"];
 export type DocumentoAnexo = components["schemas"]["DocumentoAnexo"];
 export type ItemRadar = components["schemas"]["ItemRadar"];
+export type MinutaAditivoRequest = components["schemas"]["MinutaAditivoRequest"];
+export type VerificarDocumentoResponse = components["schemas"]["VerificarDocumentoResponse"];
 
 /** Corpo do 422 de POST /processos/{id}/avancar quando o checklist da etapa não está completo. */
 export interface ChecklistIncompletoBody {
@@ -219,4 +221,65 @@ export async function baixarRelatorio(accessToken: string, processoId: string): 
   }
 
   return res;
+}
+
+/**
+ * POST binário genérico (Módulo 2 do roadmap: os 3 geradores de PDF) —
+ * mesma lógica de baixarRelatorio, mas com corpo JSON opcional.
+ */
+async function postPDF(path: string, accessToken: string, body?: unknown): Promise<Response> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const responseBody = await res.json().catch(() => undefined);
+    throw new ApiError(res.status, responseBody);
+  }
+
+  return res;
+}
+
+/** Gera a Notificação de Descumprimento (PDF) do contrato informado. */
+export function gerarNotificacao(accessToken: string, contratoId: string, motivo: string) {
+  return postPDF(`/api/v1/contratos/${contratoId}/notificacao`, accessToken, { motivo });
+}
+
+/** Gera o Atesto (PDF, com QR code de verificação) do processo informado. */
+export function gerarAtesto(accessToken: string, processoId: string) {
+  return postPDF(`/api/v1/processos/${processoId}/atesto`, accessToken);
+}
+
+/** Gera a Minuta de Aditivo (PDF) do contrato informado. */
+export function gerarMinutaAditivo(accessToken: string, contratoId: string, dados: MinutaAditivoRequest) {
+  return postPDF(`/api/v1/contratos/${contratoId}/minuta-aditivo`, accessToken, dados);
+}
+
+/**
+ * Verifica a autenticidade de um documento emitido pelo código do QR code.
+ * Diferente das demais funções deste arquivo, NÃO recebe accessToken: a
+ * rota do backend é pública de propósito (ver GeradorDocumentosHandler.
+ * Verificar) — quem escaneia o QR de um papel impresso não tem login no
+ * Selene.
+ */
+export async function verificarDocumento(codigo: string): Promise<VerificarDocumentoResponse> {
+  const res = await fetch(`${API_URL}/api/v1/verificar/${encodeURIComponent(codigo)}`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    // A rota do backend não deveria responder erro (sempre 200, ver
+    // comentário no handler) — se acontecer mesmo assim (backend fora do
+    // ar etc.), trata como "inválido" em vez de propagar um 5xx pra uma
+    // página pública.
+    return { valido: false };
+  }
+
+  return (await res.json()) as VerificarDocumentoResponse;
 }

@@ -95,6 +95,15 @@ type Config struct {
 	// gravados localmente.
 	StorageDir string
 
+	// PublicURL é a URL pública do FRONTEND (ex:
+	// "https://selene.papermoon.cloud"), usada só para montar o link
+	// embutido no QR code do Atesto (Fase 2 do roadmap): o backend não é
+	// publicamente exposto (só o frontend/BFF), então o QR sempre aponta
+	// pra uma página do frontend, nunca direto pro backend. Vazio
+	// (default) = o QR embute só o código de verificação em texto puro
+	// (ainda funcional pra digitação manual, só sem o link clicável).
+	PublicURL string
+
 	// Configuração SMTP para o envio assíncrono do pacote digital à
 	// empresa contratada (Etapa 3 do Kanban). Todos opcionais — se
 	// SMTPHost estiver vazio, o envio real fica desabilitado e apenas
@@ -194,6 +203,7 @@ func Load() (*Config, error) {
 		OTELServiceName:      getEnvOrDefault("OTEL_SERVICE_NAME", "projeto-selene-backend"),
 
 		StorageDir: getEnvOrDefault("STORAGE_DIR", "./storage"),
+		PublicURL:  os.Getenv("PUBLIC_URL"),
 
 		SMTPHost:     os.Getenv("SMTP_HOST"),
 		SMTPPort:     getEnvOrDefault("SMTP_PORT", "587"),

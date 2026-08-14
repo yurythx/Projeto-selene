@@ -45,14 +45,16 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrEtapaNotFound),
 		errors.Is(err, repository.ErrTipoDocumentoNotFound),
 		errors.Is(err, repository.ErrProcessoNotFound),
-		errors.Is(err, repository.ErrDocumentoNotFound):
+		errors.Is(err, repository.ErrDocumentoNotFound),
+		errors.Is(err, repository.ErrDocumentoEmitidoNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "recurso não encontrado"})
 
 	case errors.Is(err, service.ErrEtapaFinal),
 		errors.Is(err, service.ErrProcessoNaoElegivelParaConclusao),
 		errors.Is(err, service.ErrFiscalInvalido),
 		errors.Is(err, service.ErrTipoObjetoInvalido),
-		errors.Is(err, service.ErrContratoEncerrado):
+		errors.Is(err, service.ErrContratoEncerrado),
+		errors.Is(err, service.ErrMotivoObrigatorio):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 	default:

@@ -69,3 +69,16 @@ export const dataValidadeSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado: AAAA-MM-DD")
   .optional()
   .or(z.literal(""));
+
+// Módulo 2 do roadmap: Gerador Inteligente de Documentos Legais.
+
+export const gerarNotificacaoSchema = z.object({
+  motivo: z.string().trim().min(1, "obrigatório").max(2000),
+});
+
+export const minutaAditivoSchema = z.object({
+  tipo_aditivo: z.enum(["VALOR", "PRAZO", "VALOR_E_PRAZO"]),
+  justificativa: z.string().trim().min(1, "obrigatório").max(2000),
+  novo_valor: z.string().trim().max(255).optional(),
+  novo_prazo: z.string().trim().max(255).optional(),
+});

@@ -38,3 +38,9 @@ var ErrTipoObjetoInvalido = errors.New("service: tipo de objeto inválido")
 // ErrContratoEncerrado é retornado ao tentar abrir um novo processo de
 // pagamento para um contrato marcado como inativo (Contrato.Ativo=false).
 var ErrContratoEncerrado = errors.New("service: contrato está encerrado, não aceita novos processos de pagamento")
+
+// ErrMotivoObrigatorio é retornado pelo Gerador de Documentos (Fase 2 do
+// roadmap) quando a Notificação de Descumprimento ou a Minuta de Aditivo
+// são geradas sem um motivo/justificativa — os dois únicos tipos que
+// exigem esse campo (o Atesto não pede motivo).
+var ErrMotivoObrigatorio = errors.New("service: motivo/justificativa é obrigatório")
