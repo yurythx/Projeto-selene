@@ -20,8 +20,13 @@ type DocumentoAnexo struct {
 	TipoDocumentoID int            `gorm:"not null;index"`
 	TipoDocumento   *TipoDocumento `gorm:"foreignKey:TipoDocumentoID;references:ID"`
 
-	NomeArquivo    string `gorm:"type:varchar(255);not null"`
-	CaminhoStorage string `gorm:"type:text;not null"` // caminho local ou S3 do PDF
+	NomeArquivo string `gorm:"type:varchar(255);not null"`
+
+	// CaminhoStorage é o caminho local (ou chave S3) onde o arquivo está
+	// gravado — detalhe de infraestrutura do servidor, não deve vazar
+	// pela API (json:"-"): nenhum cliente precisa saber a estrutura de
+	// diretórios do filesystem do backend.
+	CaminhoStorage string `gorm:"type:text;not null" json:"-"`
 
 	// HashArquivo é o SHA-256 (hex, 64 caracteres) do conteúdo do arquivo,
 	// usado para evitar duplicidade de upload dentro do mesmo processo de

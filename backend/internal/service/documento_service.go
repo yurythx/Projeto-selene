@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -56,6 +57,13 @@ func (s *DocumentoService) Upload(
 	conteudo []byte,
 	enviadoPorID uuid.UUID,
 ) (*models.DocumentoAnexo, error) {
+	// nomeArquivo vem direto do multipart do cliente (Content-Disposition
+	// da requisição) — NUNCA confiável. Sem sanitizar, um filename como
+	// "../../../../evil.sh" faria o filepath.Join abaixo escapar de
+	// destDir (path traversal, CWE-22); o hash+"_" na frente só anula UM
+	// nível de "../", não protege contra vários.
+	nomeArquivo = sanitizarNomeArquivo(nomeArquivo)
+
 	if _, err := s.processoRepo.FindByID(ctx, processoID); err != nil {
 		return nil, err
 	}
@@ -109,4 +117,38 @@ func (s *DocumentoService) Listar(ctx context.Context, processoID uuid.UUID) ([]
 		return nil, fmt.Errorf("service: listar documentos do processo: %w", err)
 	}
 	return documentos, nil
+}
+
+// sanitizarNomeArquivo neutraliza um filename de upload não confiável
+// antes de usá-lo em qualquer caminho de disco ou header (Content-
+// Disposition do e-mail em notifier.go). Duas proteções:
+//
+//  1. filepath.Base descarta qualquer componente de diretório do nome —
+//     inclusive sequências "../" — então o resultado nunca contém um
+//     separador de caminho, o que por si só impede escapar de destDir em
+//     DocumentoService.Upload via filepath.Join.
+//  2. Caracteres de controle (CR, LF, NUL, etc.) são removidos — evita
+//     que um filename injete headers adicionais se for reaproveitado tal
+//     qual em Content-Disposition (MIME) mais adiante.
+func sanitizarNomeArquivo(nome string) string {
+	const fallback = "arquivo"
+
+	base := filepath.Base(nome)
+	if base == "." || base == ".." || base == string(filepath.Separator) || base == "" {
+		return fallback
+	}
+
+	var limpo strings.Builder
+	for _, r := range base {
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		limpo.WriteRune(r)
+	}
+
+	resultado := limpo.String()
+	if resultado == "" {
+		return fallback
+	}
+	return resultado
 }
