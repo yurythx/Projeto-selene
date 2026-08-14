@@ -61,17 +61,17 @@ jobs:
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: backend
-          # --timeout generoso: com cache frio (primeira run, ou go.sum
-          # mudou), o typecheck de todas as dependências (OTel, GORM +
-          # plugins de tracing, cliente Redis) mediu ~3m30s num ambiente
-          # com specs parecidas com o runner padrão do GitHub — o default
-          # do golangci-lint ficava curto demais e derrubava o job com
-          # exit code 3 (timeout), não um lint issue de verdade.
-          args: --timeout=8m
+        # golangci-lint-action@v6 (binário via go install, na toolchain
+        # do runner) falhou duas vezes com "exit code 3" sem detalhe —
+        # o endpoint de logs da API do GitHub exige permissão de admin
+        # mesmo em repo público, então não deu pra investigar a causa
+        # exata. Trocado por invocar a imagem Docker oficial diretamente
+        # (mesma versão usada localmente, v2.12.2) — reproduzi esse
+        # comando localmente, com recursos equivalentes ao runner padrão
+        # (2 CPUs, 7GB) e cache frio, e terminou limpo ("0 issues") em
+        # ~3m30s. Perde o cache/anotações inline da action, mas é o
+        # caminho comprovado enquanto a causa raiz não é confirmada.
+        run: docker run --rm -v "$GITHUB_WORKSPACE/backend:/app" -w /app golangci/golangci-lint:v2.12.2 golangci-lint run ./...
 
       - name: go build
         run: go build ./...
