@@ -50,6 +50,11 @@ tags:
     description: >
       Vistorias de campo com registro fotográfico e geolocalização, e o
       "Relatório de Campo" em PDF (Fase 3 do roadmap de módulos).
+  - name: Dossiê do Fornecedor
+    description: >
+      Consolidação por CNPJ de contratos, histórico de notificações de
+      descumprimento e Score de Pontualidade (Fase 4 do roadmap de
+      módulos).
   - name: Administração
     description: Gestão de contas de usuário — restrito a administradores.
 
@@ -651,6 +656,40 @@ paths:
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
 
+  /api/v1/fornecedores:
+    get:
+      tags: [Dossiê do Fornecedor]
+      summary: Lista um resumo por CNPJ de todos os fornecedores
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FornecedorResumo" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/fornecedores/{cnpj}:
+    parameters:
+      - name: cnpj
+        in: path
+        required: true
+        schema: { type: string }
+        description: 'Só dígitos (sem máscara) — ver FornecedorResumo.cnpj.'
+        example: "12345678000190"
+    get:
+      tags: [Dossiê do Fornecedor]
+      summary: Monta o dossiê completo do fornecedor
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FornecedorDossie" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
   /api/v1/admin/users:
     get:
       tags: [Administração]
@@ -859,6 +898,54 @@ components:
         VistoriaID: { type: string, format: uuid }
         NomeArquivo: { type: string }
         HashArquivo: { type: string }
+        CreatedAt: { type: string, format: date-time }
+
+    FornecedorResumo:
+      type: object
+      description: Uma linha da listagem consolidada por CNPJ (Fase 4 do roadmap).
+      properties:
+        cnpj: { type: string, description: "Só dígitos, sem máscara — identificador canônico usado na URL do dossiê.", example: "12345678000190" }
+        cnpj_formatado: { type: string, description: "Como cadastrado no contrato, só para exibição.", example: "12.345.678/0001-90" }
+        nome: { type: string }
+        qtd_contratos: { type: integer }
+        qtd_contratos_ativos: { type: integer }
+
+    FornecedorDossie:
+      type: object
+      description: Consolidação completa de um fornecedor (Fase 4 do roadmap).
+      properties:
+        cnpj: { type: string, example: "12345678000190" }
+        cnpj_formatado: { type: string, example: "12.345.678/0001-90" }
+        nome: { type: string }
+        contratos:
+          type: array
+          items: { $ref: "#/components/schemas/Contrato" }
+        notificacoes:
+          type: array
+          description: 'Só DocumentoEmitido do tipo NOTIFICACAO_DESCUMPRIMENTO — o "histórico de penalidades".'
+          items: { $ref: "#/components/schemas/DocumentoEmitido" }
+        score_pontualidade:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            Percentual (0-100) de transições de etapa do Kanban que
+            aconteceram em até 15 dias (mesmo limiar do Radar de Alertas
+            pra "processo parado"). null quando não há transições
+            suficientes pra calcular — distinto de 0%.
+
+    DocumentoEmitido:
+      type: object
+      description: Um PDF oficial gerado pelo Selene (Fase 2 do roadmap) — histórico consultável no Dossiê do Fornecedor.
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        ProcessoPagamentoID: { type: string, format: uuid, nullable: true }
+        Tipo: { type: string, enum: [NOTIFICACAO_DESCUMPRIMENTO, ATESTO, MINUTA_ADITIVO] }
+        Motivo: { type: string }
+        GeradoPorID: { type: string, format: uuid }
+        GeradoPor: { $ref: "#/components/schemas/Usuario" }
+        CodigoVerificacao: { type: string, example: "SEL-A1B2C3D4E5F60708" }
         CreatedAt: { type: string, format: date-time }
 
     Usuario:

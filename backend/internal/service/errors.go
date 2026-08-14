@@ -44,3 +44,7 @@ var ErrContratoEncerrado = errors.New("service: contrato está encerrado, não a
 // são geradas sem um motivo/justificativa — os dois únicos tipos que
 // exigem esse campo (o Atesto não pede motivo).
 var ErrMotivoObrigatorio = errors.New("service: motivo/justificativa é obrigatório")
+
+// ErrFornecedorNaoEncontrado é retornado pelo Dossiê do Fornecedor (Fase 4
+// do roadmap) quando nenhum contrato cadastrado tem o CNPJ informado.
+var ErrFornecedorNaoEncontrado = errors.New("service: nenhum contrato encontrado para este CNPJ")

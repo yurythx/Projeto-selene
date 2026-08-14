@@ -418,6 +418,37 @@ const server = createServer((req, res) => {
       return res.end(pdfFalso);
     }
 
+    // Módulo 4 do roadmap (Dossiê do Fornecedor) — agrupa os contratos em
+    // memória por CNPJ (só dígitos), mesma normalização do backend real.
+    const apenasDigitos = (v: string) => v.replace(/\D/g, "");
+    if (pathname === "/api/v1/fornecedores" && req.method === "GET") {
+      const porCnpj = new Map<string, { cnpj: string; cnpj_formatado: string; nome: string; qtd_contratos: number; qtd_contratos_ativos: number }>();
+      for (const c of contratos) {
+        const chave = apenasDigitos(c.ContratadaCNPJ);
+        const atual = porCnpj.get(chave) ?? { cnpj: chave, cnpj_formatado: c.ContratadaCNPJ, nome: c.ContratadaNome, qtd_contratos: 0, qtd_contratos_ativos: 0 };
+        atual.qtd_contratos += 1;
+        if (c.Ativo) atual.qtd_contratos_ativos += 1;
+        porCnpj.set(chave, atual);
+      }
+      return json(res, 200, Array.from(porCnpj.values()));
+    }
+    const fornecedorMatch = pathname.match(/^\/api\/v1\/fornecedores\/([^/]+)$/);
+    if (fornecedorMatch && req.method === "GET") {
+      const alvo = apenasDigitos(decodeURIComponent(fornecedorMatch[1]));
+      const contratosDoFornecedor = contratos.filter((c) => apenasDigitos(c.ContratadaCNPJ) === alvo);
+      if (contratosDoFornecedor.length === 0) {
+        return json(res, 404, { error: "não encontrado" });
+      }
+      return json(res, 200, {
+        cnpj: alvo,
+        cnpj_formatado: contratosDoFornecedor[0].ContratadaCNPJ,
+        nome: contratosDoFornecedor[0].ContratadaNome,
+        contratos: contratosDoFornecedor,
+        notificacoes: [],
+        score_pontualidade: null,
+      });
+    }
+
     if (pathname === "/api/v1/admin/users" && req.method === "GET") {
       return json(res, 200, usuarios);
     }

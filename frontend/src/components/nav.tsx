@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/kanban", label: "Kanban" },
   { href: "/contratos", label: "Contratos" },
   { href: "/radar", label: "Radar" },
+  { href: "/fornecedores", label: "Fornecedores" },
 ];
 
 export function Nav() {

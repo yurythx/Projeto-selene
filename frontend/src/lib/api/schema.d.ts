@@ -1214,6 +1214,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fornecedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista um resumo por CNPJ de todos os fornecedores */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FornecedorResumo"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fornecedores/{cnpj}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Só dígitos (sem máscara) — ver FornecedorResumo.cnpj.
+                 * @example 12345678000190
+                 */
+                cnpj: string;
+            };
+            cookie?: never;
+        };
+        /** Monta o dossiê completo do fornecedor */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /**
+                     * @description Só dígitos (sem máscara) — ver FornecedorResumo.cnpj.
+                     * @example 12345678000190
+                     */
+                    cnpj: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FornecedorDossie"];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -1448,6 +1535,57 @@ export interface components {
             VistoriaID?: string;
             NomeArquivo?: string;
             HashArquivo?: string;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        /** @description Uma linha da listagem consolidada por CNPJ (Fase 4 do roadmap). */
+        FornecedorResumo: {
+            /**
+             * @description Só dígitos, sem máscara — identificador canônico usado na URL do dossiê.
+             * @example 12345678000190
+             */
+            cnpj?: string;
+            /**
+             * @description Como cadastrado no contrato, só para exibição.
+             * @example 12.345.678/0001-90
+             */
+            cnpj_formatado?: string;
+            nome?: string;
+            qtd_contratos?: number;
+            qtd_contratos_ativos?: number;
+        };
+        /** @description Consolidação completa de um fornecedor (Fase 4 do roadmap). */
+        FornecedorDossie: {
+            /** @example 12345678000190 */
+            cnpj?: string;
+            /** @example 12.345.678/0001-90 */
+            cnpj_formatado?: string;
+            nome?: string;
+            contratos?: components["schemas"]["Contrato"][];
+            /** @description Só DocumentoEmitido do tipo NOTIFICACAO_DESCUMPRIMENTO — o "histórico de penalidades". */
+            notificacoes?: components["schemas"]["DocumentoEmitido"][];
+            /**
+             * Format: double
+             * @description Percentual (0-100) de transições de etapa do Kanban que aconteceram em até 15 dias (mesmo limiar do Radar de Alertas pra "processo parado"). null quando não há transições suficientes pra calcular — distinto de 0%.
+             */
+            score_pontualidade?: number | null;
+        };
+        /** @description Um PDF oficial gerado pelo Selene (Fase 2 do roadmap) — histórico consultável no Dossiê do Fornecedor. */
+        DocumentoEmitido: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ContratoID?: string;
+            /** Format: uuid */
+            ProcessoPagamentoID?: string | null;
+            /** @enum {string} */
+            Tipo?: "NOTIFICACAO_DESCUMPRIMENTO" | "ATESTO" | "MINUTA_ADITIVO";
+            Motivo?: string;
+            /** Format: uuid */
+            GeradoPorID?: string;
+            GeradoPor?: components["schemas"]["Usuario"];
+            /** @example SEL-A1B2C3D4E5F60708 */
+            CodigoVerificacao?: string;
             /** Format: date-time */
             CreatedAt?: string;
         };

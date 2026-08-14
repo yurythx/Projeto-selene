@@ -122,6 +122,8 @@ func main() {
 
 	vistoriaService := service.NewVistoriaService(vistoriaRepo, fotoVistoriaRepo, processoRepo, cfg.StorageDir)
 
+	fornecedorService := service.NewFornecedorService(contratoRepo, processoRepo, logRepo, docEmitidoRepo)
+
 	// --- Middleware de autenticação ---
 	// O contexto de fundo é usado apenas para o fetch inicial do JWKS na
 	// construção do middleware — não está atrelado ao ciclo de vida de
@@ -162,6 +164,7 @@ func main() {
 	radarHandler := handler.NewRadarHandler(radarService)
 	geradorDocumentosHandler := handler.NewGeradorDocumentosHandler(geradorDocumentosService)
 	vistoriaHandler := handler.NewVistoriaHandler(vistoriaService)
+	fornecedorHandler := handler.NewFornecedorHandler(fornecedorService)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -232,6 +235,8 @@ func main() {
 		api.GET("/processos/:id/relatorio", relatorioHandler.Gerar)
 		api.GET("/processos/:id/vistorias", vistoriaHandler.ListarPorProcesso)
 		api.GET("/vistorias/:id/relatorio", vistoriaHandler.GerarRelatorioCampo)
+		api.GET("/fornecedores", fornecedorHandler.Listar)
+		api.GET("/fornecedores/:cnpj", fornecedorHandler.Buscar)
 
 		// Escrita/movimentação do Kanban: restrita a fiscais habilitados
 		// e sujeita a rate limit (por usuário autenticado).

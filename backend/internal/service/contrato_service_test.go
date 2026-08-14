@@ -99,6 +99,10 @@ func (f *fakeContratoRepository) ListAtivos(ctx context.Context) ([]models.Contr
 	return nil, nil
 }
 
+func (f *fakeContratoRepository) ListTodos(ctx context.Context) ([]models.Contrato, error) {
+	return nil, nil
+}
+
 var _ repository.ContratoRepository = (*fakeContratoRepository)(nil)
 
 func TestContratoServiceCriar(t *testing.T) {

@@ -15,6 +15,8 @@ export type MinutaAditivoRequest = components["schemas"]["MinutaAditivoRequest"]
 export type VerificarDocumentoResponse = components["schemas"]["VerificarDocumentoResponse"];
 export type RegistroVistoria = components["schemas"]["RegistroVistoria"];
 export type FotoVistoria = components["schemas"]["FotoVistoria"];
+export type FornecedorResumo = components["schemas"]["FornecedorResumo"];
+export type FornecedorDossie = components["schemas"]["FornecedorDossie"];
 
 /** Corpo de POST /processos/{id}/vistorias. */
 export interface NovaVistoriaRequest {
@@ -232,6 +234,14 @@ export function anexarFotoVistoria(accessToken: string, vistoriaId: string, foto
     method: "POST",
     body: formData,
   });
+}
+
+export function listarFornecedores(accessToken: string) {
+  return apiFetch<FornecedorResumo[]>("/api/v1/fornecedores", accessToken);
+}
+
+export function buscarFornecedor(accessToken: string, cnpj: string) {
+  return apiFetch<FornecedorDossie>(`/api/v1/fornecedores/${cnpj}`, accessToken);
 }
 
 /**

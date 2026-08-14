@@ -29,6 +29,12 @@ type ContratoRepository interface {
 	// (contratos ativos de uma prefeitura) é pequeno o bastante pra isso
 	// ser seguro. Se deixar de ser, revisitar.
 	ListAtivos(ctx context.Context) ([]models.Contrato, error)
+	// ListTodos retorna TODOS os contratos (ativos e encerrados), sem
+	// paginação — usado pelo FornecedorService (Fase 4 do roadmap) para
+	// agrupar por CNPJ. Mesma justificativa de volume de ListAtivos: o
+	// conjunto de contratos de uma prefeitura é pequeno o bastante pra uma
+	// varredura completa em memória ser segura.
+	ListTodos(ctx context.Context) ([]models.Contrato, error)
 }
 
 type gormContratoRepository struct {
@@ -98,6 +104,20 @@ func (r *gormContratoRepository) ListAtivos(ctx context.Context) ([]models.Contr
 		Find(&contratos).Error
 	if err != nil {
 		return nil, fmt.Errorf("repository: listar contratos ativos: %w", err)
+	}
+
+	return contratos, nil
+}
+
+func (r *gormContratoRepository) ListTodos(ctx context.Context) ([]models.Contrato, error) {
+	var contratos []models.Contrato
+
+	err := r.db.WithContext(ctx).
+		Preload("Fiscal").
+		Order("contratada_cnpj, numero_contrato").
+		Find(&contratos).Error
+	if err != nil {
+		return nil, fmt.Errorf("repository: listar todos os contratos: %w", err)
 	}
 
 	return contratos, nil

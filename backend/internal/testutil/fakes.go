@@ -134,6 +134,14 @@ func (f *FakeContratoRepository) ListAtivos(ctx context.Context) ([]models.Contr
 	return out, nil
 }
 
+func (f *FakeContratoRepository) ListTodos(ctx context.Context) ([]models.Contrato, error) {
+	out := make([]models.Contrato, 0, len(f.Contratos))
+	for _, c := range f.Contratos {
+		out = append(out, *c)
+	}
+	return out, nil
+}
+
 var _ repository.ContratoRepository = (*FakeContratoRepository)(nil)
 
 // --- TipoDocumentoRepository ---
@@ -344,6 +352,20 @@ func (f *FakeKanbanLogRepository) ListByProcesso(ctx context.Context, processoID
 	var out []models.KanbanLog
 	for _, l := range f.Logs {
 		if l.ProcessoPagamentoID == processoID {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
+func (f *FakeKanbanLogRepository) ListByProcessos(ctx context.Context, processoIDs []uuid.UUID) ([]models.KanbanLog, error) {
+	porID := make(map[uuid.UUID]bool, len(processoIDs))
+	for _, id := range processoIDs {
+		porID[id] = true
+	}
+	var out []models.KanbanLog
+	for _, l := range f.Logs {
+		if porID[l.ProcessoPagamentoID] {
 			out = append(out, l)
 		}
 	}
