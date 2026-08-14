@@ -11,7 +11,10 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     globals: true,
-    exclude: ["node_modules", ".next"],
+    // "e2e" usa @playwright/test (test/expect próprios, incompatíveis
+    // com os globals do Vitest) — tem sua config e runner separados
+    // (playwright.config.ts, `npm run test:e2e`).
+    exclude: ["node_modules", ".next", "e2e"],
     // Pool "forks" (default) spawna um processo filho por worker — em
     // runners de CI com poucos CPUs (ex: GitHub Actions, 2 vCPUs) e sob
     // contêiner, isso pode travar no handshake inicial ("Timeout waiting

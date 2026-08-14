@@ -65,6 +65,20 @@ npm test
 - `src/components/contratos/novo-contrato-dialog.test.tsx` — validação do formulário, que `fiscal_id` nunca é exposto/enviado pelo client, submissão bem e mal sucedida.
 - `src/components/kanban/*.test.tsx` — documentos, e principalmente o fluxo de checklist incompleto (422 → mostra `documentos_pendentes`).
 - `src/components/contratos/encerrar-contrato-button.test.tsx`, `src/components/admin/editar-usuario-dialog.test.tsx`.
+- `src/lib/verify-origin.test.ts` — o helper de defesa contra CSRF.
+
+### E2E (Playwright)
+
+```bash
+npx playwright install --with-deps chromium   # só na primeira vez
+npm run test:e2e
+```
+
+Sobe dois servidores locais (`playwright.config.ts`): um stub do backend em memória (`e2e/mock-backend.ts` — implementa só as rotas exercitadas pelos specs, sem Go/Postgres/Keycloak reais) e a própria app rodando o artefato **standalone real** (`node .next/standalone/server.js`, o mesmo que o Dockerfile empacota — `next start` não suporta `output: "standalone"` e chegou a causar hidratação inconsistente num teste, por isso o cuidado de rodar exatamente o que vai pra produção).
+
+A sessão do Auth.js é **injetada direto num cookie** (`e2e/fixtures/auth.ts`, via `next-auth/jwt.encode()` com o mesmo `AUTH_SECRET` do servidor de teste) em vez de logar de verdade pelo Keycloak — não faz sentido (nem seria seguro) usar credenciais reais da instância de produção da prefeitura em CI. O que os specs cobrem é o comportamento do frontend a partir de uma sessão válida; o fluxo de login em si (redirect, `client_id`, discovery document) foi validado manualmente contra o Keycloak real antes deste commit.
+
+Specs em `e2e/*.spec.ts`: redirecionamento de quem não tem sessão, CRUD de contratos, o board do Kanban (incluindo o 422 de checklist incompleto e upload de documento) e a tela de administração (visibilidade por `is_admin`).
 
 **Nota sobre `vitest.config.mts`**: `pool: "threads"` + `fileParallelism: false` não são só estilo — o pool padrão do Vitest 4 (`"forks"`, um processo filho por arquivo de teste) trava esperando os workers responderem em ambientes com poucos CPUs/contêineres (reproduzido em CI e num container Docker local simples: `Timeout waiting for worker to respond`, suíte inteira falha com "no tests found" mesmo com o código correto). `"threads"` usa `worker_threads` (sem spawn de processo) e é bem mais robusto nesse cenário.
 
@@ -132,17 +146,16 @@ Abrir um processo novo não tem restrição de "fiscal dono do contrato" — a r
 - [x] Defesa em profundidade contra CSRF nos 8 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
 - [x] Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) via `next.config.ts`
 - [x] `loading.tsx` (streaming) e `error.tsx`/`global-error.tsx` (boundary de erro amigável) nas rotas principais
-- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes
-- [x] CI (lint + testes + build + imagem Docker), mesmo pipeline do backend
+- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes unitários/componente + 12 E2E (Playwright)
+- [x] CI (lint + testes unitários + testes E2E + build + imagem Docker), mesmo pipeline do backend
 - [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root
 - [x] Tipos gerados a partir do OpenAPI do backend (`openapi-typescript`) — sem duplicar contratos de API à mão
 - [ ] CSP com nonce (hoje usa `'unsafe-inline'` pra scripts/estilos — mudar pra nonce via `proxy.ts` exigiria forçar renderização dinâmica em todas as páginas; ver `next.config.ts` para o raciocínio)
-- [ ] Testes E2E (Playwright) cobrindo o fluxo real ponta a ponta contra um Keycloak/backend de verdade
 - [ ] Paginação de verdade na listagem de contratos e nas colunas do Kanban (hoje busca até 100 registros de uma vez, sem UI de "próxima página")
 - [ ] Rate limiting nos Route Handlers do BFF — hoje só existe no backend Go (que já rate-limita as rotas de escrita por usuário); redundante mas não coberto no lado do Next
 
 ## Limitações conhecidas
 
-- **Login real não testado em navegador nesta sessão** — a construção da URL de autorização contra o Keycloak real (issuer, client_id, redirect_uri, discovery document) foi validada via curl, mas o fluxo interativo completo (login → callback → sessão) depende de um usuário de verdade clicando num browser.
+- **Login real não testado em navegador nesta sessão** — a construção da URL de autorização contra o Keycloak real (issuer, client_id, redirect_uri, discovery document) foi validada via curl, mas o fluxo interativo completo (login → callback → sessão) depende de um usuário de verdade clicando num browser. Um bug real relacionado foi encontrado (e corrigido) montando a suíte E2E: `getAccessToken()` decidia o nome do cookie de sessão com base em `NODE_ENV`, mas o Auth.js decide isso por requisição, com base no protocolo (`http`/`https`) — no docker-compose atual (HTTP puro, sem TLS na frente), isso fazia toda página protegida se comportar como se o usuário estivesse deslogado mesmo com uma sessão válida. `lib/auth-token.ts` agora tenta os dois nomes de cookie em vez de adivinhar.
 - **Sem seletor de fiscal no cadastro de contrato/processo** — qualquer fiscal pode ser atribuído a um contrato ou abrir um processo pra qualquer contrato ativo, porque é assim que o backend autoriza hoje (sem checagem de propriedade). Documentado também no backend.
 - **Confirmação de "Encerrar contrato" via `window.confirm`** — funcional, mas um `AlertDialog` dedicado (shadcn/ui já tem o primitivo) seria a versão "produção de verdade" dessa UX.
