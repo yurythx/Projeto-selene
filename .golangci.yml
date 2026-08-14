@@ -1,0 +1,18 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - gosec
+  exclusions:
+    rules:
+      # Testes usam hashes/UUIDs previsíveis de propósito (dados de teste,
+      # não segredos) — gosec não precisa reclamar disso aqui.
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

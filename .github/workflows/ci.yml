@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancela execuções antigas do mesmo PR/branch quando um novo push chega —
+# não faz sentido gastar minutos de CI validando um commit já superado.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    # Sobe um Postgres real como serviço do job — os testes de integração
+    # (internal/repository, internal/service) exigem um banco de verdade
+    # (ver internal/testutil.OpenTestDB) e aqui ele está sempre disponível,
+    # ao contrário do ambiente de quem roda `go test` localmente sem Docker.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: selene
+          POSTGRES_PASSWORD: selene
+          POSTGRES_DB: projeto_selene
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U selene -d projeto_selene"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verificar formatação (gofmt)
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Os arquivos abaixo não estão formatados com gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test (unitários + integração)
+        env:
+          TEST_DATABASE_URL: "host=localhost port=5432 user=selene password=selene dbname=projeto_selene sslmode=disable"
+        # -p 1: os pacotes internal/repository e internal/service rodam
+        # testes de integração contra o MESMO Postgres externo — go test
+        # roda pacotes diferentes em paralelo por padrão, e dois pacotes
+        # migrando/truncando o mesmo banco ao mesmo tempo pode gerar
+        # deadlock no Postgres (transitório, mas evitável). -p 1 serializa
+        # a execução por pacote.
+        run: go test ./... -v -race -p 1
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build da imagem Docker
+        run: docker build -t projeto-selene:ci .
