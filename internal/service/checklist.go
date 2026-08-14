@@ -1,0 +1,115 @@
+package service
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/google/uuid"
+
+	"projeto-selene/internal/models"
+	"projeto-selene/internal/repository"
+)
+
+// checklistBase mapeia o ID de cada etapa do Kanban (a etapa de ORIGEM de
+// uma transição, i.e. a etapa que o card está deixando) para os nomes dos
+// TipoDocumento exigidos antes de permitir o avanço — Seção 5 da
+// documentação de domínio. Etapas sem entrada aqui (2 e 6) não têm
+// checklist de saída: a Coluna 2 é apenas tramitação externa read-only, e
+// a Coluna 6 é terminal (não avança, apenas é marcada como paga).
+var checklistBase = map[int][]string{
+	1: {
+		"Ordem de Fornecimento (OF)",
+		"Pré-Empenho",
+		"Ofício de Solicitação",
+	},
+	3: {
+		"Nota de Empenho",
+	},
+	4: {
+		"Nota Fiscal / Fatura",
+		"Ordem de Recepção",
+	},
+	5: {
+		"Extrato do Empenho",
+		"Declaração do Simples Nacional",
+		"CND Trabalhista",
+		"CND FGTS",
+		"CND Municipal",
+		"CND Estadual",
+		"CND Federal",
+		"CND INSS",
+		// Aprovação física: o relatório gerado, assinado pelo Secretário e
+		// com o atesto escaneado, precisa ser reanexado antes do avanço.
+		"Relatório de Pagamento Assinado",
+	},
+}
+
+// checklistCondicionalServico são os documentos exigidos ADICIONALMENTE na
+// Etapa 5 quando o contrato é da categoria SERVICO (Seção 5, "Regra
+// Condicional por Tipo").
+var checklistCondicionalServico = []string{
+	"Planilha de Medição de Serviços",
+	"Boleto DAM",
+}
+
+// RequisitosEtapa retorna a lista completa de nomes de TipoDocumento
+// exigidos para sair da etapaOrigemID, já incluindo os itens condicionais
+// de acordo com o tipoObjeto do contrato. Etapas sem checklist (2 e 6)
+// retornam uma lista vazia.
+func RequisitosEtapa(etapaOrigemID int, tipoObjeto models.TipoObjeto) []string {
+	base, ok := checklistBase[etapaOrigemID]
+	if !ok {
+		return nil
+	}
+
+	requisitos := make([]string, len(base))
+	copy(requisitos, base)
+
+	if etapaOrigemID == 5 && tipoObjeto == models.TipoObjetoServico {
+		requisitos = append(requisitos, checklistCondicionalServico...)
+	}
+
+	return requisitos
+}
+
+// ChecklistPendente compara os documentos exigidos pela etapaOrigemID
+// (dado o tipoObjeto do contrato) com os documentos já anexados ao
+// processo, e retorna os nomes dos que ainda faltam. Uma lista vazia
+// significa checklist satisfeito — o card pode avançar.
+//
+// Documentos anexados em etapas anteriores contam automaticamente aqui
+// (reaproveitamento de arquivos por card, Seção 7.2): a checagem é sobre
+// TODOS os documentos do processo, não apenas os anexados na etapa atual.
+func ChecklistPendente(
+	ctx context.Context,
+	docRepo repository.DocumentoAnexoRepository,
+	processoID uuid.UUID,
+	etapaOrigemID int,
+	tipoObjeto models.TipoObjeto,
+) ([]string, error) {
+	requisitos := RequisitosEtapa(etapaOrigemID, tipoObjeto)
+	if len(requisitos) == 0 {
+		return nil, nil
+	}
+
+	documentos, err := docRepo.ListByProcesso(ctx, processoID)
+	if err != nil {
+		return nil, fmt.Errorf("service: carregar documentos anexados para checklist: %w", err)
+	}
+
+	anexados := make(map[string]bool, len(documentos))
+	for _, doc := range documentos {
+		if doc.TipoDocumento != nil {
+			anexados[doc.TipoDocumento.Nome] = true
+		}
+	}
+
+	var pendentes []string
+	for _, nome := range requisitos {
+		if !anexados[nome] {
+			pendentes = append(pendentes, nome)
+		}
+	}
+
+	return pendentes, nil
+}
