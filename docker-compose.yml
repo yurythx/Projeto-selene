@@ -1,6 +1,10 @@
-# Orquestra o monorepo (backend + Postgres + Redis + Jaeger agora;
-# frontend entra aqui quando existir). Cada serviço aponta pro seu próprio
-# subdiretório — nenhum build usa a raiz do repo como contexto.
+# Orquestra o monorepo inteiro (frontend + backend + Postgres + Redis +
+# Jaeger). Cada serviço aponta pro seu próprio subdiretório — nenhum build
+# usa a raiz do repo como contexto.
+#
+# O frontend usa o Keycloak real da prefeitura (não um serviço local) — as
+# credenciais do client (AUTH_KEYCLOAK_*) e AUTH_SECRET vêm do .env da raiz,
+# nunca commitadas. Ver frontend/README.md para como criar o client.
 services:
   postgres:
     image: postgres:16-alpine
@@ -81,9 +85,22 @@ services:
     volumes:
       - storage_data:/app/storage
 
-  # frontend:
-  #   build: ./frontend
-  #   ...  (ainda não implementado)
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      AUTH_TRUST_HOST: "true"
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_KEYCLOAK_ID: ${AUTH_KEYCLOAK_ID}
+      AUTH_KEYCLOAK_SECRET: ${AUTH_KEYCLOAK_SECRET}
+      AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER}
+      # Rede interna do compose — nunca o host/porta publicado pro browser.
+      API_URL: http://backend:8080
 
 volumes:
   postgres_data:
