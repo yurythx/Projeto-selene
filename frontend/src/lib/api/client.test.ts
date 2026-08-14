@@ -7,6 +7,10 @@ import {
   listarProcessos,
   avancarProcesso,
   anexarDocumento,
+  atualizarContrato,
+  encerrarContrato,
+  listarUsuarios,
+  atualizarUsuario,
 } from "./client";
 
 describe("apiFetch", () => {
@@ -169,5 +173,62 @@ describe("anexarDocumento", () => {
     expect(init.body).toBeInstanceOf(FormData);
     expect((init.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
     expect((init.body as FormData).get("tipo_documento_id")).toBe("4");
+  });
+});
+
+describe("atualizarContrato", () => {
+  it("faz PATCH com o corpo serializado em JSON", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ID: "1" }), { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await atualizarContrato("token", "contrato-1", { contratada_nome: "Nova Razão Social" });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://backend.test/api/v1/contratos/contrato-1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ contratada_nome: "Nova Razão Social" });
+  });
+});
+
+describe("encerrarContrato", () => {
+  it("faz POST em /contratos/{id}/encerrar", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ID: "1", Ativo: false }), { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await encerrarContrato("token", "contrato-1");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://backend.test/api/v1/contratos/contrato-1/encerrar");
+    expect(init.method).toBe("POST");
+  });
+});
+
+describe("listarUsuarios / atualizarUsuario", () => {
+  it("lista usuários em GET /admin/users", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await listarUsuarios("token");
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://backend.test/api/v1/admin/users");
+  });
+
+  it("atualiza usuário via PATCH /admin/users/{id}", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ID: "u1" }), { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await atualizarUsuario("token", "u1", { is_admin: true });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://backend.test/api/v1/admin/users/u1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ is_admin: true });
   });
 });

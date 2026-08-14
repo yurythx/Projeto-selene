@@ -63,6 +63,10 @@ npm test
 
 - `src/lib/api/client.test.ts` — o wrapper de fetch pro backend (headers, querystring de paginação, tratamento de erro via `ApiError`).
 - `src/components/contratos/novo-contrato-dialog.test.tsx` — validação do formulário, que `fiscal_id` nunca é exposto/enviado pelo client, submissão bem e mal sucedida.
+- `src/components/kanban/*.test.tsx` — documentos, e principalmente o fluxo de checklist incompleto (422 → mostra `documentos_pendentes`).
+- `src/components/contratos/encerrar-contrato-button.test.tsx`, `src/components/admin/editar-usuario-dialog.test.tsx`.
+
+**Nota sobre `vitest.config.mts`**: `pool: "threads"` + `fileParallelism: false` não são só estilo — o pool padrão do Vitest 4 (`"forks"`, um processo filho por arquivo de teste) trava esperando os workers responderem em ambientes com poucos CPUs/contêineres (reproduzido em CI e num container Docker local simples: `Timeout waiting for worker to respond`, suíte inteira falha com "no tests found" mesmo com o código correto). `"threads"` usa `worker_threads` (sem spawn de processo) e é bem mais robusto nesse cenário.
 
 ## Gerando os tipos da API
 
@@ -89,11 +93,14 @@ src/
   app/
     (app)/            # rotas autenticadas — layout com Nav
       contratos/      # listagem (Server Component) + criação (dialog)
+        [id]/         # detalhe, editar, encerrar
       kanban/          # board das 6 etapas (Server Component + client dialogs)
+      admin/usuarios/  # só is_admin — gerenciar is_fiscal/is_admin/matricula
     api/
       auth/[...nextauth]/  # handler do Auth.js
-      contratos/           # Route Handler BFF (POST, injeta fiscal_id)
+      contratos/           # Route Handlers BFF (POST, PATCH, encerrar — injeta fiscal_id no POST)
       processos/            # Route Handlers BFF (criar, avançar, concluir, documentos, relatório)
+      admin/usuarios/        # Route Handler BFF (PATCH, checa is_admin antes de repassar)
     login/            # fora do grupo (app) — sem Nav
   auth.ts             # config do Auth.js (provider Keycloak, callbacks)
   proxy.ts            # checagem otimista de sessão (renomeado de middleware.ts no Next 16)
@@ -104,8 +111,9 @@ src/
       schema.d.ts     # gerado — não editar à mão
   components/
     ui/               # shadcn/ui
-    contratos/        # componentes específicos da tela de contratos
+    contratos/        # componentes específicos das telas de contrato
     kanban/           # board, dialog de processo (documentos/avançar/concluir), novo processo
+    admin/            # dialog de edição de usuário
 ```
 
 ## Quadro Kanban

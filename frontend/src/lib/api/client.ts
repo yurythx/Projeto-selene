@@ -93,6 +93,40 @@ export function criarContrato(accessToken: string, dados: NovoContratoRequest) {
   });
 }
 
+export function buscarContrato(accessToken: string, id: string) {
+  return apiFetch<Contrato>(`/api/v1/contratos/${id}`, accessToken);
+}
+
+export function atualizarContrato(accessToken: string, id: string, dados: AtualizarContratoRequest) {
+  return apiFetch<Contrato>(`/api/v1/contratos/${id}`, accessToken, {
+    method: "PATCH",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function encerrarContrato(accessToken: string, id: string) {
+  return apiFetch<Contrato>(`/api/v1/contratos/${id}/encerrar`, accessToken, {
+    method: "POST",
+  });
+}
+
+export interface AtualizarUsuarioRequest {
+  is_fiscal?: boolean;
+  is_admin?: boolean;
+  matricula?: string;
+}
+
+export function listarUsuarios(accessToken: string) {
+  return apiFetch<Usuario[]>("/api/v1/admin/users", accessToken);
+}
+
+export function atualizarUsuario(accessToken: string, id: string, dados: AtualizarUsuarioRequest) {
+  return apiFetch<Usuario>(`/api/v1/admin/users/${id}`, accessToken, {
+    method: "PATCH",
+    body: JSON.stringify(dados),
+  });
+}
+
 export function listarEtapas(accessToken: string) {
   return apiFetch<KanbanEtapa[]>("/api/v1/kanban/etapas", accessToken);
 }

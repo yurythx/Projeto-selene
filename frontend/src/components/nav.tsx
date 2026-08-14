@@ -50,6 +50,17 @@ export function Nav() {
                 {item.label}
               </Link>
             ))}
+            {session?.user?.isAdmin && (
+              <Link
+                href="/admin/usuarios"
+                className={cn(
+                  "text-muted-foreground hover:text-foreground transition-colors",
+                  pathname.startsWith("/admin") && "text-foreground font-medium"
+                )}
+              >
+                Administração
+              </Link>
+            )}
           </nav>
         </div>
 

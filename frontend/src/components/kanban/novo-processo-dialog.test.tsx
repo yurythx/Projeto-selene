@@ -67,7 +67,13 @@ describe("NovoProcessoDialog", () => {
       .mockResolvedValue(new Response(JSON.stringify({ ID: "novo" }), { status: 201 }));
     global.fetch = fetchMock as unknown as typeof fetch;
     const onOpenChange = vi.fn();
-    const user = userEvent.setup();
+    // Base UI mantém `pointer-events: none` no item da lista durante a
+    // animação de abertura do Select — em jsdom (sem timers reais de
+    // CSS/rAF) isso pode fazer o userEvent.click "real" (que respeita
+    // pointer-events, de propósito, pra pegar bugs de UI de verdade)
+    // falhar de forma intermitente. Desabilitar essa checagem aqui é
+    // seguro: não estamos testando a animação, só o fluxo de submissão.
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
 
     renderWithClient(
       <NovoProcessoDialog open onOpenChange={onOpenChange} contratosAtivos={contratosAtivos} />

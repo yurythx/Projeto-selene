@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { listarContratos } from "@/lib/api/client";
@@ -70,8 +71,12 @@ export default async function ContratosPage() {
               </TableRow>
             )}
             {resultado.dados.map((contrato) => (
-              <TableRow key={contrato.ID}>
-                <TableCell className="font-medium">{contrato.NumeroContrato}</TableCell>
+              <TableRow key={contrato.ID} className="hover:bg-accent">
+                <TableCell className="font-medium">
+                  <Link href={`/contratos/${contrato.ID}`} className="hover:underline">
+                    {contrato.NumeroContrato}
+                  </Link>
+                </TableCell>
                 <TableCell>{contrato.ContratadaNome}</TableCell>
                 <TableCell>
                   {contrato.TipoObjeto ? TIPO_OBJETO_LABEL[contrato.TipoObjeto] : "—"}
