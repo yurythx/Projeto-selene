@@ -1,0 +1,61 @@
+package models
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+// TipoObjeto classifica a natureza do contrato, o que determina qual
+// checklist condicional (Coluna 5 do Kanban) se aplica ao processo de
+// pagamento — ver internal/service (etapa futura) para as regras de
+// validação por tipo.
+type TipoObjeto string
+
+const (
+	TipoObjetoConsumo    TipoObjeto = "CONSUMO"
+	TipoObjetoPermanente TipoObjeto = "PERMANENTE"
+	TipoObjetoServico    TipoObjeto = "SERVICO"
+)
+
+// Contrato representa um contrato administrativo sob fiscalização de um
+// Fiscal de Contratos. Não armazena saldo orçamentário — isso é
+// responsabilidade exclusiva dos sistemas corporativos da prefeitura.
+type Contrato struct {
+	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
+
+	NumeroContrato   string    `gorm:"type:varchar(50);not null;uniqueIndex"` // ex: "125/2026"
+	PortariaNomeacao string    `gorm:"type:varchar(255)"`
+	DataAssinatura   time.Time `gorm:"type:date;not null"`
+
+	ContratadaNome string `gorm:"type:varchar(255);not null"`
+	ContratadaCNPJ string `gorm:"type:varchar(18);not null;index"`
+
+	// ContratadaEmail não está na lista original de campos da Seção 4.2 da
+	// documentação de domínio, mas é indispensável para a Ação Assíncrona
+	// da Etapa 3 ("envio de pacote digital... por e-mail para a empresa
+	// contratada") — sem um endereço de destino, essa notificação não
+	// pode ser implementada de verdade. Adicionado como campo opcional
+	// para não quebrar contratos já cadastrados sem esse dado.
+	ContratadaEmail string `gorm:"type:varchar(255)"`
+
+	FiscalID uuid.UUID `gorm:"type:uuid;not null;index"`
+	Fiscal   *User     `gorm:"foreignKey:FiscalID;references:ID"`
+
+	TipoObjeto TipoObjeto `gorm:"type:varchar(20);not null;check:tipo_objeto IN ('CONSUMO','PERMANENTE','SERVICO')"`
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (Contrato) TableName() string {
+	return "contratos"
+}
+
+func (c *Contrato) BeforeCreate(tx *gorm.DB) error {
+	if c.ID == uuid.Nil {
+		c.ID = uuid.New()
+	}
+	return nil
+}

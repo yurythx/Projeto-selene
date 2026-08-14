@@ -1,0 +1,18 @@
+# Segredos locais — nunca commitar
+.env
+
+# Documentos anexados gravados localmente (STORAGE_DIR)
+/storage/
+
+# Binários compilados
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.test
+*.out
+
+# Arquivos de IDE
+.vscode/
+.idea/
