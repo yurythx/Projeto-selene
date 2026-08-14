@@ -1,5 +1,12 @@
 version: "2"
 
+# Com cache frio, o typecheck de todas as dependências (OTel, GORM +
+# plugins de tracing, cliente Redis) pode passar de 3 minutos num
+# ambiente com poucos recursos (ex: runner padrão do GitHub Actions) — o
+# default é curto demais pra isso.
+run:
+  timeout: 8m
+
 linters:
   default: standard
   enable:

@@ -65,6 +65,13 @@ jobs:
         with:
           version: latest
           working-directory: backend
+          # --timeout generoso: com cache frio (primeira run, ou go.sum
+          # mudou), o typecheck de todas as dependências (OTel, GORM +
+          # plugins de tracing, cliente Redis) mediu ~3m30s num ambiente
+          # com specs parecidas com o runner padrão do GitHub — o default
+          # do golangci-lint ficava curto demais e derrubava o job com
+          # exit code 3 (timeout), não um lint issue de verdade.
+          args: --timeout=8m
 
       - name: go build
         run: go build ./...
