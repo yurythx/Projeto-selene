@@ -15,7 +15,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [{ href: "/contratos", label: "Contratos" }];
+const NAV_ITEMS = [
+  { href: "/kanban", label: "Kanban" },
+  { href: "/contratos", label: "Contratos" },
+];
 
 export function Nav() {
   const pathname = usePathname();

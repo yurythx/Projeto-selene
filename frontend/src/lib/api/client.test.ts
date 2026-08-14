@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { apiFetch, ApiError, listarContratos, criarContrato } from "./client";
+import {
+  apiFetch,
+  ApiError,
+  listarContratos,
+  criarContrato,
+  listarProcessos,
+  avancarProcesso,
+  anexarDocumento,
+} from "./client";
 
 describe("apiFetch", () => {
   const originalFetch = global.fetch;
@@ -105,5 +113,61 @@ describe("criarContrato", () => {
     expect(url).toBe("http://backend.test/api/v1/contratos");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toMatchObject({ numero_contrato: "1/2026" });
+  });
+});
+
+describe("listarProcessos", () => {
+  it("inclui o parâmetro obrigatório 'etapa' na query string", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ total: 0, pagina: 1, tamanho_pagina: 100, dados: [] }), {
+          status: 200,
+        })
+      );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await listarProcessos("token", 3);
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://backend.test/api/v1/processos?etapa=3&pagina=1&tamanho=100");
+  });
+});
+
+describe("avancarProcesso", () => {
+  it("propaga o body do 422 (documentos_pendentes) via ApiError", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: "checklist incompleto", documentos_pendentes: ["Nota Fiscal"] }),
+        { status: 422 }
+      )
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(avancarProcesso("token", "id-1")).rejects.toMatchObject({
+      status: 422,
+      body: { documentos_pendentes: ["Nota Fiscal"] },
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://backend.test/api/v1/processos/id-1/avancar");
+    expect(init.method).toBe("POST");
+  });
+});
+
+describe("anexarDocumento", () => {
+  it("envia FormData sem forçar Content-Type (o browser define o boundary)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ID: "doc-1" }), { status: 201 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const arquivo = new File(["conteudo"], "nota.pdf", { type: "application/pdf" });
+    await anexarDocumento("token", "processo-1", 4, arquivo);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://backend.test/api/v1/processos/processo-1/documentos");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+    expect((init.body as FormData).get("tipo_documento_id")).toBe("4");
   });
 });

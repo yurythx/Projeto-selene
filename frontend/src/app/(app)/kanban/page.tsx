@@ -1,0 +1,51 @@
+import { auth } from "@/auth";
+import { getAccessToken } from "@/lib/auth-token";
+import {
+  listarEtapas,
+  listarTiposDocumento,
+  listarProcessos,
+  listarContratos,
+} from "@/lib/api/client";
+import { KanbanBoard } from "@/components/kanban/kanban-board";
+
+export default async function KanbanPage() {
+  const session = await auth();
+  const accessToken = await getAccessToken();
+
+  if (!accessToken) {
+    return null;
+  }
+
+  const [etapas, tiposDocumento, contratos] = await Promise.all([
+    listarEtapas(accessToken),
+    listarTiposDocumento(accessToken),
+    // tamanho máximo permitido pela API — ver limitação documentada no
+    // NovoProcessoDialog sobre contratos além da primeira página.
+    listarContratos(accessToken, 1, 100),
+  ]);
+
+  const colunas = await Promise.all(
+    etapas.map((etapa) => listarProcessos(accessToken, etapa.ID!))
+  );
+
+  const contratosAtivos = contratos.dados.filter((c) => c.Ativo);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Kanban</h1>
+        <p className="text-muted-foreground text-sm">
+          Funil de compliance dos processos de pagamento — 6 etapas.
+        </p>
+      </div>
+
+      <KanbanBoard
+        etapas={etapas}
+        colunasIniciais={colunas.map((c) => c.dados)}
+        tiposDocumento={tiposDocumento}
+        contratosAtivos={contratosAtivos}
+        isFiscal={Boolean(session?.user?.isFiscal)}
+      />
+    </div>
+  );
+}

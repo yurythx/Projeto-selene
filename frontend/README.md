@@ -89,9 +89,11 @@ src/
   app/
     (app)/            # rotas autenticadas — layout com Nav
       contratos/      # listagem (Server Component) + criação (dialog)
+      kanban/          # board das 6 etapas (Server Component + client dialogs)
     api/
       auth/[...nextauth]/  # handler do Auth.js
       contratos/           # Route Handler BFF (POST, injeta fiscal_id)
+      processos/            # Route Handlers BFF (criar, avançar, concluir, documentos, relatório)
     login/            # fora do grupo (app) — sem Nav
   auth.ts             # config do Auth.js (provider Keycloak, callbacks)
   proxy.ts            # checagem otimista de sessão (renomeado de middleware.ts no Next 16)
@@ -103,4 +105,13 @@ src/
   components/
     ui/               # shadcn/ui
     contratos/        # componentes específicos da tela de contratos
+    kanban/           # board, dialog de processo (documentos/avançar/concluir), novo processo
 ```
+
+## Quadro Kanban
+
+`/kanban` lista os processos de pagamento em 6 colunas (uma por etapa). Ao abrir um card: anexar documentos, avançar de etapa e baixar o Relatório de Pagamento (PDF).
+
+**O checklist de documentos obrigatórios por etapa não é duplicado no frontend** — ele só existe no backend (`internal/service/checklist.go`), de propósito: são regras administrativas que podem mudar, e mantê-las em um único lugar evita que as duas camadas fiquem dessincronizadas. O frontend tenta avançar a etapa; se o backend responder 422 (`ChecklistIncompletoBody`), a lista de `documentos_pendentes` da própria resposta é exibida ao usuário. Isso significa que a única forma de saber o que falta é tentar avançar — aceitável para a v1, mas vale considerar expor os requisitos via API no futuro se o usuário achar o fluxo confuso.
+
+Abrir um processo novo não tem restrição de "fiscal dono do contrato" — a regra de negócio do backend permite qualquer fiscal abrir um processo pra qualquer contrato ativo (não há checagem de propriedade em `KanbanService.CriarProcesso`).
