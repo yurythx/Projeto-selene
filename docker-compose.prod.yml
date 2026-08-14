@@ -1,0 +1,126 @@
+# Compose de produção — publica só a porta do frontend pro host. O
+# Cloudflare Tunnel (ver ../tunel-cloudflare) alcança por aqui, via IP do
+# host + ufw restrito ao IP de onde o cloudflared roda — mesmo padrão já
+# usado pelo papermoon (ver docker-compose.prod.yml dele e
+# docs/docker.md "Cloudflare Tunnel <-> PaperMoon").
+#
+# Diferença chave do padrão do papermoon: o backend Go NÃO é publicado
+# pro host aqui. O Selene usa arquitetura BFF — o browser nunca chama o
+# backend direto, só o frontend Next.js (que fala com o backend pela rede
+# Docker interna, "http://backend:8080"). Menos superfície de ataque, uma
+# porta a menos pra abrir no ufw.
+#
+# Postgres/Redis também não são publicados — só o frontend precisa de
+# porta no host. Ao contrário do dev (docker-compose.yml), aqui NÃO há
+# valores-default para segredos (DB_PASSWORD, REDIS_PASSWORD, AUTH_SECRET
+# etc.) — todos vêm obrigatoriamente do .env.production (ver
+# .env.production.example). Suba com:
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Porta do frontend: ${FRONTEND_PORT:-3010}, não 3000 — a mesma máquina
+# já roda o papermoon-web na 3000 (ver .env.production.example).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-projeto_selene}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME:-projeto_selene}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    restart: always
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    # Sem auth própria (Jaeger não tem login) — só em loopback, nunca
+    # 0.0.0.0. Acesso: túnel SSH (`ssh -L 16686:localhost:16686 <host>`)
+    # e abrir localhost:16686. Mesmo padrão do papermoon-jaeger.
+    ports:
+      - "127.0.0.1:16686:16686"
+
+  backend:
+    build: ./backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    environment:
+      APP_ENV: production
+      SERVER_PORT: 8080
+      # BFF: nenhuma chamada cross-site de browser chega aqui — vazio é
+      # o correto (fail-closed), não "esquecido".
+      CORS_ALLOWED_ORIGINS: ""
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-projeto_selene}
+      DB_SSLMODE: disable
+      KEYCLOAK_JWKS_URL: ${KEYCLOAK_JWKS_URL}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
+      STORAGE_DIR: /app/storage
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-5}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-10}
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4318
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-projeto-selene-backend}
+    volumes:
+      - storage_data:/app/storage
+
+  frontend:
+    build: ./frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3010}:3000"
+    environment:
+      NODE_ENV: production
+      # Cloudflare Tunnel termina o TLS e repassa X-Forwarded-Proto:
+      # https pro origin — com AUTH_TRUST_HOST=true o Auth.js confia
+      # nesse header pra saber que a conexão real do usuário é HTTPS
+      # (necessário pro cookie de sessão sair com o prefixo __Secure-
+      # correto). Sem isso: erro "UntrustedHost".
+      AUTH_TRUST_HOST: "true"
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_KEYCLOAK_ID: ${AUTH_KEYCLOAK_ID}
+      AUTH_KEYCLOAK_SECRET: ${AUTH_KEYCLOAK_SECRET}
+      AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER}
+      # Rede interna do compose — nunca o host/porta publicado pro browser.
+      API_URL: http://backend:8080
+
+volumes:
+  postgres_data:
+  storage_data:

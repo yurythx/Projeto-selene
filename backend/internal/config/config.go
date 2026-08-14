@@ -77,6 +77,11 @@ type Config struct {
 	// múltiplas réplicas do backend. Vazio (default) = limiter em
 	// memória, por instância.
 	RedisAddr string
+	// RedisPassword autentica no Redis quando ele exige senha
+	// (--requirepass, recomendado em produção). Vazio (default) = sem
+	// autenticação — só aceitável quando o Redis não está exposto fora
+	// da rede Docker interna.
+	RedisPassword string
 
 	// OTELExporterEndpoint ("host:porta", sem esquema — ex:
 	// "jaeger:4318"), se definido, habilita a exportação real de traces
@@ -183,6 +188,7 @@ func Load() (*Config, error) {
 		RateLimitRPS:   rateLimitRPS,
 		RateLimitBurst: rateLimitBurst,
 		RedisAddr:      os.Getenv("REDIS_ADDR"),
+		RedisPassword:  os.Getenv("REDIS_PASSWORD"),
 
 		OTELExporterEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		OTELServiceName:      getEnvOrDefault("OTEL_SERVICE_NAME", "projeto-selene-backend"),

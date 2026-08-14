@@ -130,7 +130,7 @@ func main() {
 	// princípio de graceful degradation do resto da aplicação).
 	var rateLimiter middleware.RateLimiter
 	if cfg.RedisAddr != "" {
-		redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+		redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword})
 		if err := redisClient.Ping(context.Background()).Err(); err != nil {
 			fatal("falha ao conectar ao Redis (REDIS_ADDR configurado)", err)
 		}

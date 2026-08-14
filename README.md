@@ -8,7 +8,8 @@ Monorepo com dois projetos independentes:
 projeto-selene/
 ├── backend/     → API Go (Gin + GORM + Postgres), autenticação Keycloak/JWT — ver backend/README.md
 ├── frontend/    → cliente Next.js (App Router, Auth.js + Keycloak) — ver frontend/README.md
-└── docker-compose.yml → sobe o stack inteiro (Postgres, Redis, Jaeger, backend e frontend)
+├── docker-compose.yml      → dev: sobe o stack inteiro (Postgres, Redis, Jaeger, backend e frontend)
+└── docker-compose.prod.yml → produção: só o frontend é publicado (BFF) — ver DEPLOY.md
 ```
 
 ## Início rápido
@@ -30,3 +31,4 @@ Veja `make help` na raiz para os atalhos de orquestração do monorepo, [`backen
 
 - **[backend/README.md](backend/README.md)** — arquitetura (Clean Architecture), o funil do Kanban, como rodar/testar localmente, migrations, referência de variáveis de ambiente, rotas da API, checklist de produção e limitações conhecidas.
 - **[frontend/README.md](frontend/README.md)** — stack, arquitetura BFF, setup, passo a passo do client Keycloak, testes.
+- **[DEPLOY.md](DEPLOY.md)** — runbook de deploy em produção (`selene.papermoon.cloud`, atrás do Cloudflare Tunnel).
