@@ -1,18 +1,13 @@
+# Regras gerais do monorepo (backend/ e frontend/ têm seus próprios
+# .gitignore para o que é específico de cada stack).
+
 # Segredos locais — nunca commitar
 .env
+.env.*
+!.env.example
 
-# Documentos anexados gravados localmente (STORAGE_DIR)
-/storage/
-
-# Binários compilados
-/bin/
-/dist/
-*.exe
-*.exe~
-*.dll
-*.test
-*.out
-
-# Arquivos de IDE
+# Arquivos de IDE / SO
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db

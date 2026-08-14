@@ -1,3 +1,6 @@
+# Orquestra o monorepo (backend + Postgres agora; frontend entra aqui
+# quando existir). Cada serviço aponta pro seu próprio subdiretório —
+# nenhum build usa a raiz do repo como contexto.
 services:
   postgres:
     image: postgres:16-alpine
@@ -16,8 +19,8 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
-    build: .
+  backend:
+    build: ./backend
     restart: unless-stopped
     depends_on:
       postgres:
@@ -36,14 +39,24 @@ services:
       DB_NAME: ${DB_NAME:-projeto_selene}
       DB_SSLMODE: disable
       KEYCLOAK_JWKS_URL: ${KEYCLOAK_JWKS_URL}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
       STORAGE_DIR: /app/storage
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-5}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-10}
     volumes:
       - storage_data:/app/storage
+
+  # frontend:
+  #   build: ./frontend
+  #   ...  (ainda não implementado)
 
 volumes:
   postgres_data:

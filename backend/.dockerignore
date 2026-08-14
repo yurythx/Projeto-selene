@@ -1,0 +1,11 @@
+.git
+.github
+.gitignore
+.golangci.yml
+README.md
+*.md
+.env
+.env.example
+storage/
+storage-test/
+*.log

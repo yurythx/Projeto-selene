@@ -1,0 +1,15 @@
+# Específico do backend (Go). Segredos/IDE genéricos ficam no
+# .gitignore da raiz do monorepo.
+
+# Documentos anexados gravados localmente (STORAGE_DIR)
+/storage/
+/storage-test/
+
+# Binários compilados
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.test
+*.out
