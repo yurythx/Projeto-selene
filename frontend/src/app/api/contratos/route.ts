@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
+import { assertOrigemSegura } from "@/lib/verify-origin";
 import { criarContrato, ApiError, type NovoContratoRequest } from "@/lib/api/client";
 
 /**
@@ -13,6 +14,9 @@ import { criarContrato, ApiError, type NovoContratoRequest } from "@/lib/api/cli
  * valor de fiscal_id enviado pelo client é ignorado por completo.
  */
 export async function POST(request: Request) {
+  const erroOrigem = assertOrigemSegura(request);
+  if (erroOrigem) return erroOrigem;
+
   const session = await auth();
   const accessToken = await getAccessToken();
 

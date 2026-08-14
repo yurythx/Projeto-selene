@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
+import { assertOrigemSegura } from "@/lib/verify-origin";
 import { listarDocumentos, anexarDocumento, ApiError } from "@/lib/api/client";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,6 +24,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const erroOrigem = assertOrigemSegura(request);
+  if (erroOrigem) return erroOrigem;
+
   const session = await auth();
   const accessToken = await getAccessToken();
 

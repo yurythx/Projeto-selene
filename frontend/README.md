@@ -123,3 +123,26 @@ src/
 **O checklist de documentos obrigatórios por etapa não é duplicado no frontend** — ele só existe no backend (`internal/service/checklist.go`), de propósito: são regras administrativas que podem mudar, e mantê-las em um único lugar evita que as duas camadas fiquem dessincronizadas. O frontend tenta avançar a etapa; se o backend responder 422 (`ChecklistIncompletoBody`), a lista de `documentos_pendentes` da própria resposta é exibida ao usuário. Isso significa que a única forma de saber o que falta é tentar avançar — aceitável para a v1, mas vale considerar expor os requisitos via API no futuro se o usuário achar o fluxo confuso.
 
 Abrir um processo novo não tem restrição de "fiscal dono do contrato" — a regra de negócio do backend permite qualquer fiscal abrir um processo pra qualquer contrato ativo (não há checagem de propriedade em `KanbanService.CriarProcesso`).
+
+## Checklist de produção
+
+- [x] Autenticação via Auth.js v5 + Keycloak, access token nunca exposto ao browser (fica só no cookie de sessão criptografado; `getAccessToken()` lê direto via `next-auth/jwt`, nunca pelo endpoint público `/api/auth/session`)
+- [x] Arquitetura BFF: browser nunca chama o backend Go direto, só os Route Handlers do próprio Next
+- [x] `fiscal_id`/autorização sempre resolvidos server-side a partir da sessão — nunca aceitos do corpo da requisição do client
+- [x] Defesa em profundidade contra CSRF nos 8 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
+- [x] Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) via `next.config.ts`
+- [x] `loading.tsx` (streaming) e `error.tsx`/`global-error.tsx` (boundary de erro amigável) nas rotas principais
+- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes
+- [x] CI (lint + testes + build + imagem Docker), mesmo pipeline do backend
+- [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root
+- [x] Tipos gerados a partir do OpenAPI do backend (`openapi-typescript`) — sem duplicar contratos de API à mão
+- [ ] CSP com nonce (hoje usa `'unsafe-inline'` pra scripts/estilos — mudar pra nonce via `proxy.ts` exigiria forçar renderização dinâmica em todas as páginas; ver `next.config.ts` para o raciocínio)
+- [ ] Testes E2E (Playwright) cobrindo o fluxo real ponta a ponta contra um Keycloak/backend de verdade
+- [ ] Paginação de verdade na listagem de contratos e nas colunas do Kanban (hoje busca até 100 registros de uma vez, sem UI de "próxima página")
+- [ ] Rate limiting nos Route Handlers do BFF — hoje só existe no backend Go (que já rate-limita as rotas de escrita por usuário); redundante mas não coberto no lado do Next
+
+## Limitações conhecidas
+
+- **Login real não testado em navegador nesta sessão** — a construção da URL de autorização contra o Keycloak real (issuer, client_id, redirect_uri, discovery document) foi validada via curl, mas o fluxo interativo completo (login → callback → sessão) depende de um usuário de verdade clicando num browser.
+- **Sem seletor de fiscal no cadastro de contrato/processo** — qualquer fiscal pode ser atribuído a um contrato ou abrir um processo pra qualquer contrato ativo, porque é assim que o backend autoriza hoje (sem checagem de propriedade). Documentado também no backend.
+- **Confirmação de "Encerrar contrato" via `window.confirm`** — funcional, mas um `AlertDialog` dedicado (shadcn/ui já tem o primitivo) seria a versão "produção de verdade" dessa UX.

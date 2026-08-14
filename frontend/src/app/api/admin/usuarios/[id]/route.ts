@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
+import { assertOrigemSegura } from "@/lib/verify-origin";
 import { atualizarUsuario, ApiError, type AtualizarUsuarioRequest } from "@/lib/api/client";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const erroOrigem = assertOrigemSegura(request);
+  if (erroOrigem) return erroOrigem;
+
   const session = await auth();
   const accessToken = await getAccessToken();
 

@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
+import { assertOrigemSegura } from "@/lib/verify-origin";
 import { criarProcesso, ApiError } from "@/lib/api/client";
 
 export async function POST(request: Request) {
+  const erroOrigem = assertOrigemSegura(request);
+  if (erroOrigem) return erroOrigem;
+
   const session = await auth();
   const accessToken = await getAccessToken();
 
