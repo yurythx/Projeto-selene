@@ -71,8 +71,9 @@ Ou, a partir da raiz: `make -C backend run` (ver `backend/Makefile` para todos o
 go test ./...
 ```
 
-Dois níveis:
-- **Unitários** (`internal/service/checklist_test.go`, `contrato_service_test.go`): usam dublês em memória (fakes) dos repositories, não tocam banco, sempre rodam.
+Três níveis:
+- **Unitários** (`internal/service/*_test.go`): usam dublês em memória (fakes, ver `internal/testutil/fakes.go`) dos repositories, não tocam banco, sempre rodam.
+- **Handler/HTTP** (`internal/handler/*_test.go`): montam a pilha real `handler -> service` (repositories fake) e testam via `httptest` — binding de JSON/multipart, códigos de status, mapeamento de erros. Também sempre rodam, sem banco.
 - **Integração** (`internal/repository/*_test.go`, `internal/service/kanban_service_test.go`): usam Postgres real (via `internal/testutil.OpenTestDB`), aplicando as migrations de verdade. **São puladas automaticamente (`SKIP`)** se não houver um Postgres acessível — não travam quem não tem Docker instalado.
 
 Para rodá-las de propósito:
@@ -129,7 +130,11 @@ Ver `.env.example` para a lista completa com comentários. Resumo:
 
 ## API — resumo de rotas
 
+Contrato completo em **[`api/openapi.yaml`](api/openapi.yaml)** (OpenAPI 3.0 — abra em [editor.swagger.io](https://editor.swagger.io) ou qualquer visualizador Swagger/Redoc para explorar interativamente). Resumo abaixo.
+
 Todas sob `/api/v1`, exigem `Authorization: Bearer <JWT>` exceto `/health` e `/metrics`. `GET /contratos` e `GET /processos` aceitam `?pagina=&tamanho=` (defaults 1/20, máximo 100 por página).
+
+> **Nota:** as respostas JSON usam PascalCase (`NumeroContrato`, não `numero_contrato`) — os models não têm tags `json` explícitas hoje, exceto onde indicado (`CaminhoStorage`, nunca serializado). Inconsistência conhecida com os corpos de requisição (snake_case); documentada como está, não corrigida nesta rodada para não quebrar clientes que já existirem.
 
 | Rota | Método | Permissão |
 |---|---|---|
@@ -175,8 +180,12 @@ Um contrato `Encerrar`ado (`Ativo=false`) não aceita novos `POST /processos` �
 - [x] Logging estruturado (`slog`, JSON em produção) com request ID correlacionando os logs de uma requisição
 - [x] Métricas Prometheus (`/metrics`): requisições HTTP e transições do Kanban
 - [x] Rate limiting por usuário nas rotas de escrita
+- [x] Testes de handler (camada HTTP: binding, status codes, multipart)
+- [x] Documentação OpenAPI/Swagger (`api/openapi.yaml`)
+- [x] Revisão de segurança manual das áreas sensíveis (auth, upload, SMTP, rate limit) — achou e corrigiu um path traversal real (ver `git log`, commit "fix: corrige path traversal...")
 - [ ] Tracing distribuído (OpenTelemetry)
 - [ ] Rate limiting compartilhado entre réplicas (hoje é em memória, por instância — ver limitações)
+- [ ] `security-review` automatizado no CI (hoje depende de diff contra `origin/HEAD`, que só existe depois do primeiro push)
 
 ---
 

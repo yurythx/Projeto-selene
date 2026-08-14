@@ -1,0 +1,642 @@
+openapi: 3.0.3
+info:
+  title: Projeto Selene — API
+  description: >
+    Sistema de compliance documental e Kanban para fiscalização de contratos
+    públicos municipais. Ver `backend/README.md` para arquitetura, setup e
+    detalhes de autenticação.
+
+
+    **Nota sobre nomes de campo:** as respostas JSON usam PascalCase (ex:
+    `NumeroContrato`, não `numero_contrato`) — reflexo dos nomes dos campos
+    Go nos models, que não têm tags `json` explícitas hoje (exceto onde
+    indicado). Os corpos de **requisição** (POST/PATCH) usam snake_case
+    normalmente. Essa assimetria é uma inconsistência conhecida, documentada
+    como está — não idealizada.
+  version: "1.0.0"
+  license:
+    name: Uso interno — Prefeitura
+externalDocs:
+  description: README do backend (arquitetura, checklist por etapa do Kanban, etc.)
+  url: ../README.md
+
+servers:
+  - url: http://localhost:8080
+    description: Local (docker-compose)
+
+tags:
+  - name: Sistema
+    description: Health check e métricas — sem autenticação.
+  - name: Sessão
+    description: Informações do usuário autenticado.
+  - name: Referências do Kanban
+    description: Tabelas de referência somente-leitura (etapas fixas, tipos de documento).
+  - name: Contratos
+    description: Cadastro e ciclo de vida dos contratos administrativos.
+  - name: Processos de Pagamento
+    description: Os "cards" do Kanban — um por mês de referência de um contrato.
+  - name: Documentos
+    description: Upload e consulta de documentos anexados a um processo.
+  - name: Relatório
+    description: Geração do Relatório de Pagamento (PDF).
+  - name: Administração
+    description: Gestão de contas de usuário — restrito a administradores.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Sistema]
+      summary: Health check
+      description: Verifica a conexão real com o Postgres, não só se o processo está de pé.
+      security: []
+      responses:
+        "200":
+          description: Saudável.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { status: { type: string, example: ok } }
+        "503":
+          description: Dependência (Postgres) indisponível.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: indisponível }
+                  error: { type: string }
+
+  /metrics:
+    get:
+      tags: [Sistema]
+      summary: Métricas Prometheus
+      description: >
+        Formato de exposição do Prometheus (text/plain). Sem autenticação por
+        convenção do ecossistema — restrinja o acesso por rede em produção.
+      security: []
+      responses:
+        "200":
+          description: Métricas no formato Prometheus.
+          content:
+            text/plain: { schema: { type: string } }
+
+  /api/v1/me:
+    get:
+      tags: [Sessão]
+      summary: Dados do usuário autenticado
+      description: Confirma que o token foi validado e o usuário foi resolvido/provisionado (JIT) com sucesso.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  nome: { type: string }
+                  email: { type: string, format: email }
+                  is_fiscal: { type: boolean }
+                  is_admin: { type: boolean }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/kanban/etapas:
+    get:
+      tags: [Referências do Kanban]
+      summary: Lista as 6 etapas fixas do funil
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/KanbanEtapa" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/kanban/tipos-documento:
+    get:
+      tags: [Referências do Kanban]
+      summary: Lista o catálogo de tipos de documento
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TipoDocumento" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/contratos:
+    get:
+      tags: [Contratos]
+      summary: Lista contratos (paginado)
+      parameters:
+        - $ref: "#/components/parameters/Pagina"
+        - $ref: "#/components/parameters/Tamanho"
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResultadoPaginado"
+                  - type: object
+                    properties:
+                      dados:
+                        type: array
+                        items: { $ref: "#/components/schemas/Contrato" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [Contratos]
+      summary: Cadastra um novo contrato
+      description: Restrito a fiscais habilitados (`IsFiscal=true`). Sujeito a rate limit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NovoContratoRequest" }
+      responses:
+        "201":
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contrato" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/contratos/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    get:
+      tags: [Contratos]
+      summary: Busca um contrato por ID
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contrato" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+    patch:
+      tags: [Contratos]
+      summary: Atualiza campos editáveis do contrato
+      description: >
+        Só os campos presentes no corpo são alterados. `numero_contrato`,
+        `fiscal_id` e `tipo_objeto` não são editáveis por aqui (identidade e
+        classificação do contrato).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AtualizarContratoRequest" }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contrato" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/contratos/{id}/encerrar:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    post:
+      tags: [Contratos]
+      summary: Encerra o contrato (soft-close)
+      description: >
+        Marca `Ativo=false`. Contrato encerrado não aceita novos `POST
+        /processos`, mas o histórico continua consultável. Não há reversão
+        automática.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contrato" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos:
+    get:
+      tags: [Processos de Pagamento]
+      summary: Lista processos de uma etapa do Kanban (paginado)
+      description: O parâmetro `etapa` é obrigatório — o board sempre navega por coluna.
+      parameters:
+        - name: etapa
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 6 }
+          description: ID da etapa do Kanban (1 a 6).
+        - $ref: "#/components/parameters/Pagina"
+        - $ref: "#/components/parameters/Tamanho"
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ResultadoPaginado"
+                  - type: object
+                    properties:
+                      dados:
+                        type: array
+                        items: { $ref: "#/components/schemas/ProcessoPagamento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [Processos de Pagamento]
+      summary: Abre um novo processo de pagamento (card)
+      description: >
+        Sempre entra na Etapa 1. Rejeitado com 400 se o contrato estiver
+        encerrado (`Ativo=false`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contrato_id, mes_referencia]
+              properties:
+                contrato_id: { type: string, format: uuid }
+                mes_referencia: { type: string, example: "07/2026", description: 'Formato "MM/AAAA".' }
+      responses:
+        "201":
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProcessoPagamento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    get:
+      tags: [Processos de Pagamento]
+      summary: Busca um processo por ID
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProcessoPagamento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/processos/{id}/avancar:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    post:
+      tags: [Processos de Pagamento]
+      summary: Avança o processo para a próxima etapa
+      description: >
+        Só avança se o checklist da etapa atual estiver completo (Seção 5 da
+        documentação de domínio). Ao confirmar a Etapa 3, dispara em
+        background o envio do pacote digital à empresa contratada.
+      responses:
+        "200":
+          description: Avançou.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProcessoPagamento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "422": { $ref: "#/components/responses/ChecklistIncompleto" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}/concluir:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    post:
+      tags: [Processos de Pagamento]
+      summary: Marca o processo como pago
+      description: Só permitido a partir da etapa final (6 — Contabilidade).
+      responses:
+        "200":
+          description: Concluído.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProcessoPagamento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}/documentos:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    get:
+      tags: [Documentos]
+      summary: Lista os documentos anexados ao processo
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DocumentoAnexo" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [Documentos]
+      summary: Anexa um documento ao processo
+      description: >
+        multipart/form-data. Se o SHA-256 do conteúdo já existir para este
+        processo, reaproveita o registro existente em vez de duplicar (não
+        cria um novo). Limite de 20MB por arquivo.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [tipo_documento_id, arquivo]
+              properties:
+                tipo_documento_id: { type: integer, description: "ID de um tipo em GET /kanban/tipos-documento." }
+                arquivo: { type: string, format: binary }
+      responses:
+        "201":
+          description: Anexado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentoAnexo" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "413":
+          description: Arquivo excede 20MB.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}/relatorio:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    get:
+      tags: [Relatório]
+      summary: Gera o Relatório de Pagamento (PDF)
+      description: >
+        PDF pronto para impressão/assinatura física. Layout funcional
+        próprio do Selene, não o modelo oficial da prefeitura (nenhum
+        template real foi fornecido — ver README, seção "Limitações").
+      responses:
+        "200":
+          description: PDF gerado.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/admin/users:
+    get:
+      tags: [Administração]
+      summary: Lista todos os usuários
+      description: Restrito a administradores (`IsAdmin=true`).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Usuario" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+
+  /api/v1/admin/users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Administração]
+      summary: Busca um usuário por ID
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+    patch:
+      tags: [Administração]
+      summary: Altera permissões/matrícula de um usuário
+      description: Só os campos presentes no corpo são alterados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_fiscal: { type: boolean }
+                is_admin: { type: boolean }
+                matricula: { type: string }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token emitido pelo Keycloak do realm da prefeitura (validado contra o JWKS — assinatura, expiração, issuer e, opcionalmente, audience).
+
+  parameters:
+    ContratoId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProcessoId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Pagina:
+      name: pagina
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Tamanho:
+      name: tamanho
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    NaoAutenticado:
+      description: Token ausente, inválido, expirado, ou issuer/audience não batem.
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+    Proibido:
+      description: Usuário autenticado, mas sem a permissão exigida (IsFiscal/IsAdmin).
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+    NaoEncontrado:
+      description: Recurso não encontrado.
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+    RequisicaoInvalida:
+      description: "Corpo/parâmetros inválidos, ou regra de negócio violada (ex: contrato encerrado)."
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+    MuitasRequisicoes:
+      description: Rate limit excedido para este usuário (rotas de escrita).
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+    ChecklistIncompleto:
+      description: O checklist obrigatório da etapa atual ainda não está completo.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string, example: "checklist incompleto" }
+              documentos_pendentes:
+                type: array
+                items: { type: string }
+                example: ["Nota Fiscal / Fatura", "Ordem de Recepção"]
+
+  schemas:
+    ErroSimples:
+      type: object
+      properties:
+        error: { type: string }
+
+    ResultadoPaginado:
+      type: object
+      properties:
+        total: { type: integer, example: 42 }
+        pagina: { type: integer, example: 1 }
+        tamanho_pagina: { type: integer, example: 20 }
+
+    KanbanEtapa:
+      type: object
+      properties:
+        ID: { type: integer, example: 1 }
+        Nome: { type: string, example: "Elaborar OF / Pré-Empenho" }
+        Posicao: { type: integer, example: 1 }
+
+    TipoDocumento:
+      type: object
+      properties:
+        ID: { type: integer, example: 4 }
+        Nome: { type: string, example: "Nota de Empenho" }
+
+    Usuario:
+      type: object
+      properties:
+        ID: { type: string, format: uuid }
+        KeycloakID: { type: string, description: 'Claim "sub" do token OIDC.' }
+        Nome: { type: string }
+        Email: { type: string, format: email }
+        IsFiscal: { type: boolean }
+        IsAdmin: { type: boolean }
+        Matricula: { type: string }
+        CriadoEm: { type: string, format: date-time }
+        AtualizadoEm: { type: string, format: date-time }
+
+    Contrato:
+      type: object
+      properties:
+        ID: { type: string, format: uuid }
+        NumeroContrato: { type: string, example: "125/2026" }
+        PortariaNomeacao: { type: string }
+        DataAssinatura: { type: string, format: date }
+        ContratadaNome: { type: string }
+        ContratadaCNPJ: { type: string }
+        ContratadaEmail: { type: string, format: email }
+        FiscalID: { type: string, format: uuid }
+        Fiscal: { $ref: "#/components/schemas/Usuario" }
+        TipoObjeto: { type: string, enum: [CONSUMO, PERMANENTE, SERVICO] }
+        Ativo: { type: boolean, description: "false = contrato encerrado (soft-close)." }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+
+    NovoContratoRequest:
+      type: object
+      required: [numero_contrato, data_assinatura, contratada_nome, contratada_cnpj, fiscal_id, tipo_objeto]
+      properties:
+        numero_contrato: { type: string, example: "125/2026" }
+        portaria_nomeacao: { type: string }
+        data_assinatura: { type: string, example: "2026-01-15", description: 'Formato "AAAA-MM-DD".' }
+        contratada_nome: { type: string }
+        contratada_cnpj: { type: string }
+        contratada_email: { type: string, format: email }
+        fiscal_id: { type: string, format: uuid, description: "Precisa ser um usuário com IsFiscal=true." }
+        tipo_objeto: { type: string, enum: [CONSUMO, PERMANENTE, SERVICO] }
+
+    AtualizarContratoRequest:
+      type: object
+      properties:
+        portaria_nomeacao: { type: string }
+        contratada_nome: { type: string }
+        contratada_cnpj: { type: string }
+        contratada_email: { type: string, format: email }
+
+    ProcessoPagamento:
+      type: object
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        Contrato: { $ref: "#/components/schemas/Contrato" }
+        MesReferencia: { type: string, example: "07/2026" }
+        EtapaAtualID: { type: integer, minimum: 1, maximum: 6 }
+        EtapaAtual: { $ref: "#/components/schemas/KanbanEtapa" }
+        Status: { type: string, enum: [Ativo, Concluido] }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+
+    DocumentoAnexo:
+      type: object
+      description: 'CaminhoStorage (path local no servidor) é omitido de propósito — nunca serializado (json:"-").'
+      properties:
+        ID: { type: string, format: uuid }
+        ProcessoPagamentoID: { type: string, format: uuid }
+        TipoDocumentoID: { type: integer }
+        TipoDocumento: { $ref: "#/components/schemas/TipoDocumento" }
+        NomeArquivo: { type: string, description: "Sanitizado no upload (sem componentes de caminho ou caracteres de controle)." }
+        HashArquivo: { type: string, description: "SHA-256 (hex) do conteúdo." }
+        EnviadoPorID: { type: string, format: uuid }
+        EnviadoPor: { $ref: "#/components/schemas/Usuario" }
+        DataUpload: { type: string, format: date-time }
