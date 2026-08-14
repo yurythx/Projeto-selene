@@ -565,9 +565,9 @@ components:
 
     Usuario:
       type: object
+      description: 'KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI.'
       properties:
         ID: { type: string, format: uuid }
-        KeycloakID: { type: string, description: 'Claim "sub" do token OIDC.' }
         Nome: { type: string }
         Email: { type: string, format: email }
         IsFiscal: { type: boolean }

@@ -14,6 +14,18 @@ import (
 	"projeto-selene/internal/service"
 )
 
+// respondBindError responde a uma falha de c.ShouldBindJSON/ShouldBind sem
+// repassar err.Error() ao cliente — a mensagem do validador
+// (go-playground/validator) inclui o nome da struct e do campo Go
+// internos (ex: "Key: 'criarContratoRequest.NumeroContrato' Error:Field
+// validation for 'NumeroContrato' failed on the 'required' tag"), o que
+// não é segredo, mas também não é da conta do cliente. O detalhe vai só
+// pro log do servidor.
+func respondBindError(c *gin.Context, err error) {
+	slog.WarnContext(c.Request.Context(), "corpo da requisição inválido", "erro", err)
+	c.JSON(http.StatusBadRequest, gin.H{"error": "corpo da requisição inválido ou campos obrigatórios ausentes"})
+}
+
 // respondError centraliza a tradução de erros vindos de repository/service
 // em respostas HTTP, para que cada handler não precise reimplementar essa
 // lógica de mapeamento.

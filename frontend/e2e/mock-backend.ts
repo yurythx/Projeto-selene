@@ -99,7 +99,10 @@ const processoChecklistPendenteId = "processo-checklist-pendente";
 // teste pro próximo. Cada reset precisa de objetos novos.
 function criarContratoSeed(): Contrato {
   return {
-    ID: "contrato-seed",
+    // Precisa ter formato de UUID de verdade: novoProcessoSchema
+    // (lib/validation/bff-schemas.ts) valida contrato_id com z.uuid(),
+    // igual o backend real exige (Contrato.ID é uuid.UUID no Go).
+    ID: "11111111-1111-4111-8111-111111111111",
     NumeroContrato: "1/2026",
     PortariaNomeacao: "Portaria 1/2026",
     DataAssinatura: "2026-01-01",
@@ -158,6 +161,9 @@ const port = Number(process.env.MOCK_BACKEND_PORT ?? 4010);
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${port}`);
   const { pathname, searchParams } = url;
+  if (process.env.MOCK_BACKEND_DEBUG) {
+    console.log(`[mock-backend] ${req.method} ${pathname}${url.search}`);
+  }
   const chunks: Buffer[] = [];
 
   req.on("data", (chunk) => chunks.push(chunk));

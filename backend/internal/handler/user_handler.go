@@ -66,7 +66,7 @@ func (h *UserHandler) AtualizarPermissoes(c *gin.Context) {
 
 	var req atualizarPermissoesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondBindError(c, err)
 		return
 	}
 

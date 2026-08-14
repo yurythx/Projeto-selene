@@ -16,7 +16,12 @@ type User struct {
 	// KeycloakID é o claim "sub" do token OIDC — identificador único e
 	// imutável do usuário no Keycloak. Tratado como string opaca (não como
 	// uuid.UUID) porque o OIDC não garante esse formato para todo IdP.
-	KeycloakID string `gorm:"type:varchar(255);uniqueIndex;not null"`
+	// json:"-": é um identificador interno de correlação com o Keycloak,
+	// sem uso na UI hoje — não tem por que ir pra fora em nenhuma resposta
+	// (inclusive quando User aparece aninhado como Contrato.Fiscal em
+	// /contratos e /processos, visível a QUALQUER usuário autenticado, não
+	// só administradores).
+	KeycloakID string `gorm:"type:varchar(255);uniqueIndex;not null" json:"-"`
 
 	Nome  string `gorm:"type:varchar(255);not null"`
 	Email string `gorm:"type:varchar(255);uniqueIndex;not null"`

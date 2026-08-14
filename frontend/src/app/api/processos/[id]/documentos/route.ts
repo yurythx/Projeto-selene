@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
+import { tipoDocumentoIdSchema } from "@/lib/validation/bff-schemas";
 import { listarDocumentos, anexarDocumento, ApiError } from "@/lib/api/client";
+
+// Espelha maxUploadBytes em backend/internal/handler/documento_handler.go
+// — checagem redundante e intencional: falha rápido aqui, antes de gastar
+// uma chamada de rede pro backend, sem depender só do limite de lá.
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const accessToken = await getAccessToken();
@@ -40,18 +46,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
 
   const formData = await request.formData();
-  const tipoDocumentoId = Number(formData.get("tipo_documento_id"));
   const arquivo = formData.get("arquivo");
 
-  if (!tipoDocumentoId || !(arquivo instanceof File)) {
+  const tipoResultado = tipoDocumentoIdSchema.safeParse(formData.get("tipo_documento_id"));
+  if (!tipoResultado.success) {
     return NextResponse.json(
-      { error: "campos 'tipo_documento_id' e 'arquivo' são obrigatórios" },
+      { error: "campo 'tipo_documento_id' precisa ser um número inteiro positivo" },
       { status: 400 }
     );
   }
+  if (!(arquivo instanceof File)) {
+    return NextResponse.json({ error: "campo 'arquivo' é obrigatório" }, { status: 400 });
+  }
+  if (arquivo.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json({ error: "arquivo excede o limite de 20MB" }, { status: 413 });
+  }
 
   try {
-    const documento = await anexarDocumento(accessToken, id, tipoDocumentoId, arquivo);
+    const documento = await anexarDocumento(accessToken, id, tipoResultado.data, arquivo);
     return NextResponse.json(documento, { status: 201 });
   } catch (erro) {
     if (erro instanceof ApiError) {

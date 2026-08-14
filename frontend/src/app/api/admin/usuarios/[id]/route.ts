@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
-import { atualizarUsuario, ApiError, type AtualizarUsuarioRequest } from "@/lib/api/client";
+import { atualizarUsuarioSchema } from "@/lib/validation/bff-schemas";
+import { atualizarUsuario, ApiError } from "@/lib/api/client";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const erroOrigem = assertOrigemSegura(request);
@@ -21,10 +22,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const corpo = (await request.json()) as AtualizarUsuarioRequest;
+
+  const resultado = atualizarUsuarioSchema.safeParse(await request.json().catch(() => null));
+  if (!resultado.success) {
+    return NextResponse.json(
+      { error: "corpo inválido", detalhes: resultado.error.flatten() },
+      { status: 400 }
+    );
+  }
 
   try {
-    const usuario = await atualizarUsuario(accessToken, id, corpo);
+    const usuario = await atualizarUsuario(accessToken, id, resultado.data);
     return NextResponse.json(usuario);
   } catch (erro) {
     if (erro instanceof ApiError) {

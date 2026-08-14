@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
-import { atualizarContrato, ApiError, type AtualizarContratoRequest } from "@/lib/api/client";
+import { atualizarContratoSchema } from "@/lib/validation/bff-schemas";
+import { atualizarContrato, ApiError } from "@/lib/api/client";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const erroOrigem = assertOrigemSegura(request);
@@ -19,10 +20,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const corpo = (await request.json()) as AtualizarContratoRequest;
+
+  const resultado = atualizarContratoSchema.safeParse(await request.json().catch(() => null));
+  if (!resultado.success) {
+    return NextResponse.json(
+      { error: "corpo inválido", detalhes: resultado.error.flatten() },
+      { status: 400 }
+    );
+  }
 
   try {
-    const contrato = await atualizarContrato(accessToken, id, corpo);
+    const contrato = await atualizarContrato(accessToken, id, resultado.data);
     return NextResponse.json(contrato);
   } catch (erro) {
     if (erro instanceof ApiError) {

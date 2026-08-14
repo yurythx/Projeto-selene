@@ -43,15 +43,26 @@ func (h *DocumentoHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	// Envolve o corpo da requisição ANTES de qualquer parse de
+	// multipart/form-data (c.PostForm/c.FormFile disparam esse parse na
+	// primeira chamada). Sem isso, o Gin bufferiza/grava em disco o corpo
+	// inteiro antes da checagem de tamanho abaixo rodar — um upload de
+	// vários GB já teria consumido memória/disco antes de ser rejeitado.
+	// Com MaxBytesReader, o próprio parser aborta assim que o limite é
+	// excedido, com uma margem pequena pro overhead do multipart
+	// (boundary, headers de cada parte, o campo tipo_documento_id).
+	const margemMultipart = 64 << 10 // 64KiB
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadBytes+margemMultipart)
+
 	tipoDocumentoID, err := strconv.Atoi(c.PostForm("tipo_documento_id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "campo 'tipo_documento_id' é obrigatório e precisa ser um número"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "campo 'tipo_documento_id' é obrigatório e precisa ser um número, ou o arquivo excede o limite de 20MB"})
 		return
 	}
 
 	arquivoHeader, err := c.FormFile("arquivo")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "campo 'arquivo' é obrigatório"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "campo 'arquivo' é obrigatório, ou o arquivo excede o limite de 20MB"})
 		return
 	}
 	if arquivoHeader.Size > maxUploadBytes {

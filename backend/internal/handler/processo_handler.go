@@ -38,7 +38,7 @@ func (h *ProcessoHandler) Criar(c *gin.Context) {
 
 	var req criarProcessoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondBindError(c, err)
 		return
 	}
 

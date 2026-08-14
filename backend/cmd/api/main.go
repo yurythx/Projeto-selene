@@ -249,6 +249,19 @@ func runWithGracefulShutdown(router *gin.Engine, port string, logger *slog.Logge
 		// conexão e manda os headers bytes-a-bytes bem devagar,
 		// segurando um worker do servidor indefinidamente).
 		ReadHeaderTimeout: 10 * time.Second,
+		// ReadTimeout cobre o corpo inteiro da requisição (não só os
+		// headers) — sem isso, um cliente lento enviando o body aos
+		// poucos ainda segura a conexão indefinidamente. 30s é folgado o
+		// bastante pro maior corpo esperado (upload de documento, até
+		// 20MB — ver maxUploadBytes em documento_handler.go) mesmo numa
+		// rede ruim.
+		ReadTimeout: 30 * time.Second,
+		// WriteTimeout cobre da leitura do header até o fim do envio da
+		// resposta — segue a mesma folga do ReadTimeout.
+		WriteTimeout: 30 * time.Second,
+		// IdleTimeout limita quanto tempo uma conexão keep-alive fica
+		// aberta sem atividade.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

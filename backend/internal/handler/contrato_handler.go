@@ -35,7 +35,7 @@ type criarContratoRequest struct {
 func (h *ContratoHandler) Criar(c *gin.Context) {
 	var req criarContratoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondBindError(c, err)
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *ContratoHandler) Atualizar(c *gin.Context) {
 
 	var req atualizarContratoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondBindError(c, err)
 		return
 	}
 

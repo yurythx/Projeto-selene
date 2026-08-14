@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -25,7 +26,12 @@ func NewHealthHandler(db *gorm.DB) *HealthHandler {
 // Check trata GET /health.
 func (h *HealthHandler) Check(c *gin.Context) {
 	if err := database.Ping(c.Request.Context(), h.db); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "indisponível", "error": err.Error()})
+		// /health não exige autenticação (convenção de orquestrador/load
+		// balancer) — err.Error() de uma falha de Postgres pode incluir
+		// host, porta ou detalhes de conexão; isso não vai pra um chamador
+		// anônimo, só pro log do servidor.
+		slog.ErrorContext(c.Request.Context(), "health check: Postgres indisponível", "erro", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "indisponível"})
 		return
 	}
 

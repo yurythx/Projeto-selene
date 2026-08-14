@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
-import { criarContrato, ApiError, type NovoContratoRequest } from "@/lib/api/client";
+import { novoContratoSchema } from "@/lib/validation/bff-schemas";
+import { criarContrato, ApiError } from "@/lib/api/client";
 
 /**
  * Route Handler do BFF: proxy autenticado pro backend Go em
@@ -28,11 +29,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "usuário não é fiscal" }, { status: 403 });
   }
 
-  const corpo = (await request.json()) as Omit<NovoContratoRequest, "fiscal_id">;
+  const resultado = novoContratoSchema.safeParse(await request.json().catch(() => null));
+  if (!resultado.success) {
+    return NextResponse.json(
+      { error: "corpo inválido", detalhes: resultado.error.flatten() },
+      { status: 400 }
+    );
+  }
 
   try {
     const contrato = await criarContrato(accessToken, {
-      ...corpo,
+      ...resultado.data,
       fiscal_id: session.user.id,
     });
     return NextResponse.json(contrato, { status: 201 });

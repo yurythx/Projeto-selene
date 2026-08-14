@@ -931,11 +931,10 @@ export interface components {
             /** @example Nota de Empenho */
             Nome?: string;
         };
+        /** @description KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI. */
         Usuario: {
             /** Format: uuid */
             ID?: string;
-            /** @description Claim "sub" do token OIDC. */
-            KeycloakID?: string;
             Nome?: string;
             /** Format: email */
             Email?: string;

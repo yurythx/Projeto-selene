@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
+import { novoProcessoSchema } from "@/lib/validation/bff-schemas";
 import { criarProcesso, ApiError } from "@/lib/api/client";
 
 export async function POST(request: Request) {
@@ -18,13 +19,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "usuário não é fiscal" }, { status: 403 });
   }
 
-  const corpo = (await request.json()) as { contrato_id?: string; mes_referencia?: string };
-  if (!corpo.contrato_id || !corpo.mes_referencia) {
-    return NextResponse.json({ error: "contrato_id e mes_referencia são obrigatórios" }, { status: 400 });
+  const resultado = novoProcessoSchema.safeParse(await request.json().catch(() => null));
+  if (!resultado.success) {
+    return NextResponse.json(
+      { error: "corpo inválido", detalhes: resultado.error.flatten() },
+      { status: 400 }
+    );
   }
 
   try {
-    const processo = await criarProcesso(accessToken, corpo.contrato_id, corpo.mes_referencia);
+    const processo = await criarProcesso(accessToken, resultado.data.contrato_id, resultado.data.mes_referencia);
     return NextResponse.json(processo, { status: 201 });
   } catch (erro) {
     if (erro instanceof ApiError) {

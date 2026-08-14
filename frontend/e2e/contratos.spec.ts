@@ -29,7 +29,7 @@ test.describe("/contratos", () => {
     await page.goto("/contratos");
     await page.getByRole("link", { name: "1/2026" }).click();
 
-    await expect(page).toHaveURL(/\/contratos\/contrato-seed/);
+    await expect(page).toHaveURL(/\/contratos\/11111111-1111-4111-8111-111111111111/);
     await expect(page.getByRole("heading", { name: "1/2026" })).toBeVisible();
 
     await page.getByRole("button", { name: "Editar" }).click();
@@ -39,6 +39,9 @@ test.describe("/contratos", () => {
 
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Encerrar contrato" }).click();
-    await expect(page.getByText("Encerrado")).toBeVisible();
+    // getByText("Encerrado") sem exact bate tanto no badge de situação
+    // quanto no toast "Contrato encerrado." (getByText normaliza case) —
+    // exact:true escopa pro badge, que é o que a asserção quer checar.
+    await expect(page.getByText("Encerrado", { exact: true })).toBeVisible();
   });
 });

@@ -3,18 +3,33 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/smtp"
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"time"
 
 	"projeto-selene/internal/models"
+)
+
+// smtpDialTimeout e smtpOperationTimeout limitam quanto tempo o envio de
+// e-mail pode segurar a goroutine assíncrona que o chama (ver
+// KanbanService.notificarEmpresaAssincrono). net/smtp.SendMail não aceita
+// timeout/contexto — sem isso, um servidor SMTP travado (firewall
+// dropando pacotes silenciosamente, por exemplo) prenderia essa goroutine
+// pra sempre, acumulando sem limite a cada Etapa 3 confirmada.
+const (
+	smtpDialTimeout      = 15 * time.Second
+	smtpOperationTimeout = 30 * time.Second
 )
 
 // Notifier envia o pacote digital unificado (OF + Pré-Empenho + Empenho +
@@ -84,11 +99,80 @@ func (n *smtpNotifier) EnviarPacoteEmpresa(ctx context.Context, processo *models
 	auth := smtp.PlainAuth("", n.cfg.User, n.cfg.Password, n.cfg.Host)
 	addr := fmt.Sprintf("%s:%s", n.cfg.Host, n.cfg.Port)
 
-	if err := smtp.SendMail(addr, auth, n.cfg.From, []string{destinatario}, msg); err != nil {
+	if err := sendMailComTimeout(addr, n.cfg.Host, auth, n.cfg.From, []string{destinatario}, msg); err != nil {
 		return fmt.Errorf("service: falha ao enviar e-mail via SMTP: %w", err)
 	}
 
 	return nil
+}
+
+// sendMailComTimeout replica a sequência de smtp.SendMail (hello →
+// STARTTLS oportunista → auth → mail/rcpt/data → quit), mas discando a
+// conexão nós mesmos com net.DialTimeout e aplicando um SetDeadline geral
+// sobre ela — assim qualquer travamento no meio da conversa SMTP vira um
+// erro de I/O (conexão expirada) em vez de bloquear a goroutine pra
+// sempre. smtp.SendMail da standard library não oferece essa opção.
+func sendMailComTimeout(addr, host string, auth smtp.Auth, from string, to []string, msg []byte) error {
+	conn, err := net.DialTimeout("tcp", addr, smtpDialTimeout)
+	if err != nil {
+		return fmt.Errorf("conectar ao servidor SMTP: %w", err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Warn("smtp: falha ao fechar conexão", "erro", err)
+		}
+	}()
+
+	if err := conn.SetDeadline(time.Now().Add(smtpOperationTimeout)); err != nil {
+		return fmt.Errorf("definir deadline da conexão SMTP: %w", err)
+	}
+
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		return fmt.Errorf("iniciar cliente SMTP: %w", err)
+	}
+	defer func() {
+		if err := client.Close(); err != nil {
+			slog.Warn("smtp: falha ao fechar cliente", "erro", err)
+		}
+	}()
+
+	if ok, _ := client.Extension("STARTTLS"); ok {
+		if err := client.StartTLS(&tls.Config{ServerName: host}); err != nil {
+			return fmt.Errorf("STARTTLS: %w", err)
+		}
+	}
+
+	if auth != nil {
+		if ok, _ := client.Extension("AUTH"); !ok {
+			return errors.New("servidor SMTP não suporta autenticação")
+		}
+		if err := client.Auth(auth); err != nil {
+			return fmt.Errorf("autenticar no SMTP: %w", err)
+		}
+	}
+
+	if err := client.Mail(from); err != nil {
+		return fmt.Errorf("MAIL FROM: %w", err)
+	}
+	for _, destinatario := range to {
+		if err := client.Rcpt(destinatario); err != nil {
+			return fmt.Errorf("RCPT TO %q: %w", destinatario, err)
+		}
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("DATA: %w", err)
+	}
+	if _, err := w.Write(msg); err != nil {
+		return fmt.Errorf("escrever corpo da mensagem: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("finalizar corpo da mensagem: %w", err)
+	}
+
+	return client.Quit()
 }
 
 // montarMensagem monta o e-mail completo (headers + corpo multipart/mixed)
