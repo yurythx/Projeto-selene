@@ -1023,6 +1023,197 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/processos/{id}/vistorias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+            };
+            cookie?: never;
+        };
+        /** Lista as vistorias do processo */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RegistroVistoria"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        /**
+         * Registra uma nova vistoria de campo
+         * @description Abre o registro; as fotos são anexadas depois, uma a uma, via POST /vistorias/{id}/fotos. Latitude/longitude são opcionais — o navegador pode negar/não suportar geolocalização.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: double */
+                        latitude?: number | null;
+                        /** Format: double */
+                        longitude?: number | null;
+                        observacoes?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Registrada. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RegistroVistoria"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vistorias/{id}/fotos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anexa uma foto à vistoria
+         * @description multipart/form-data, campo "foto". Mesma deduplicação por SHA-256 de POST /processos/{id}/documentos. Limite de 20MB por arquivo.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        foto: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Anexada. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FotoVistoria"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                /** @description Arquivo excede 20MB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vistorias/{id}/relatorio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Gera o Relatório de Campo da vistoria (PDF)
+         * @description Dados do contrato/processo, coordenadas, observações e as fotos anexadas, embutidas no PDF.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description PDF gerado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -1225,6 +1416,40 @@ export interface components {
             criado_em?: string;
             /** @example SEL-A1B2C3D4E5F60708 */
             codigo_verificacao?: string;
+        };
+        /** @description Uma vistoria de campo (Fase 3 do roadmap). */
+        RegistroVistoria: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ProcessoPagamentoID?: string;
+            /** Format: uuid */
+            FiscalID?: string;
+            Fiscal?: components["schemas"]["Usuario"];
+            /** Format: date-time */
+            DataHora?: string;
+            /**
+             * Format: double
+             * @description Ausente quando o navegador negou/não suportou geolocalização.
+             */
+            Latitude?: number | null;
+            /** Format: double */
+            Longitude?: number | null;
+            Observacoes?: string;
+            Fotos?: components["schemas"]["FotoVistoria"][];
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        /** @description CaminhoStorage (path local no servidor) é omitido de propósito — nunca serializado (json:"-"). */
+        FotoVistoria: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            VistoriaID?: string;
+            NomeArquivo?: string;
+            HashArquivo?: string;
+            /** Format: date-time */
+            CreatedAt?: string;
         };
         /** @description KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI. */
         Usuario: {

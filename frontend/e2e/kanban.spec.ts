@@ -69,4 +69,28 @@ test.describe("/kanban", () => {
     await expect(page.getByText("Documento anexado.")).toBeVisible();
     await expect(page.getByText("arquivo-teste.pdf")).toBeVisible();
   });
+
+  test("registra uma vistoria de campo e anexa uma foto", async ({ page }) => {
+    await page.goto("/kanban");
+    await page.getByText("1/2026").first().click();
+
+    await page.getByRole("button", { name: "Vistorias de Campo" }).click();
+    await expect(page.getByText("Nenhuma vistoria registrada ainda.")).toBeVisible();
+
+    await page.getByLabel("Nova vistoria — observações").fill("Execução conforme o especificado.");
+    await page.getByRole("button", { name: "Registrar vistoria" }).click();
+
+    await expect(page.getByText("Vistoria registrada.")).toBeVisible();
+    await expect(page.getByText("Execução conforme o especificado.")).toBeVisible();
+    await expect(page.getByText("0 foto(s) anexada(s)")).toBeVisible();
+
+    await page.setInputFiles('input[type="file"][accept="image/*"]', {
+      name: "foto.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from("conteúdo de imagem de teste"),
+    });
+
+    await expect(page.getByText("Foto anexada.")).toBeVisible();
+    await expect(page.getByText("1 foto(s) anexada(s)")).toBeVisible();
+  });
 });

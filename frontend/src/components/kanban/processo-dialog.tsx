@@ -25,6 +25,7 @@ import {
 import type { TipoDocumento, ProcessoPagamento, DocumentoAnexo, ItemRadar } from "@/lib/api/client";
 import { RadarNivelBadge } from "@/components/radar/radar-badge";
 import { abrirPDFDeResposta } from "@/lib/abrir-pdf";
+import { VistoriasDialog } from "./vistorias-dialog";
 import { TriangleAlertIcon } from "lucide-react";
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -55,6 +56,7 @@ export function ProcessoDialog({
   const queryClient = useQueryClient();
   const [tipoSelecionado, setTipoSelecionado] = useState<string>("");
   const [pendentes, setPendentes] = useState<string[] | null>(null);
+  const [vistoriasOpen, setVistoriasOpen] = useState(false);
 
   const tipoDocumentoSelecionado = tiposDocumento.find(
     (tipo) => String(tipo.ID) === tipoSelecionado
@@ -273,33 +275,45 @@ export function ProcessoDialog({
           >
             Baixar relatório (PDF)
           </a>
-          {isFiscal && (
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => atestoMutation.mutate()}
-                disabled={atestoMutation.isPending}
-              >
-                {atestoMutation.isPending ? "Gerando..." : "Gerar Atesto"}
-              </Button>
-              {podeAvancar && (
-                <Button onClick={() => avancarMutation.mutate()} disabled={avancarMutation.isPending}>
-                  {avancarMutation.isPending ? "Avançando..." : "Avançar etapa"}
-                </Button>
-              )}
-              {podeConcluir && (
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={() => setVistoriasOpen(true)}>
+              Vistorias de Campo
+            </Button>
+            {isFiscal && (
+              <>
                 <Button
-                  variant="default"
-                  onClick={() => concluirMutation.mutate()}
-                  disabled={concluirMutation.isPending}
+                  variant="outline"
+                  onClick={() => atestoMutation.mutate()}
+                  disabled={atestoMutation.isPending}
                 >
-                  {concluirMutation.isPending ? "Concluindo..." : "Marcar como pago"}
+                  {atestoMutation.isPending ? "Gerando..." : "Gerar Atesto"}
                 </Button>
-              )}
-            </div>
-          )}
+                {podeAvancar && (
+                  <Button onClick={() => avancarMutation.mutate()} disabled={avancarMutation.isPending}>
+                    {avancarMutation.isPending ? "Avançando..." : "Avançar etapa"}
+                  </Button>
+                )}
+                {podeConcluir && (
+                  <Button
+                    variant="default"
+                    onClick={() => concluirMutation.mutate()}
+                    disabled={concluirMutation.isPending}
+                  >
+                    {concluirMutation.isPending ? "Concluindo..." : "Marcar como pago"}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
+
+      <VistoriasDialog
+        processoId={processo.ID!}
+        isFiscal={isFiscal}
+        open={vistoriasOpen}
+        onOpenChange={setVistoriasOpen}
+      />
     </Dialog>
   );
 }

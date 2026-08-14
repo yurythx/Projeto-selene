@@ -82,3 +82,12 @@ export const minutaAditivoSchema = z.object({
   novo_valor: z.string().trim().max(255).optional(),
   novo_prazo: z.string().trim().max(255).optional(),
 });
+
+// Módulo 3 do roadmap: Vistorias e Registro Fotográfico com
+// Geolocalização. Latitude/longitude vêm de navigator.geolocation no
+// client — nullable de propósito (permissão negada/indisponível).
+export const registrarVistoriaSchema = z.object({
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  observacoes: z.string().trim().max(4000).optional(),
+});

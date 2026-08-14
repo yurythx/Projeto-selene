@@ -400,3 +400,75 @@ func (f *FakeDocumentoEmitidoRepository) ListByContratoIDs(ctx context.Context, 
 }
 
 var _ repository.DocumentoEmitidoRepository = (*FakeDocumentoEmitidoRepository)(nil)
+
+// --- VistoriaRepository ---
+
+type FakeVistoriaRepository struct {
+	Vistorias map[uuid.UUID]*models.RegistroVistoria
+}
+
+func NewFakeVistoriaRepository(vistorias ...*models.RegistroVistoria) *FakeVistoriaRepository {
+	byID := make(map[uuid.UUID]*models.RegistroVistoria, len(vistorias))
+	for _, v := range vistorias {
+		byID[v.ID] = v
+	}
+	return &FakeVistoriaRepository{Vistorias: byID}
+}
+
+func (f *FakeVistoriaRepository) Create(ctx context.Context, vistoria *models.RegistroVistoria) error {
+	if vistoria.ID == uuid.Nil {
+		vistoria.ID = uuid.New()
+	}
+	f.Vistorias[vistoria.ID] = vistoria
+	return nil
+}
+
+func (f *FakeVistoriaRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.RegistroVistoria, error) {
+	if v, ok := f.Vistorias[id]; ok {
+		return v, nil
+	}
+	return nil, repository.ErrVistoriaNotFound
+}
+
+func (f *FakeVistoriaRepository) ListByProcesso(ctx context.Context, processoID uuid.UUID) ([]models.RegistroVistoria, error) {
+	var out []models.RegistroVistoria
+	for _, v := range f.Vistorias {
+		if v.ProcessoPagamentoID == processoID {
+			out = append(out, *v)
+		}
+	}
+	return out, nil
+}
+
+var _ repository.VistoriaRepository = (*FakeVistoriaRepository)(nil)
+
+// --- FotoVistoriaRepository ---
+
+type FakeFotoVistoriaRepository struct {
+	Fotos []models.FotoVistoria
+}
+
+func (f *FakeFotoVistoriaRepository) Create(ctx context.Context, foto *models.FotoVistoria) error {
+	if foto.ID == uuid.Nil {
+		foto.ID = uuid.New()
+	}
+	f.Fotos = append(f.Fotos, *foto)
+
+	// Reflete a foto na vistoria em memória do FakeVistoriaRepository não é
+	// responsabilidade deste fake (cada repository fake é independente,
+	// como os reais) — os testes que precisam de Vistoria.Fotos populado
+	// montam isso diretamente no fixture, igual RadarService faz com
+	// Contrato/Fiscal.
+	return nil
+}
+
+func (f *FakeFotoVistoriaRepository) FindByVistoriaAndHash(ctx context.Context, vistoriaID uuid.UUID, hash string) (*models.FotoVistoria, error) {
+	for _, foto := range f.Fotos {
+		if foto.VistoriaID == vistoriaID && foto.HashArquivo == hash {
+			return &foto, nil
+		}
+	}
+	return nil, repository.ErrFotoVistoriaNotFound
+}
+
+var _ repository.FotoVistoriaRepository = (*FakeFotoVistoriaRepository)(nil)

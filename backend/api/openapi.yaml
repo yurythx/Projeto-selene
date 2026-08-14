@@ -46,6 +46,10 @@ tags:
       Geração de PDFs oficiais (Notificação de Descumprimento, Atesto,
       Minuta de Aditivo) e verificação pública de autenticidade via QR code
       (Fase 2 do roadmap de módulos).
+  - name: Vistorias
+    description: >
+      Vistorias de campo com registro fotográfico e geolocalização, e o
+      "Relatório de Campo" em PDF (Fase 3 do roadmap de módulos).
   - name: Administração
     description: Gestão de contas de usuário — restrito a administradores.
 
@@ -544,6 +548,109 @@ paths:
         "404": { $ref: "#/components/responses/NaoEncontrado" }
         "429": { $ref: "#/components/responses/MuitasRequisicoes" }
 
+  /api/v1/processos/{id}/vistorias:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    get:
+      tags: [Vistorias]
+      summary: Lista as vistorias do processo
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RegistroVistoria" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [Vistorias]
+      summary: Registra uma nova vistoria de campo
+      description: >
+        Abre o registro; as fotos são anexadas depois, uma a uma, via
+        POST /vistorias/{id}/fotos. Latitude/longitude são opcionais — o
+        navegador pode negar/não suportar geolocalização.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                latitude: { type: number, format: double, nullable: true }
+                longitude: { type: number, format: double, nullable: true }
+                observacoes: { type: string }
+      responses:
+        "201":
+          description: Registrada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegistroVistoria" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/vistorias/{id}/fotos:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Vistorias]
+      summary: Anexa uma foto à vistoria
+      description: >
+        multipart/form-data, campo "foto". Mesma deduplicação por SHA-256
+        de POST /processos/{id}/documentos. Limite de 20MB por arquivo.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [foto]
+              properties:
+                foto: { type: string, format: binary }
+      responses:
+        "201":
+          description: Anexada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FotoVistoria" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "413":
+          description: Arquivo excede 20MB.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/vistorias/{id}/relatorio:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Vistorias]
+      summary: Gera o Relatório de Campo da vistoria (PDF)
+      description: >
+        Dados do contrato/processo, coordenadas, observações e as fotos
+        anexadas, embutidas no PDF.
+      responses:
+        "200":
+          description: PDF gerado.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
   /api/v1/admin/users:
     get:
       tags: [Administração]
@@ -726,6 +833,33 @@ components:
         gerado_por_nome: { type: string }
         criado_em: { type: string, example: "13/08/2026 14:32" }
         codigo_verificacao: { type: string, example: "SEL-A1B2C3D4E5F60708" }
+
+    RegistroVistoria:
+      type: object
+      description: Uma vistoria de campo (Fase 3 do roadmap).
+      properties:
+        ID: { type: string, format: uuid }
+        ProcessoPagamentoID: { type: string, format: uuid }
+        FiscalID: { type: string, format: uuid }
+        Fiscal: { $ref: "#/components/schemas/Usuario" }
+        DataHora: { type: string, format: date-time }
+        Latitude: { type: number, format: double, nullable: true, description: "Ausente quando o navegador negou/não suportou geolocalização." }
+        Longitude: { type: number, format: double, nullable: true }
+        Observacoes: { type: string }
+        Fotos:
+          type: array
+          items: { $ref: "#/components/schemas/FotoVistoria" }
+        CreatedAt: { type: string, format: date-time }
+
+    FotoVistoria:
+      type: object
+      description: 'CaminhoStorage (path local no servidor) é omitido de propósito — nunca serializado (json:"-").'
+      properties:
+        ID: { type: string, format: uuid }
+        VistoriaID: { type: string, format: uuid }
+        NomeArquivo: { type: string }
+        HashArquivo: { type: string }
+        CreatedAt: { type: string, format: date-time }
 
     Usuario:
       type: object

@@ -94,6 +94,8 @@ func main() {
 	docRepo := repository.NewDocumentoAnexoRepository(db)
 	logRepo := repository.NewKanbanLogRepository(db)
 	docEmitidoRepo := repository.NewDocumentoEmitidoRepository(db)
+	vistoriaRepo := repository.NewVistoriaRepository(db)
+	fotoVistoriaRepo := repository.NewFotoVistoriaRepository(db)
 
 	// --- Services ---
 	userService := service.NewUserService(userRepo)
@@ -117,6 +119,8 @@ func main() {
 	radarService := service.NewRadarService(contratoRepo, processoRepo, docRepo, logRepo)
 
 	geradorDocumentosService := service.NewGeradorDocumentosService(contratoRepo, processoRepo, docEmitidoRepo, cfg.PublicURL)
+
+	vistoriaService := service.NewVistoriaService(vistoriaRepo, fotoVistoriaRepo, processoRepo, cfg.StorageDir)
 
 	// --- Middleware de autenticação ---
 	// O contexto de fundo é usado apenas para o fetch inicial do JWKS na
@@ -157,6 +161,7 @@ func main() {
 	kanbanRefHandler := handler.NewKanbanRefHandler(etapaRepo, tipoDocRepo)
 	radarHandler := handler.NewRadarHandler(radarService)
 	geradorDocumentosHandler := handler.NewGeradorDocumentosHandler(geradorDocumentosService)
+	vistoriaHandler := handler.NewVistoriaHandler(vistoriaService)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -225,6 +230,8 @@ func main() {
 		api.GET("/processos/:id", processoHandler.Buscar)
 		api.GET("/processos/:id/documentos", documentoHandler.Listar)
 		api.GET("/processos/:id/relatorio", relatorioHandler.Gerar)
+		api.GET("/processos/:id/vistorias", vistoriaHandler.ListarPorProcesso)
+		api.GET("/vistorias/:id/relatorio", vistoriaHandler.GerarRelatorioCampo)
 
 		// Escrita/movimentação do Kanban: restrita a fiscais habilitados
 		// e sujeita a rate limit (por usuário autenticado).
@@ -243,6 +250,11 @@ func main() {
 			fiscal.POST("/contratos/:id/notificacao", geradorDocumentosHandler.GerarNotificacao)
 			fiscal.POST("/processos/:id/atesto", geradorDocumentosHandler.GerarAtesto)
 			fiscal.POST("/contratos/:id/minuta-aditivo", geradorDocumentosHandler.GerarMinutaAditivo)
+
+			// Módulo 3 do roadmap: vistorias de campo com registro
+			// fotográfico e geolocalização.
+			fiscal.POST("/processos/:id/vistorias", vistoriaHandler.Registrar)
+			fiscal.POST("/vistorias/:id/fotos", vistoriaHandler.AnexarFoto)
 		}
 
 		// Administração de contas: restrita a administradores.

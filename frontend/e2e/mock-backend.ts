@@ -137,8 +137,22 @@ function criarProcessoSeed(contrato: Contrato): Processo {
   };
 }
 
+interface Vistoria {
+  ID: string;
+  ProcessoPagamentoID: string;
+  FiscalID: string;
+  Fiscal: Usuario;
+  DataHora: string;
+  Latitude: number | null;
+  Longitude: number | null;
+  Observacoes: string;
+  Fotos: { ID: string; NomeArquivo: string }[];
+  CreatedAt: string;
+}
+
 let contratos: Contrato[] = [];
 let processos: Processo[] = [];
+let vistorias: Vistoria[] = [];
 const documentosPorProcesso = new Map<string, Documento[]>();
 
 function resetState() {
@@ -146,6 +160,7 @@ function resetState() {
   const contratoSeed = criarContratoSeed();
   contratos = [contratoSeed];
   processos = [criarProcessoSeed(contratoSeed)];
+  vistorias = [];
   documentosPorProcesso.clear();
 }
 
@@ -357,6 +372,50 @@ const server = createServer((req, res) => {
     const verificarMatch = pathname.match(/^\/api\/v1\/verificar\/([^/]+)$/);
     if (verificarMatch && req.method === "GET") {
       return json(res, 200, { valido: false });
+    }
+
+    // Módulo 3 do roadmap (Vistorias) — em memória, mesmo espírito do
+    // resto do stub: só o suficiente pra exercitar o fluxo do frontend.
+    const vistoriasDoProcessoMatch = pathname.match(/^\/api\/v1\/processos\/([^/]+)\/vistorias$/);
+    if (vistoriasDoProcessoMatch) {
+      const [, processoId] = vistoriasDoProcessoMatch;
+      if (req.method === "GET") {
+        return json(res, 200, vistorias.filter((v) => v.ProcessoPagamentoID === processoId));
+      }
+      if (req.method === "POST") {
+        const corpo = bodyAsJSON();
+        const nova = {
+          ID: nextId("vistoria"),
+          ProcessoPagamentoID: processoId,
+          FiscalID: "fiscal-1",
+          Fiscal: usuarios[0],
+          DataHora: new Date().toISOString(),
+          Latitude: corpo.latitude ?? null,
+          Longitude: corpo.longitude ?? null,
+          Observacoes: corpo.observacoes ?? "",
+          Fotos: [] as { ID: string; NomeArquivo: string }[],
+          CreatedAt: new Date().toISOString(),
+        };
+        vistorias.push(nova);
+        return json(res, 201, nova);
+      }
+    }
+
+    const fotoVistoriaMatch = pathname.match(/^\/api\/v1\/vistorias\/([^/]+)\/fotos$/);
+    if (fotoVistoriaMatch && req.method === "POST") {
+      const [, vistoriaId] = fotoVistoriaMatch;
+      const vistoria = vistorias.find((v) => v.ID === vistoriaId);
+      if (!vistoria) return json(res, 404, { error: "não encontrado" });
+      const foto = { ID: nextId("foto-vistoria"), NomeArquivo: "foto-teste.jpg" };
+      vistoria.Fotos.push(foto);
+      return json(res, 201, foto);
+    }
+
+    const relatorioCampoMatch = pathname.match(/^\/api\/v1\/vistorias\/([^/]+)\/relatorio$/);
+    if (relatorioCampoMatch && req.method === "GET") {
+      const pdfFalso = Buffer.from("%PDF-1.4 relatorio de campo de teste");
+      res.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": pdfFalso.length });
+      return res.end(pdfFalso);
     }
 
     if (pathname === "/api/v1/admin/users" && req.method === "GET") {

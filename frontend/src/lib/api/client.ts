@@ -13,6 +13,15 @@ export type DocumentoAnexo = components["schemas"]["DocumentoAnexo"];
 export type ItemRadar = components["schemas"]["ItemRadar"];
 export type MinutaAditivoRequest = components["schemas"]["MinutaAditivoRequest"];
 export type VerificarDocumentoResponse = components["schemas"]["VerificarDocumentoResponse"];
+export type RegistroVistoria = components["schemas"]["RegistroVistoria"];
+export type FotoVistoria = components["schemas"]["FotoVistoria"];
+
+/** Corpo de POST /processos/{id}/vistorias. */
+export interface NovaVistoriaRequest {
+  latitude?: number | null;
+  longitude?: number | null;
+  observacoes?: string;
+}
 
 /** Corpo do 422 de POST /processos/{id}/avancar quando o checklist da etapa não está completo. */
 export interface ChecklistIncompletoBody {
@@ -203,6 +212,44 @@ export function anexarDocumento(
 
 export function listarRadar(accessToken: string) {
   return apiFetch<ItemRadar[]>("/api/v1/radar", accessToken);
+}
+
+export function listarVistorias(accessToken: string, processoId: string) {
+  return apiFetch<RegistroVistoria[]>(`/api/v1/processos/${processoId}/vistorias`, accessToken);
+}
+
+export function registrarVistoria(accessToken: string, processoId: string, dados: NovaVistoriaRequest) {
+  return apiFetch<RegistroVistoria>(`/api/v1/processos/${processoId}/vistorias`, accessToken, {
+    method: "POST",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function anexarFotoVistoria(accessToken: string, vistoriaId: string, foto: File) {
+  const formData = new FormData();
+  formData.append("foto", foto);
+  return apiFetch<FotoVistoria>(`/api/v1/vistorias/${vistoriaId}/fotos`, accessToken, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+/**
+ * Baixa o Relatório de Campo (PDF) de uma vistoria. Não passa por
+ * apiFetch — resposta binária, mesmo padrão de baixarRelatorio.
+ */
+export async function baixarRelatorioCampo(accessToken: string, vistoriaId: string): Promise<Response> {
+  const res = await fetch(`${API_URL}/api/v1/vistorias/${vistoriaId}/relatorio`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => undefined);
+    throw new ApiError(res.status, body);
+  }
+
+  return res;
 }
 
 /**

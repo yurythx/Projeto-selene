@@ -46,7 +46,9 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrTipoDocumentoNotFound),
 		errors.Is(err, repository.ErrProcessoNotFound),
 		errors.Is(err, repository.ErrDocumentoNotFound),
-		errors.Is(err, repository.ErrDocumentoEmitidoNotFound):
+		errors.Is(err, repository.ErrDocumentoEmitidoNotFound),
+		errors.Is(err, repository.ErrVistoriaNotFound),
+		errors.Is(err, repository.ErrFotoVistoriaNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "recurso não encontrado"})
 
 	case errors.Is(err, service.ErrEtapaFinal),
