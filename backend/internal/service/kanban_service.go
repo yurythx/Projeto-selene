@@ -6,6 +6,10 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 
 	"projeto-selene/internal/logging"
@@ -13,6 +17,11 @@ import (
 	"projeto-selene/internal/models"
 	"projeto-selene/internal/repository"
 )
+
+// tracer identifica os spans deste pacote na árvore de traces — nome
+// convencional do OpenTelemetry (costuma ser o import path do pacote que
+// os produz).
+var tracer = otel.Tracer("projeto-selene/internal/service")
 
 // KanbanService implementa o funil rígido de 6 etapas descrito na Seção 5
 // da documentação de domínio: cria processos de pagamento (cards), avança
@@ -110,7 +119,18 @@ func (s *KanbanService) CriarProcesso(ctx context.Context, contratoID uuid.UUID,
 // checklist obrigatório da etapa atual esteja completo. A atualização da
 // etapa e a gravação do log de auditoria acontecem na mesma transação —
 // nunca existe uma transição sem o log correspondente.
-func (s *KanbanService) AvancarEtapa(ctx context.Context, processoID uuid.UUID, usuarioID uuid.UUID) (*models.ProcessoPagamento, error) {
+func (s *KanbanService) AvancarEtapa(ctx context.Context, processoID uuid.UUID, usuarioID uuid.UUID) (processoResultado *models.ProcessoPagamento, errResultado error) {
+	ctx, span := tracer.Start(ctx, "kanban.avancar_etapa", trace.WithAttributes(
+		attribute.String("processo_id", processoID.String()),
+	))
+	defer func() {
+		if errResultado != nil {
+			span.RecordError(errResultado)
+			span.SetStatus(codes.Error, errResultado.Error())
+		}
+		span.End()
+	}()
+
 	processo, err := s.processoRepo.FindByID(ctx, processoID)
 	if err != nil {
 		return nil, err
@@ -122,6 +142,10 @@ func (s *KanbanService) AvancarEtapa(ctx context.Context, processoID uuid.UUID, 
 
 	etapaOrigem := processo.EtapaAtualID
 	etapaDestino := etapaOrigem + 1
+	span.SetAttributes(
+		attribute.Int("etapa_origem", etapaOrigem),
+		attribute.Int("etapa_destino", etapaDestino),
+	)
 
 	pendentes, err := ChecklistPendente(ctx, s.docRepo, processoID, etapaOrigem, processo.Contrato.TipoObjeto)
 	if err != nil {

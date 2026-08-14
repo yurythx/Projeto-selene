@@ -17,6 +17,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"projeto-selene/internal/config"
 	"projeto-selene/internal/database"
@@ -25,6 +27,7 @@ import (
 	"projeto-selene/internal/middleware"
 	"projeto-selene/internal/repository"
 	"projeto-selene/internal/service"
+	"projeto-selene/internal/tracing"
 )
 
 // shutdownTimeout é quanto tempo o servidor espera requisições em
@@ -49,6 +52,16 @@ func main() {
 		logger.Error(msg, "erro", err)
 		os.Exit(1)
 	}
+
+	shutdownTracing, err := tracing.New(context.Background(), cfg.OTELServiceName, cfg.OTELExporterEndpoint)
+	if err != nil {
+		fatal("falha ao inicializar tracing", err)
+	}
+	defer func() {
+		if err := shutdownTracing(context.Background()); err != nil {
+			logger.Error("falha ao encerrar tracer provider", "erro", err)
+		}
+	}()
 
 	// gin.ReleaseMode é obrigatório em produção: modo debug loga rotas e
 	// erros com detalhe e roda mais devagar. AppEnv precisa ser
@@ -112,7 +125,21 @@ func main() {
 		fatal("falha ao inicializar middleware de autenticação", err)
 	}
 
-	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRPS, cfg.RateLimitBurst)
+	// Rate limiter: Redis compartilhado se REDIS_ADDR estiver configurado
+	// (vale entre réplicas), senão cai para o limiter em memória (mesmo
+	// princípio de graceful degradation do resto da aplicação).
+	var rateLimiter middleware.RateLimiter
+	if cfg.RedisAddr != "" {
+		redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+		if err := redisClient.Ping(context.Background()).Err(); err != nil {
+			fatal("falha ao conectar ao Redis (REDIS_ADDR configurado)", err)
+		}
+		rateLimiter = middleware.NewRedisRateLimiter(redisClient, cfg.RateLimitRPS, cfg.RateLimitBurst)
+		logger.Info("rate limiter usando Redis compartilhado", "endereco", cfg.RedisAddr)
+	} else {
+		rateLimiter = middleware.NewInMemoryRateLimiter(cfg.RateLimitRPS, cfg.RateLimitBurst)
+		logger.Warn("REDIS_ADDR não configurado — rate limiter em memória, por instância (não vale entre réplicas)")
+	}
 
 	// --- Handlers ---
 	healthHandler := handler.NewHealthHandler(db)
@@ -131,6 +158,7 @@ func main() {
 	router.Use(
 		gin.Recovery(),
 		middleware.RequestID(),
+		otelgin.Middleware(cfg.OTELServiceName),
 		middleware.StructuredLogger(),
 		middleware.Metrics(),
 		middleware.NewCORS(cfg.CORSAllowedOrigins),

@@ -1,6 +1,6 @@
-# Orquestra o monorepo (backend + Postgres agora; frontend entra aqui
-# quando existir). Cada serviço aponta pro seu próprio subdiretório —
-# nenhum build usa a raiz do repo como contexto.
+# Orquestra o monorepo (backend + Postgres + Redis + Jaeger agora;
+# frontend entra aqui quando existir). Cada serviço aponta pro seu próprio
+# subdiretório — nenhum build usa a raiz do repo como contexto.
 services:
   postgres:
     image: postgres:16-alpine
@@ -19,12 +19,36 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI
+      - "4318:4318"   # OTLP/HTTP (o backend exporta pra cá)
+
   backend:
     build: ./backend
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
     ports:
       - "${SERVER_PORT:-8080}:8080"
     environment:
@@ -51,6 +75,9 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-}
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-5}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-10}
+      REDIS_ADDR: redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4318
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-projeto-selene-backend}
     volumes:
       - storage_data:/app/storage
 

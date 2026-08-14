@@ -49,7 +49,7 @@ cp backend/.env.example backend/.env
 make up            # a partir da raiz do repo (atalho para `docker compose up --build`)
 ```
 
-Sobe Postgres + backend. A API roda as migrations e o seed automaticamente no boot. Health check em `http://localhost:8080/health`.
+Sobe Postgres + Redis + Jaeger + backend. A API roda as migrations e o seed automaticamente no boot. Health check em `http://localhost:8080/health`, traces em `http://localhost:16686` (Jaeger UI).
 
 ### Opção 2 — Go local
 
@@ -125,6 +125,9 @@ Ver `.env.example` para a lista completa com comentários. Resumo:
 | `LOG_LEVEL` | não (default `info`) | `debug`/`info`/`warn`/`error`. |
 | `LOG_FORMAT` | não (default por `APP_ENV`) | `json` (produção) ou `text` (desenvolvimento). |
 | `RATE_LIMIT_RPS`, `RATE_LIMIT_BURST` | não (defaults `5`/`10`) | Limite de requisições por usuário nas rotas de escrita. |
+| `REDIS_ADDR` | não (default: nenhum) | `"host:porta"` — se definido, o rate limit usa Redis compartilhado (vale entre réplicas); vazio = em memória, por instância. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | não (default: nenhum) | `"host:porta"` de um coletor OTLP/HTTP (Jaeger, Tempo); vazio = tracing desabilitado. |
+| `OTEL_SERVICE_NAME` | não (default `projeto-selene-backend`) | Nome do serviço nos traces exportados. |
 
 ---
 
@@ -183,8 +186,8 @@ Um contrato `Encerrar`ado (`Ativo=false`) não aceita novos `POST /processos` �
 - [x] Testes de handler (camada HTTP: binding, status codes, multipart)
 - [x] Documentação OpenAPI/Swagger (`api/openapi.yaml`)
 - [x] Revisão de segurança manual das áreas sensíveis (auth, upload, SMTP, rate limit) — achou e corrigiu um path traversal real (ver `git log`, commit "fix: corrige path traversal...")
-- [ ] Tracing distribuído (OpenTelemetry)
-- [ ] Rate limiting compartilhado entre réplicas (hoje é em memória, por instância — ver limitações)
+- [x] Tracing distribuído (OpenTelemetry — HTTP via `otelgin`, GORM via `otelgorm`, spans manuais no `KanbanService.AvancarEtapa`), validado no Jaeger
+- [x] Rate limiting compartilhado entre réplicas (Redis, GCRA via `go-redis/redis_rate`, fail-open se o Redis cair) — cai para o limiter em memória se `REDIS_ADDR` não estiver configurado
 - [ ] `security-review` automatizado no CI (hoje depende de diff contra `origin/HEAD`, que só existe depois do primeiro push)
 
 ---

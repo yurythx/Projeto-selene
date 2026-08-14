@@ -71,6 +71,21 @@ type Config struct {
 	RateLimitRPS   float64
 	RateLimitBurst int
 
+	// RedisAddr ("host:porta"), se definido, faz o rate limit usar um
+	// backend Redis compartilhado (internal/middleware.RedisRateLimiter)
+	// em vez do limiter em memória — necessário pra o limite valer entre
+	// múltiplas réplicas do backend. Vazio (default) = limiter em
+	// memória, por instância.
+	RedisAddr string
+
+	// OTELExporterEndpoint ("host:porta", sem esquema — ex:
+	// "jaeger:4318"), se definido, habilita a exportação real de traces
+	// via OTLP/HTTP. Vazio (default) = tracing desabilitado (sampler
+	// nunca grava, sem exportar nada). Ver internal/tracing.
+	OTELExporterEndpoint string
+	// OTELServiceName identifica este serviço nos traces exportados.
+	OTELServiceName string
+
 	// StorageDir é o diretório raiz onde os documentos anexos (PDFs) são
 	// gravados localmente.
 	StorageDir string
@@ -167,6 +182,10 @@ func Load() (*Config, error) {
 
 		RateLimitRPS:   rateLimitRPS,
 		RateLimitBurst: rateLimitBurst,
+		RedisAddr:      os.Getenv("REDIS_ADDR"),
+
+		OTELExporterEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		OTELServiceName:      getEnvOrDefault("OTEL_SERVICE_NAME", "projeto-selene-backend"),
 
 		StorageDir: getEnvOrDefault("STORAGE_DIR", "./storage"),
 

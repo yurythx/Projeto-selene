@@ -9,23 +9,31 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// RateLimiter é satisfeita tanto por InMemoryRateLimiter (default, sempre
+// disponível) quanto por RedisRateLimiter (ratelimit_redis.go, usado
+// quando REDIS_ADDR está configurado) — main.go escolhe qual construir,
+// o resto do wiring (fiscal.Use(rateLimiter.Middleware())) não muda.
+type RateLimiter interface {
+	Middleware() gin.HandlerFunc
+}
+
 // tempoOciosoLimite é quanto tempo um limiter de usuário fica sem uso
 // antes de ser descartado — evita crescimento ilimitado do mapa de
 // limiters ao longo do tempo (um usuário que não volta mais não deveria
 // ocupar memória para sempre).
 const tempoOciosoLimite = 3 * time.Minute
 
-// RateLimiter aplica um limite de requisições por usuário autenticado
-// (token bucket, via golang.org/x/time/rate) nas rotas de escrita.
+// InMemoryRateLimiter aplica um limite de requisições por usuário
+// autenticado (token bucket, via golang.org/x/time/rate) nas rotas de
+// escrita.
 //
 // LIMITAÇÃO CONHECIDA: o estado é em memória, por instância do processo.
 // Com múltiplas réplicas da API atrás de um load balancer, cada réplica
 // aplica seu próprio limite independente (um usuário poderia, na prática,
 // ter o limite multiplicado pelo número de réplicas). Para um limite
-// verdadeiramente global entre réplicas seria necessário um backend
-// compartilhado (Redis) — deixado para quando houver deploy multi-réplica
-// de verdade, para não adicionar essa dependência prematuramente.
-type RateLimiter struct {
+// verdadeiramente global entre réplicas, configure REDIS_ADDR — main.go
+// troca automaticamente para RedisRateLimiter (ver ratelimit_redis.go).
+type InMemoryRateLimiter struct {
 	mu       sync.Mutex
 	visitors map[string]*visitanteLimiter
 
@@ -38,11 +46,12 @@ type visitanteLimiter struct {
 	ultimoUso time.Time
 }
 
-// NewRateLimiter constrói um RateLimiter e inicia sua goroutine de limpeza
-// periódica — vive pelo tempo de vida do processo (construído uma única
-// vez em main.go), não por requisição nem por teste.
-func NewRateLimiter(rps float64, burst int) *RateLimiter {
-	rl := &RateLimiter{
+// NewInMemoryRateLimiter constrói um InMemoryRateLimiter e inicia sua
+// goroutine de limpeza periódica — vive pelo tempo de vida do processo
+// (construído uma única vez em main.go), não por requisição nem por
+// teste.
+func NewInMemoryRateLimiter(rps float64, burst int) *InMemoryRateLimiter {
+	rl := &InMemoryRateLimiter{
 		visitors: make(map[string]*visitanteLimiter),
 		rps:      rate.Limit(rps),
 		burst:    burst,
@@ -51,7 +60,7 @@ func NewRateLimiter(rps float64, burst int) *RateLimiter {
 	return rl
 }
 
-func (rl *RateLimiter) limparPeriodicamente() {
+func (rl *InMemoryRateLimiter) limparPeriodicamente() {
 	for {
 		time.Sleep(time.Minute)
 
@@ -65,7 +74,7 @@ func (rl *RateLimiter) limparPeriodicamente() {
 	}
 }
 
-func (rl *RateLimiter) obterLimiter(chave string) *rate.Limiter {
+func (rl *InMemoryRateLimiter) obterLimiter(chave string) *rate.Limiter {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
@@ -85,7 +94,7 @@ func (rl *RateLimiter) obterLimiter(chave string) *rate.Limiter {
 // Cai de volta para o IP só se, por algum motivo, rodar antes do
 // middleware de autenticação (não deveria acontecer no wiring normal).
 // Precisa rodar DEPOIS do middleware de autenticação na cadeia.
-func (rl *RateLimiter) Middleware() gin.HandlerFunc {
+func (rl *InMemoryRateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		chave := c.ClientIP()
 		if user, ok := UserFromContext(c); ok {
@@ -100,3 +109,5 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+var _ RateLimiter = (*InMemoryRateLimiter)(nil)

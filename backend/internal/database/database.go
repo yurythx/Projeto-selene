@@ -11,6 +11,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	migratepostgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -19,12 +20,18 @@ import (
 var migrationsFS embed.FS
 
 // Connect abre a conexão com o Postgres usando a DSN fornecida (ver
-// config.Config.DSN). Não realiza migrations — chame Migrate separadamente
+// config.Config.DSN), instrumentada com OpenTelemetry (spans de query
+// aparecem como filhos do span do handler/service que a chamou, na mesma
+// árvore de trace). Não realiza migrations — chame Migrate separadamente
 // após validar a conexão.
 func Connect(dsn string) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("database: falha ao conectar ao Postgres: %w", err)
+	}
+
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		return nil, fmt.Errorf("database: falha ao instrumentar GORM com OpenTelemetry: %w", err)
 	}
 
 	return db, nil
