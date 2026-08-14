@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EditarUsuarioDialog } from "@/components/admin/editar-usuario-dialog";
+import { CriarUsuarioLocalDialog } from "@/components/admin/criar-usuario-local-dialog";
 
 export default async function AdminUsuariosPage() {
   const session = await auth();
@@ -36,12 +37,15 @@ export default async function AdminUsuariosPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Administração de usuários</h1>
-        <p className="text-muted-foreground text-sm">
-          {usuarios.length} usuário{usuarios.length === 1 ? "" : "s"} provisionado
-          {usuarios.length === 1 ? "" : "s"} (via primeiro login no Keycloak).
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Administração de usuários</h1>
+          <p className="text-muted-foreground text-sm">
+            {usuarios.length} usuário{usuarios.length === 1 ? "" : "s"} — via Keycloak (primeiro
+            login) ou conta local criada aqui.
+          </p>
+        </div>
+        <CriarUsuarioLocalDialog />
       </div>
 
       <div className="overflow-x-auto rounded-md border">
@@ -53,6 +57,7 @@ export default async function AdminUsuariosPage() {
               <TableHead>Matrícula</TableHead>
               <TableHead>Fiscal</TableHead>
               <TableHead>Admin</TableHead>
+              <TableHead>Situação</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -71,6 +76,18 @@ export default async function AdminUsuariosPage() {
                   <Badge variant={usuario.IsAdmin ? "default" : "secondary"}>
                     {usuario.IsAdmin ? "Sim" : "Não"}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  {usuario.MustChangePassword ? (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400"
+                    >
+                      Senha temporária pendente
+                    </Badge>
+                  ) : (
+                    "—"
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   <EditarUsuarioDialog usuario={usuario} />

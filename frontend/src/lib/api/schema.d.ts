@@ -132,6 +132,8 @@ export interface paths {
                             email?: string;
                             is_fiscal?: boolean;
                             is_admin?: boolean;
+                            /** @description true = conta local com senha temporária, precisa trocar antes de continuar. */
+                            must_change_password?: boolean;
                         };
                     };
                 };
@@ -140,6 +142,127 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login tradicional (e-mail/senha)
+         * @description Rota PÚBLICA (ainda não há sessão) — sujeita a rate limit por IP como defesa contra força bruta. Emite um token de acesso aceito pelo resto da API exatamente como um token do Keycloak (mesmo formato, issuer diferente).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: email */
+                        email: string;
+                        /** Format: password */
+                        senha: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            access_token?: string;
+                            usuario?: components["schemas"]["Usuario"];
+                        };
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                /** @description E-mail ou senha inválidos. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/trocar-senha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Troca a senha da própria conta
+         * @description Autenticado (qualquer usuário logado). Contas Keycloak recebem 400 — a senha delas é gerenciada pelo Keycloak, não pelo Selene.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: password */
+                        senha_atual: string;
+                        /**
+                         * Format: password
+                         * @description Mínimo 8 caracteres.
+                         */
+                        senha_nova: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Senha trocada. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                /** @description Não autenticado, ou senha atual incorreta. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1342,6 +1465,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/local": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cria uma conta de login local (e-mail/senha)
+         * @description Restrito a administradores. Não há autocadastro público — só por aqui. A conta nasce com `must_change_password=true`: o usuário precisa trocar a senha temporária no primeiro login (ver POST /auth/trocar-senha).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        nome: string;
+                        /** Format: email */
+                        email: string;
+                        /**
+                         * Format: password
+                         * @description Mínimo 8 caracteres.
+                         */
+                        senha_temporaria: string;
+                        is_fiscal?: boolean;
+                        is_admin?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Criado. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Usuario"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{id}": {
         parameters: {
             query?: never;
@@ -1589,7 +1769,7 @@ export interface components {
             /** Format: date-time */
             CreatedAt?: string;
         };
-        /** @description KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI. */
+        /** @description KeycloakID (claim "sub" do token OIDC) e PasswordHash (bcrypt) são omitidos de propósito — nunca serializados (json:"-"): o primeiro é um identificador interno sem uso na UI, o segundo nunca deveria sair do servidor em nenhuma resposta. */
         Usuario: {
             /** Format: uuid */
             ID?: string;
@@ -1598,6 +1778,8 @@ export interface components {
             Email?: string;
             IsFiscal?: boolean;
             IsAdmin?: boolean;
+            /** @description true = conta local com senha temporária definida pelo admin, ainda não trocada. */
+            MustChangePassword?: boolean;
             Matricula?: string;
             /** Format: date-time */
             CriadoEm?: string;

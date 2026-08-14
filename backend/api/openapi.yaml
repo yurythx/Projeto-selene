@@ -29,6 +29,11 @@ tags:
     description: Health check e métricas — sem autenticação.
   - name: Sessão
     description: Informações do usuário autenticado.
+  - name: Login Local
+    description: >
+      Login tradicional (e-mail/senha) — alternativa ao Keycloak. Contas
+      são criadas só por um administrador (POST /admin/users/local); não
+      há autocadastro público.
   - name: Referências do Kanban
     description: Tabelas de referência somente-leitura (etapas fixas, tipos de documento).
   - name: Contratos
@@ -118,7 +123,70 @@ paths:
                   email: { type: string, format: email }
                   is_fiscal: { type: boolean }
                   is_admin: { type: boolean }
+                  must_change_password: { type: boolean, description: "true = conta local com senha temporária, precisa trocar antes de continuar." }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/auth/login:
+    post:
+      tags: [Login Local]
+      summary: Login tradicional (e-mail/senha)
+      description: >
+        Rota PÚBLICA (ainda não há sessão) — sujeita a rate limit por IP
+        como defesa contra força bruta. Emite um token de acesso aceito
+        pelo resto da API exatamente como um token do Keycloak (mesmo
+        formato, issuer diferente).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, senha]
+              properties:
+                email: { type: string, format: email }
+                senha: { type: string, format: password }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  usuario: { $ref: "#/components/schemas/Usuario" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401":
+          description: E-mail ou senha inválidos.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/auth/trocar-senha:
+    post:
+      tags: [Login Local]
+      summary: Troca a senha da própria conta
+      description: >
+        Autenticado (qualquer usuário logado). Contas Keycloak recebem
+        400 — a senha delas é gerenciada pelo Keycloak, não pelo Selene.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [senha_atual, senha_nova]
+              properties:
+                senha_atual: { type: string, format: password }
+                senha_nova: { type: string, format: password, description: "Mínimo 8 caracteres." }
+      responses:
+        "204": { description: Senha trocada. }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401":
+          description: Não autenticado, ou senha atual incorreta.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
 
   /api/v1/kanban/etapas:
     get:
@@ -706,6 +774,38 @@ paths:
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "403": { $ref: "#/components/responses/Proibido" }
 
+  /api/v1/admin/users/local:
+    post:
+      tags: [Administração, Login Local]
+      summary: Cria uma conta de login local (e-mail/senha)
+      description: >
+        Restrito a administradores. Não há autocadastro público — só por
+        aqui. A conta nasce com `must_change_password=true`: o usuário
+        precisa trocar a senha temporária no primeiro login (ver POST
+        /auth/trocar-senha).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nome, email, senha_temporaria]
+              properties:
+                nome: { type: string }
+                email: { type: string, format: email }
+                senha_temporaria: { type: string, format: password, description: "Mínimo 8 caracteres." }
+                is_fiscal: { type: boolean }
+                is_admin: { type: boolean }
+      responses:
+        "201":
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+
   /api/v1/admin/users/{id}:
     parameters:
       - name: id
@@ -950,13 +1050,14 @@ components:
 
     Usuario:
       type: object
-      description: 'KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI.'
+      description: 'KeycloakID (claim "sub" do token OIDC) e PasswordHash (bcrypt) são omitidos de propósito — nunca serializados (json:"-"): o primeiro é um identificador interno sem uso na UI, o segundo nunca deveria sair do servidor em nenhuma resposta.'
       properties:
         ID: { type: string, format: uuid }
         Nome: { type: string }
         Email: { type: string, format: email }
         IsFiscal: { type: boolean }
         IsAdmin: { type: boolean }
+        MustChangePassword: { type: boolean, description: "true = conta local com senha temporária definida pelo admin, ainda não trocada." }
         Matricula: { type: string }
         CriadoEm: { type: string, format: date-time }
         AtualizadoEm: { type: string, format: date-time }

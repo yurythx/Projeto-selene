@@ -119,6 +119,13 @@ services:
       # (necessário pro cookie de sessão sair com o prefixo __Secure-
       # correto). Sem isso: erro "UntrustedHost".
       AUTH_TRUST_HOST: "true"
+      # OBRIGATÓRIO (mesmo motivo do docker-compose.yml de dev, ver o
+      # comentário lá): sem isso o redirect_uri mandado pro Keycloak sai
+      # como "http://0.0.0.0:3000/..." em vez da URL pública real — o
+      # Keycloak rejeita por não bater com o Valid Redirect URI cadastrado
+      # no client. Reaproveita PUBLIC_URL (já usado pelo backend pro QR
+      # code do Atesto) — é o mesmo valor: a URL pública do frontend.
+      AUTH_URL: ${PUBLIC_URL}
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_KEYCLOAK_ID: ${AUTH_KEYCLOAK_ID}
       AUTH_KEYCLOAK_SECRET: ${AUTH_KEYCLOAK_SECRET}

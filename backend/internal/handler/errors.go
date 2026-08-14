@@ -57,8 +57,13 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrFiscalInvalido),
 		errors.Is(err, service.ErrTipoObjetoInvalido),
 		errors.Is(err, service.ErrContratoEncerrado),
-		errors.Is(err, service.ErrMotivoObrigatorio):
+		errors.Is(err, service.ErrMotivoObrigatorio),
+		errors.Is(err, service.ErrSenhaFraca),
+		errors.Is(err, service.ErrContaSemSenhaLocal):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+	case errors.Is(err, service.ErrCredenciaisInvalidas):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 
 	default:
 		// Erro não mapeado = inesperado (bug, falha de infraestrutura) —

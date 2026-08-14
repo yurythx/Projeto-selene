@@ -48,3 +48,20 @@ var ErrMotivoObrigatorio = errors.New("service: motivo/justificativa é obrigat�
 // ErrFornecedorNaoEncontrado é retornado pelo Dossiê do Fornecedor (Fase 4
 // do roadmap) quando nenhum contrato cadastrado tem o CNPJ informado.
 var ErrFornecedorNaoEncontrado = errors.New("service: nenhum contrato encontrado para este CNPJ")
+
+// ErrCredenciaisInvalidas é retornado pelo login local (AuthService) tanto
+// pra e-mail inexistente quanto pra senha errada quanto pra conta sem
+// senha local (provisionada via Keycloak) — deliberadamente a MESMA
+// mensagem nos três casos, pra não revelar por resposta (nem por tempo —
+// ver o comentário em AuthService.Login sobre a comparação bcrypt contra
+// um hash de preenchimento) se um e-mail está cadastrado no sistema.
+var ErrCredenciaisInvalidas = errors.New("service: e-mail ou senha inválidos")
+
+// ErrSenhaFraca é retornado quando a nova senha (troca de senha) não
+// atende o tamanho mínimo.
+var ErrSenhaFraca = errors.New("service: senha precisa ter pelo menos 8 caracteres")
+
+// ErrContaSemSenhaLocal é retornado ao tentar trocar a senha de uma conta
+// provisionada via Keycloak (PasswordHash nulo) — a senha dela é
+// gerenciada pelo Keycloak, não pelo Selene.
+var ErrContaSemSenhaLocal = errors.New("service: esta conta não usa senha local (login via Keycloak)")

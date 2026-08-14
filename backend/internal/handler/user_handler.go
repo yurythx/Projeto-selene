@@ -14,11 +14,12 @@ import (
 // middleware.RequireAdmin.
 type UserHandler struct {
 	userService *service.UserService
+	authService *service.AuthService
 }
 
 // NewUserHandler constrói um UserHandler.
-func NewUserHandler(userService *service.UserService) *UserHandler {
-	return &UserHandler{userService: userService}
+func NewUserHandler(userService *service.UserService, authService *service.AuthService) *UserHandler {
+	return &UserHandler{userService: userService, authService: authService}
 }
 
 // Listar trata GET /api/v1/admin/users.
@@ -81,4 +82,39 @@ func (h *UserHandler) AtualizarPermissoes(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, user)
+}
+
+type criarUsuarioLocalRequest struct {
+	Nome            string `json:"nome" binding:"required"`
+	Email           string `json:"email" binding:"required,email"`
+	SenhaTemporaria string `json:"senha_temporaria" binding:"required"`
+	IsFiscal        bool   `json:"is_fiscal"`
+	IsAdmin         bool   `json:"is_admin"`
+}
+
+// CriarLocal trata POST /api/v1/admin/users/local — cria uma conta de
+// login tradicional (usuário/senha), sempre com uma senha temporária que
+// o próprio usuário troca no primeiro login (ver models.User.
+// MustChangePassword). Não há autocadastro público: só um administrador
+// cria contas locais, por aqui.
+func (h *UserHandler) CriarLocal(c *gin.Context) {
+	var req criarUsuarioLocalRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondBindError(c, err)
+		return
+	}
+
+	user, err := h.authService.CriarLocal(c.Request.Context(), service.CriarLocalInput{
+		Nome:            req.Nome,
+		Email:           req.Email,
+		SenhaTemporaria: req.SenhaTemporaria,
+		IsFiscal:        req.IsFiscal,
+		IsAdmin:         req.IsAdmin,
+	})
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, user)
 }

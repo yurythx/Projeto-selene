@@ -23,12 +23,27 @@ interface Usuario {
   IsFiscal: boolean;
   IsAdmin: boolean;
   Matricula: string;
+  MustChangePassword?: boolean;
 }
 
-const usuarios: Usuario[] = [
-  { ID: "fiscal-1", Nome: "Fiscal Teste", Email: "fiscal@example.com", IsFiscal: true, IsAdmin: false, Matricula: "001" },
-  { ID: "admin-1", Nome: "Admin Teste", Email: "admin@example.com", IsFiscal: false, IsAdmin: true, Matricula: "002" },
-];
+let usuarios: Usuario[] = [];
+// senha em texto puro por e-mail — só existe neste stub (o backend real usa
+// bcrypt); mapa separado pra não vazar "senha" num objeto Usuario que a UI
+// também usa pra exibição.
+let senhasLocais: Record<string, string> = {};
+
+function usuariosSeed(): Usuario[] {
+  return [
+    { ID: "fiscal-1", Nome: "Fiscal Teste", Email: "fiscal@example.com", IsFiscal: true, IsAdmin: false, Matricula: "001" },
+    { ID: "admin-1", Nome: "Admin Teste", Email: "admin@example.com", IsFiscal: false, IsAdmin: true, Matricula: "002" },
+    // Conta de login local já "pronta" (senha já trocada) — usada pelo
+    // spec que exercita o fluxo de login tradicional.
+    { ID: "local-1", Nome: "Fiscal Local", Email: "fiscal.local@example.com", IsFiscal: true, IsAdmin: false, Matricula: "", MustChangePassword: false },
+    // Conta com senha temporária pendente — usada pelo spec de troca de
+    // senha obrigatória.
+    { ID: "local-2", Nome: "Novo Fiscal Local", Email: "novo.local@example.com", IsFiscal: true, IsAdmin: false, Matricula: "", MustChangePassword: true },
+  ];
+}
 
 const etapas = [
   { ID: 1, Nome: "Elaborar OF / Pré-Empenho", Posicao: 1 },
@@ -162,6 +177,11 @@ function resetState() {
   processos = [criarProcessoSeed(contratoSeed)];
   vistorias = [];
   documentosPorProcesso.clear();
+  usuarios = usuariosSeed();
+  senhasLocais = {
+    "fiscal.local@example.com": "senha12345",
+    "novo.local@example.com": "temporaria123",
+  };
 }
 
 resetState();
@@ -447,6 +467,47 @@ const server = createServer((req, res) => {
         notificacoes: [],
         score_pontualidade: null,
       });
+    }
+
+    // Login local (usuário/senha) — alternativa ao Keycloak.
+    if (pathname === "/api/v1/auth/login" && req.method === "POST") {
+      const corpo = bodyAsJSON();
+      const usuario = usuarios.find((u) => u.Email === corpo.email);
+      if (!usuario || senhasLocais[corpo.email] !== corpo.senha) {
+        return json(res, 401, { error: "e-mail ou senha inválidos" });
+      }
+      return json(res, 200, { access_token: `fake-local-token-${usuario.ID}`, usuario });
+    }
+
+    if (pathname === "/api/v1/auth/trocar-senha" && req.method === "POST") {
+      const auth = req.headers.authorization ?? "";
+      const usuarioId = auth.replace("Bearer fake-local-token-", "");
+      const usuario = usuarios.find((u) => u.ID === usuarioId);
+      if (!usuario) return json(res, 401, { error: "não autenticado" });
+
+      const corpo = bodyAsJSON();
+      if (senhasLocais[usuario.Email] !== corpo.senha_atual) {
+        return json(res, 401, { error: "e-mail ou senha inválidos" });
+      }
+      senhasLocais[usuario.Email] = corpo.senha_nova;
+      usuario.MustChangePassword = false;
+      return json(res, 204, null);
+    }
+
+    if (pathname === "/api/v1/admin/users/local" && req.method === "POST") {
+      const corpo = bodyAsJSON();
+      const novo: Usuario = {
+        ID: nextId("local-user"),
+        Nome: corpo.nome,
+        Email: corpo.email,
+        IsFiscal: Boolean(corpo.is_fiscal),
+        IsAdmin: Boolean(corpo.is_admin),
+        Matricula: "",
+        MustChangePassword: true,
+      };
+      usuarios.push(novo);
+      senhasLocais[novo.Email] = corpo.senha_temporaria;
+      return json(res, 201, novo);
     }
 
     if (pathname === "/api/v1/admin/users" && req.method === "GET") {

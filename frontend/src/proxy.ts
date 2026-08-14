@@ -20,6 +20,11 @@ const GUEST_ONLY_ROUTES = ["/login"];
 // link (ex: conferir o próprio QR) sem ser expulso da página.
 const PUBLIC_ROUTES = ["/verificar"];
 
+// Única rota isenta do gate de troca de senha obrigatória abaixo — sem
+// isso, um usuário com mustChangePassword=true seria redirecionado de
+// volta pra ela mesma (loop).
+const TROCA_SENHA_ROUTE = "/trocar-senha";
+
 export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isGuestOnlyRoute = GUEST_ONLY_ROUTES.some((route) => pathname.startsWith(route));
@@ -33,6 +38,19 @@ export default auth((req) => {
 
   if (req.auth?.user && isGuestOnlyRoute) {
     return NextResponse.redirect(new URL("/", req.nextUrl));
+  }
+
+  // Login local (usuário/senha) com senha temporária ainda não trocada —
+  // "soft gate" antes de liberar qualquer outra página autenticada. Não
+  // se aplica a contas Keycloak (mustChangePassword sempre false pra
+  // elas, ver src/auth.ts).
+  if (
+    req.auth?.user?.mustChangePassword &&
+    !isPublicRoute &&
+    !isGuestOnlyRoute &&
+    pathname !== TROCA_SENHA_ROUTE
+  ) {
+    return NextResponse.redirect(new URL(TROCA_SENHA_ROUTE, req.nextUrl));
   }
 
   return NextResponse.next();

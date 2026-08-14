@@ -23,6 +23,7 @@ import (
 	"projeto-selene/internal/config"
 	"projeto-selene/internal/database"
 	"projeto-selene/internal/handler"
+	"projeto-selene/internal/localauth"
 	"projeto-selene/internal/logging"
 	"projeto-selene/internal/middleware"
 	"projeto-selene/internal/repository"
@@ -97,8 +98,18 @@ func main() {
 	vistoriaRepo := repository.NewVistoriaRepository(db)
 	fotoVistoriaRepo := repository.NewFotoVistoriaRepository(db)
 
+	// Chave RSA do login local (usuário/senha) — gerada uma vez por
+	// processo, ver a "LIMITAÇÃO CONHECIDA" documentada em
+	// internal/localauth.KeyPair sobre sessões locais não sobreviverem a
+	// um restart do backend.
+	localKeys, err := localauth.NewKeyPair()
+	if err != nil {
+		fatal("falha ao gerar par de chaves do login local", err)
+	}
+
 	// --- Services ---
 	userService := service.NewUserService(userRepo)
+	authService := service.NewAuthService(userRepo, localKeys)
 	contratoService := service.NewContratoService(contratoRepo, userRepo)
 	documentoService := service.NewDocumentoService(docRepo, tipoDocRepo, processoRepo, cfg.StorageDir)
 
@@ -132,7 +143,7 @@ func main() {
 		JWKSURL:  cfg.KeycloakJWKSURL,
 		Issuer:   cfg.KeycloakIssuer,
 		Audience: cfg.KeycloakAudience,
-	}, userService)
+	}, userService, localKeys)
 	if err != nil {
 		fatal("falha ao inicializar middleware de autenticação", err)
 	}
@@ -159,7 +170,8 @@ func main() {
 	processoHandler := handler.NewProcessoHandler(kanbanService)
 	documentoHandler := handler.NewDocumentoHandler(documentoService)
 	relatorioHandler := handler.NewRelatorioHandler(relatorioService)
-	userHandler := handler.NewUserHandler(userService)
+	userHandler := handler.NewUserHandler(userService, authService)
+	authHandler := handler.NewAuthHandler(authService)
 	kanbanRefHandler := handler.NewKanbanRefHandler(etapaRepo, tipoDocRepo)
 	radarHandler := handler.NewRadarHandler(radarService)
 	geradorDocumentosHandler := handler.NewGeradorDocumentosHandler(geradorDocumentosService)
@@ -202,6 +214,13 @@ func main() {
 	// única rota de consulta, sempre chamada server-side pelo BFF.
 	router.GET("/api/v1/verificar/:codigo", geradorDocumentosHandler.Verificar)
 
+	// Login tradicional (usuário/senha) — também PÚBLICO de propósito
+	// (ainda não há sessão/token pra exigir), mas sujeito a rate limit por
+	// IP (rateLimiter.Middleware() cai pra ClientIP() na ausência de
+	// usuário autenticado no contexto — ver o comentário lá) como defesa
+	// contra força bruta de senha.
+	router.POST("/api/v1/auth/login", rateLimiter.Middleware(), authHandler.Login)
+
 	api := router.Group("/api/v1")
 	api.Use(authMiddleware)
 	{
@@ -215,13 +234,21 @@ func main() {
 			}
 
 			c.JSON(200, gin.H{
-				"id":        user.ID,
-				"nome":      user.Nome,
-				"email":     user.Email,
-				"is_fiscal": user.IsFiscal,
-				"is_admin":  user.IsAdmin,
+				"id":                   user.ID,
+				"nome":                 user.Nome,
+				"email":                user.Email,
+				"is_fiscal":            user.IsFiscal,
+				"is_admin":             user.IsAdmin,
+				"must_change_password": user.MustChangePassword,
 			})
 		})
+
+		// Troca de senha — qualquer usuário autenticado (local ou
+		// Keycloak; contas Keycloak recebem um erro claro, a senha delas é
+		// gerenciada pelo Keycloak). Sem RequireFiscal/RequireAdmin de
+		// propósito: é uma ação sobre a PRÓPRIA conta, não uma permissão
+		// de negócio.
+		api.POST("/auth/trocar-senha", authHandler.TrocarSenha)
 
 		// Leitura: qualquer usuário autenticado pode consultar.
 		api.GET("/kanban/etapas", kanbanRefHandler.ListarEtapas)
@@ -269,6 +296,9 @@ func main() {
 			admin.GET("/users", userHandler.Listar)
 			admin.GET("/users/:id", userHandler.Buscar)
 			admin.PATCH("/users/:id", userHandler.AtualizarPermissoes)
+			// Login tradicional: só um admin cria contas locais (sem
+			// autocadastro público) — ver AuthService.CriarLocal.
+			admin.POST("/users/local", userHandler.CriarLocal)
 		}
 	}
 

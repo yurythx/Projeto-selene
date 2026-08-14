@@ -91,3 +91,17 @@ export const registrarVistoriaSchema = z.object({
   longitude: z.number().min(-180).max(180).nullable().optional(),
   observacoes: z.string().trim().max(4000).optional(),
 });
+
+// Login local (usuário/senha) — contas criadas só por admin.
+export const criarUsuarioLocalSchema = z.object({
+  nome: z.string().trim().min(1, "obrigatório").max(255),
+  email: z.string().trim().email("e-mail inválido"),
+  senha_temporaria: z.string().min(8, "mínimo 8 caracteres"),
+  is_fiscal: z.boolean().optional(),
+  is_admin: z.boolean().optional(),
+});
+
+export const trocarSenhaSchema = z.object({
+  senha_atual: z.string().min(1, "obrigatório"),
+  senha_nova: z.string().min(8, "mínimo 8 caracteres"),
+});

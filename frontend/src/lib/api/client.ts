@@ -141,6 +141,30 @@ export function atualizarUsuario(accessToken: string, id: string, dados: Atualiz
   });
 }
 
+export interface CriarUsuarioLocalRequest {
+  nome: string;
+  email: string;
+  senha_temporaria: string;
+  is_fiscal?: boolean;
+  is_admin?: boolean;
+}
+
+/** Login tradicional (usuário/senha) — só um admin cria contas locais. */
+export function criarUsuarioLocal(accessToken: string, dados: CriarUsuarioLocalRequest) {
+  return apiFetch<Usuario>("/api/v1/admin/users/local", accessToken, {
+    method: "POST",
+    body: JSON.stringify(dados),
+  });
+}
+
+/** Troca a senha da PRÓPRIA conta (autenticado) — POST /auth/trocar-senha. */
+export function trocarSenha(accessToken: string, senhaAtual: string, senhaNova: string) {
+  return apiFetch<void>("/api/v1/auth/trocar-senha", accessToken, {
+    method: "POST",
+    body: JSON.stringify({ senha_atual: senhaAtual, senha_nova: senhaNova }),
+  });
+}
+
 export function listarEtapas(accessToken: string) {
   return apiFetch<KanbanEtapa[]>("/api/v1/kanban/etapas", accessToken);
 }

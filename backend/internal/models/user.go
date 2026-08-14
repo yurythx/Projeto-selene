@@ -7,21 +7,41 @@ import (
 	"gorm.io/gorm"
 )
 
-// User representa um usuário autenticado via Keycloak (OIDC). O registro é
-// criado automaticamente (sincronização Just-In-Time) pelo middleware de
-// autenticação na primeira requisição válida de um novo `sub`.
+// User representa um usuário do Selene, autenticado OU via Keycloak
+// (OIDC — registro criado automaticamente por sincronização Just-In-Time
+// na primeira requisição válida de um novo `sub`) OU por login local
+// tradicional (usuário/senha — conta criada só por um administrador, sem
+// autocadastro público; ver AuthService). Um usuário tem exatamente uma
+// dessas origens: KeycloakID preenchido e PasswordHash nulo, ou vice-versa
+// — nunca as duas (nem nenhuma).
 type User struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
 	// KeycloakID é o claim "sub" do token OIDC — identificador único e
 	// imutável do usuário no Keycloak. Tratado como string opaca (não como
 	// uuid.UUID) porque o OIDC não garante esse formato para todo IdP.
-	// json:"-": é um identificador interno de correlação com o Keycloak,
-	// sem uso na UI hoje — não tem por que ir pra fora em nenhuma resposta
-	// (inclusive quando User aparece aninhado como Contrato.Fiscal em
-	// /contratos e /processos, visível a QUALQUER usuário autenticado, não
-	// só administradores).
-	KeycloakID string `gorm:"type:varchar(255);uniqueIndex;not null" json:"-"`
+	// Nulo para usuários locais (nunca logaram via Keycloak). json:"-": é
+	// um identificador interno de correlação com o Keycloak, sem uso na
+	// UI hoje — não tem por que ir pra fora em nenhuma resposta (inclusive
+	// quando User aparece aninhado como Contrato.Fiscal em /contratos e
+	// /processos, visível a QUALQUER usuário autenticado, não só
+	// administradores).
+	KeycloakID *string `gorm:"type:varchar(255);uniqueIndex" json:"-"`
+
+	// PasswordHash (bcrypt) só é preenchido pra contas de login local —
+	// nulo pra usuários provisionados via Keycloak. json:"-": um hash de
+	// senha nunca deveria ir pra fora em resposta nenhuma, mesmo sendo
+	// bcrypt (defesa em profundidade, não depende de "é seguro o
+	// suficiente pra vazar").
+	PasswordHash *string `gorm:"type:text" json:"-"`
+
+	// MustChangePassword força a troca de senha no próximo login local —
+	// true quando o admin definiu uma senha temporária na criação da
+	// conta. Não tem efeito pra contas Keycloak. Aplicado como um "soft
+	// gate" no FRONTEND (redireciona pra tela de troca antes de liberar
+	// navegação) — o backend não bloqueia as demais rotas por este flag;
+	// ver o comentário em AuthService sobre essa limitação conhecida.
+	MustChangePassword bool `gorm:"not null;default:false"`
 
 	Nome  string `gorm:"type:varchar(255);not null"`
 	Email string `gorm:"type:varchar(255);uniqueIndex;not null"`

@@ -30,7 +30,7 @@ func NewFakeUserRepository(users ...*models.User) *FakeUserRepository {
 
 func (f *FakeUserRepository) FindByKeycloakID(ctx context.Context, keycloakID string) (*models.User, error) {
 	for _, u := range f.Users {
-		if u.KeycloakID == keycloakID {
+		if u.KeycloakID != nil && *u.KeycloakID == keycloakID {
 			return u, nil
 		}
 	}
@@ -40,6 +40,15 @@ func (f *FakeUserRepository) FindByKeycloakID(ctx context.Context, keycloakID st
 func (f *FakeUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	if u, ok := f.Users[id]; ok {
 		return u, nil
+	}
+	return nil, repository.ErrUserNotFound
+}
+
+func (f *FakeUserRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+	for _, u := range f.Users {
+		if u.Email == email {
+			return u, nil
+		}
 	}
 	return nil, repository.ErrUserNotFound
 }
