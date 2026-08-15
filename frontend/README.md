@@ -179,7 +179,7 @@ Adequação às IN SCL 01/2019 e 04/2021 (ver `backend/README.md` para a Matriz 
 - [x] Defesa em profundidade contra CSRF nos 22 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
 - [x] Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) via `next.config.ts`
 - [x] `loading.tsx` (streaming) e `error.tsx`/`global-error.tsx` (boundary de erro amigável) nas rotas principais
-- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes unitários/componente + 20 E2E (Playwright)
+- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes unitários/componente + 21 E2E (Playwright)
 - [x] CI (lint + testes unitários + testes E2E + build + imagem Docker), mesmo pipeline do backend
 - [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root
 - [x] Tipos gerados a partir do OpenAPI do backend (`openapi-typescript`) — sem duplicar contratos de API à mão
