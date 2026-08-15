@@ -120,6 +120,60 @@ privilégio) — **não há como conceder o primeiro admin pela própria UI**
       `UntrustedHost` (se aparecer, confira `AUTH_TRUST_HOST=true` e que
       o Cloudflare Tunnel está repassando `X-Forwarded-Proto: https`)
 
+## Testando o compose de produção localmente, antes de um deploy real
+
+`docker-compose.prod.yml` roda igual em qualquer máquina — não precisa
+esperar chegar na VPS pra descobrir que algo quebra com as variáveis de
+produção (foi assim que um crash de boot real foi encontrado: ver commit
+"fix: corrige crash de boot em produção quando CORS_ALLOWED_ORIGINS=""").
+Pra rodar lado a lado com o stack de dev (`docker-compose.yml`) já
+rodando, sem conflito:
+
+```bash
+# .env.production local só pra este teste (nunca comitar) — Keycloak
+# pode apontar pra instância real da prefeitura (só busca o JWKS
+# público no boot, não faz login de verdade); PUBLIC_URL local.
+cp .env.production.example .env.production
+# preencha DB_PASSWORD/REDIS_PASSWORD/AUTH_SECRET (comandos na seção 1)
+# e ajuste PUBLIC_URL=http://localhost:3010
+
+# -p com nome de projeto diferente do dev evita que os dois stacks
+# disputem os mesmos nomes de container/volume
+docker compose -f docker-compose.prod.yml --env-file .env.production -p selene-prod up -d --build
+```
+
+Se o Jaeger do dev já estiver usando `127.0.0.1:16686`, crie um override
+só local (não comitado) trocando a porta do Jaeger — `ports` é
+concatenado, não substituído, entre arquivos de compose, então é preciso
+`!reset` antes da porta nova:
+
+```yaml
+# docker-compose.prod.local-test.yml
+services:
+  jaeger:
+    ports: !reset
+      - "127.0.0.1:16687:16686"
+```
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.local-test.yml --env-file .env.production -p selene-prod up -d --build
+```
+
+Sem acesso ao Keycloak real (login OIDC não é testável localmente), o
+primeiro admin pode ser criado via login local direto no Postgres do
+stack de teste, sem passar pelo fluxo de "promover via UI" da seção 6
+(que pressupõe login via Keycloak já ter criado o usuário):
+
+```bash
+# gera um hash bcrypt (mesmo script usado durante o desenvolvimento)
+docker compose -f docker-compose.prod.yml -p selene-prod exec postgres psql -U selene -d projeto_selene -c "
+INSERT INTO users (id, nome, email, is_fiscal, is_admin, password_hash, must_change_password, criado_em, atualizado_em)
+VALUES (gen_random_uuid(), 'Admin Teste Local', 'admin@teste.local', true, true, '<hash bcrypt>', false, now(), now());
+"
+```
+
+Derruba com `docker compose -f docker-compose.prod.yml -p selene-prod down -v` quando terminar (o `-v` também apaga os volumes deste teste — não afeta o stack de dev, que usa um projeto/volumes diferentes).
+
 ## Rollback
 
 ```bash
