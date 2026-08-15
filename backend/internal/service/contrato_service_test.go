@@ -203,6 +203,37 @@ func TestContratoServiceCriar(t *testing.T) {
 			t.Fatal("esperava erro de data inválida, veio nil")
 		}
 	})
+
+	t.Run("ExigeFiscalizacaoTerceirizacao não informado nasce false", func(t *testing.T) {
+		userRepo := newFakeUserRepository(fiscal)
+		contratoRepo := &fakeContratoRepository{}
+		svc := NewContratoService(contratoRepo, userRepo)
+
+		contrato, err := svc.Criar(ctx, baseInput())
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if contrato.ExigeFiscalizacaoTerceirizacao {
+			t.Fatal("esperava ExigeFiscalizacaoTerceirizacao=false por default")
+		}
+	})
+
+	t.Run("ExigeFiscalizacaoTerceirizacao=true é persistido", func(t *testing.T) {
+		userRepo := newFakeUserRepository(fiscal)
+		contratoRepo := &fakeContratoRepository{}
+		svc := NewContratoService(contratoRepo, userRepo)
+
+		input := baseInput()
+		input.ExigeFiscalizacaoTerceirizacao = true
+
+		contrato, err := svc.Criar(ctx, input)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if !contrato.ExigeFiscalizacaoTerceirizacao {
+			t.Fatal("esperava ExigeFiscalizacaoTerceirizacao=true")
+		}
+	})
 }
 
 func TestContratoServiceAtualizarEEncerrar(t *testing.T) {
@@ -261,6 +292,19 @@ func TestContratoServiceAtualizarEEncerrar(t *testing.T) {
 		}
 		if encerrado.Ativo {
 			t.Fatal("esperava Ativo=false após Encerrar")
+		}
+	})
+
+	t.Run("atualizar ExigeFiscalizacaoTerceirizacao", func(t *testing.T) {
+		svc, contrato := novoServico()
+
+		valor := true
+		atualizado, err := svc.Atualizar(ctx, contrato.ID, AtualizarContratoInput{ExigeFiscalizacaoTerceirizacao: &valor})
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if !atualizado.ExigeFiscalizacaoTerceirizacao {
+			t.Fatal("esperava ExigeFiscalizacaoTerceirizacao=true após atualizar")
 		}
 	})
 }

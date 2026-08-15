@@ -37,6 +37,10 @@ type NovoContratoInput struct {
 	// contrato simplesmente não aparece no radar de vigência (ver o
 	// comentário no campo do model).
 	DataVigenciaFim string
+	// ExigeFiscalizacaoTerceirizacao marca o contrato como sujeito à IN SCL
+	// Nº 04/2021 (mão de obra terceirizada) — ver o comentário do campo
+	// homônimo em models.Contrato. Camada 2, opcional, default false.
+	ExigeFiscalizacaoTerceirizacao bool
 }
 
 // ContratoService contém os casos de uso de cadastro/consulta de
@@ -85,15 +89,16 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 	}
 
 	contrato := &models.Contrato{
-		NumeroContrato:   input.NumeroContrato,
-		PortariaNomeacao: input.PortariaNomeacao,
-		DataAssinatura:   dataAssinatura,
-		ContratadaNome:   input.ContratadaNome,
-		ContratadaCNPJ:   input.ContratadaCNPJ,
-		ContratadaEmail:  input.ContratadaEmail,
-		FiscalID:         input.FiscalID,
-		TipoObjeto:       input.TipoObjeto,
-		DataVigenciaFim:  dataVigenciaFim,
+		NumeroContrato:                 input.NumeroContrato,
+		PortariaNomeacao:               input.PortariaNomeacao,
+		DataAssinatura:                 dataAssinatura,
+		ContratadaNome:                 input.ContratadaNome,
+		ContratadaCNPJ:                 input.ContratadaCNPJ,
+		ContratadaEmail:                input.ContratadaEmail,
+		FiscalID:                       input.FiscalID,
+		TipoObjeto:                     input.TipoObjeto,
+		DataVigenciaFim:                dataVigenciaFim,
+		ExigeFiscalizacaoTerceirizacao: input.ExigeFiscalizacaoTerceirizacao,
 		// Explícito, não implícito: o zero-value de bool em Go é false, e
 		// GORM.Create envia esse false para o banco em vez de deixar o
 		// DEFAULT true da coluna se aplicar (não há como o GORM
@@ -144,6 +149,11 @@ type AtualizarContratoInput struct {
 	// ponteiro-pra-time.Time): distingue "não enviado" (nil) de "enviado
 	// vazio" (string vazia, que limpa a vigência cadastrada).
 	DataVigenciaFim *string
+	// ExigeFiscalizacaoTerceirizacao, se não-nil, atualiza o flag de
+	// sujeição à IN04/2021 — editável depois de criado porque um
+	// aditivo/repactuação pode mudar a natureza da mão de obra do
+	// contrato.
+	ExigeFiscalizacaoTerceirizacao *bool
 }
 
 // Atualizar aplica as alterações de AtualizarContratoInput a um contrato
@@ -165,6 +175,9 @@ func (s *ContratoService) Atualizar(ctx context.Context, id uuid.UUID, input Atu
 	}
 	if input.ContratadaEmail != nil {
 		contrato.ContratadaEmail = *input.ContratadaEmail
+	}
+	if input.ExigeFiscalizacaoTerceirizacao != nil {
+		contrato.ExigeFiscalizacaoTerceirizacao = *input.ExigeFiscalizacaoTerceirizacao
 	}
 	if input.DataVigenciaFim != nil {
 		if *input.DataVigenciaFim == "" {

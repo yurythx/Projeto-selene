@@ -110,7 +110,7 @@ func (s *FiscalizacaoService) Decorar(ctx context.Context, processo *models.Proc
 
 	var checklistPendente []string
 	if processo.Status == models.StatusProcessoAtivo && processo.EtapaAtualID < etapaFinalID && processo.Contrato != nil {
-		checklistPendente, err = ChecklistPendente(ctx, s.docRepo, processo.ID, processo.EtapaAtualID, processo.Contrato.TipoObjeto)
+		checklistPendente, err = ChecklistPendente(ctx, s.docRepo, processo.ID, processo.EtapaAtualID, processo.Contrato.TipoObjeto, processo.Contrato.ExigeFiscalizacaoTerceirizacao)
 		if err != nil {
 			return nil, err
 		}

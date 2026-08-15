@@ -67,6 +67,16 @@ type Contrato struct {
 	// documenta e evita isso setando Ativo:true explicitamente.
 	Ativo bool `gorm:"not null;default:true"`
 
+	// ExigeFiscalizacaoTerceirizacao é Camada 2 (regra do SGF, não da
+	// norma): marca contratos de mão de obra terceirizada, sujeitos à
+	// IN SCL Nº 04/2021 (que é mais estreita que TipoObjeto == SERVICO —
+	// nem todo contrato de serviço é terceirização de mão de obra). Quando
+	// true, o checklist da Etapa 5 passa a exigir também os documentos
+	// mensais do Art.9º-XXXII (alíneas a/b.1/b.2/b.3) — ver
+	// internal/service/checklist.go. Default false para não afetar
+	// contratos já cadastrados.
+	ExigeFiscalizacaoTerceirizacao bool `gorm:"not null;default:false"`
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

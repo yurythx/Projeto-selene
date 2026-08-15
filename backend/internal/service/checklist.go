@@ -52,11 +52,28 @@ var checklistCondicionalServico = []string{
 	"Boleto DAM",
 }
 
+// checklistCondicionalTerceirizacao são os documentos mensais exigidos
+// ADICIONALMENTE na Etapa 5 quando o contrato está marcado com
+// ExigeFiscalizacaoTerceirizacao (Camada 2, ver models.Contrato) —
+// documentação trabalhista/previdenciária específica de mão de obra
+// terceirizada, IN SCL Nº 04/2021 Art.9º-XXXII, alíneas a/b.1/b.2/b.3.
+// Este é um subconjunto deliberadamente estreito do Anexo III da IN04
+// (42 itens no total, questionário de autoavaliação do fiscal) — só os
+// itens genuinamente documentais (comprovante/protocolo/guia/relação a
+// anexar) entraram aqui; o restante do Anexo III não tem formato de
+// checklist de anexo e não deve ser forçado neste modelo.
+var checklistCondicionalTerceirizacao = []string{
+	"Comprovante de Pagamento de Salário",
+	"Protocolo GFIP",
+	"Guia GRF/GPS",
+	"Relação de Trabalhadores (SEFIP)",
+}
+
 // RequisitosEtapa retorna a lista completa de nomes de TipoDocumento
 // exigidos para sair da etapaOrigemID, já incluindo os itens condicionais
-// de acordo com o tipoObjeto do contrato. Etapas sem checklist (2 e 6)
-// retornam uma lista vazia.
-func RequisitosEtapa(etapaOrigemID int, tipoObjeto models.TipoObjeto) []string {
+// de acordo com o tipoObjeto e o exigeFiscalizacaoTerceirizacao do
+// contrato. Etapas sem checklist (2 e 6) retornam uma lista vazia.
+func RequisitosEtapa(etapaOrigemID int, tipoObjeto models.TipoObjeto, exigeFiscalizacaoTerceirizacao bool) []string {
 	base, ok := checklistBase[etapaOrigemID]
 	if !ok {
 		return nil
@@ -65,8 +82,13 @@ func RequisitosEtapa(etapaOrigemID int, tipoObjeto models.TipoObjeto) []string {
 	requisitos := make([]string, len(base))
 	copy(requisitos, base)
 
-	if etapaOrigemID == 5 && tipoObjeto == models.TipoObjetoServico {
-		requisitos = append(requisitos, checklistCondicionalServico...)
+	if etapaOrigemID == 5 {
+		if tipoObjeto == models.TipoObjetoServico {
+			requisitos = append(requisitos, checklistCondicionalServico...)
+		}
+		if exigeFiscalizacaoTerceirizacao {
+			requisitos = append(requisitos, checklistCondicionalTerceirizacao...)
+		}
 	}
 
 	return requisitos
@@ -86,8 +108,9 @@ func ChecklistPendente(
 	processoID uuid.UUID,
 	etapaOrigemID int,
 	tipoObjeto models.TipoObjeto,
+	exigeFiscalizacaoTerceirizacao bool,
 ) ([]string, error) {
-	requisitos := RequisitosEtapa(etapaOrigemID, tipoObjeto)
+	requisitos := RequisitosEtapa(etapaOrigemID, tipoObjeto, exigeFiscalizacaoTerceirizacao)
 	if len(requisitos) == 0 {
 		return nil, nil
 	}

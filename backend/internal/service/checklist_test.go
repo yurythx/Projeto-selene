@@ -52,13 +52,13 @@ func comDocumento(processoID uuid.UUID, tipoNome string) models.DocumentoAnexo {
 
 func TestRequisitosEtapa(t *testing.T) {
 	t.Run("etapa 1 exige OF, Pré-Empenho e Ofício, independente do tipo de objeto", func(t *testing.T) {
-		got := RequisitosEtapa(1, models.TipoObjetoConsumo)
+		got := RequisitosEtapa(1, models.TipoObjetoConsumo, false)
 		want := []string{"Ordem de Fornecimento (OF)", "Pré-Empenho", "Ofício de Solicitação"}
 		assertSameElements(t, got, want)
 	})
 
 	t.Run("etapa 5 para CONSUMO não inclui os itens condicionais de SERVICO", func(t *testing.T) {
-		got := RequisitosEtapa(5, models.TipoObjetoConsumo)
+		got := RequisitosEtapa(5, models.TipoObjetoConsumo, false)
 		for _, condicional := range checklistCondicionalServico {
 			for _, r := range got {
 				if r == condicional {
@@ -69,18 +69,38 @@ func TestRequisitosEtapa(t *testing.T) {
 	})
 
 	t.Run("etapa 5 para SERVICO inclui Planilha de Medição e Boleto DAM", func(t *testing.T) {
-		got := RequisitosEtapa(5, models.TipoObjetoServico)
+		got := RequisitosEtapa(5, models.TipoObjetoServico, false)
 		assertContains(t, got, "Planilha de Medição de Serviços")
 		assertContains(t, got, "Boleto DAM")
 	})
 
 	t.Run("etapas 2 e 6 não têm checklist de saída", func(t *testing.T) {
-		if got := RequisitosEtapa(2, models.TipoObjetoServico); len(got) != 0 {
+		if got := RequisitosEtapa(2, models.TipoObjetoServico, false); len(got) != 0 {
 			t.Fatalf("etapa 2 deveria ter checklist vazio, veio %v", got)
 		}
-		if got := RequisitosEtapa(6, models.TipoObjetoServico); len(got) != 0 {
+		if got := RequisitosEtapa(6, models.TipoObjetoServico, false); len(got) != 0 {
 			t.Fatalf("etapa 6 deveria ter checklist vazio, veio %v", got)
 		}
+	})
+
+	t.Run("etapa 5 sem exigeFiscalizacaoTerceirizacao não inclui os itens de mão de obra", func(t *testing.T) {
+		got := RequisitosEtapa(5, models.TipoObjetoServico, false)
+		for _, condicional := range checklistCondicionalTerceirizacao {
+			for _, r := range got {
+				if r == condicional {
+					t.Fatalf("sem exigeFiscalizacaoTerceirizacao não deveria exigir %q", condicional)
+				}
+			}
+		}
+	})
+
+	t.Run("etapa 5 com exigeFiscalizacaoTerceirizacao inclui os documentos do Art.9º-XXXII", func(t *testing.T) {
+		got := RequisitosEtapa(5, models.TipoObjetoServico, true)
+		for _, condicional := range checklistCondicionalTerceirizacao {
+			assertContains(t, got, condicional)
+		}
+		// Cumulativo com os condicionais de SERVICO, não excludente.
+		assertContains(t, got, "Planilha de Medição de Serviços")
 	})
 }
 
@@ -90,7 +110,7 @@ func TestChecklistPendente(t *testing.T) {
 
 	t.Run("sem documentos anexados, tudo pendente", func(t *testing.T) {
 		repo := &fakeDocumentoAnexoRepository{}
-		pendentes, err := ChecklistPendente(ctx, repo, processoID, 1, models.TipoObjetoConsumo)
+		pendentes, err := ChecklistPendente(ctx, repo, processoID, 1, models.TipoObjetoConsumo, false)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -103,7 +123,7 @@ func TestChecklistPendente(t *testing.T) {
 			comDocumento(processoID, "Pré-Empenho"),
 			comDocumento(processoID, "Ofício de Solicitação"),
 		}}
-		pendentes, err := ChecklistPendente(ctx, repo, processoID, 1, models.TipoObjetoConsumo)
+		pendentes, err := ChecklistPendente(ctx, repo, processoID, 1, models.TipoObjetoConsumo, false)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -117,7 +137,7 @@ func TestChecklistPendente(t *testing.T) {
 		repo := &fakeDocumentoAnexoRepository{documentos: []models.DocumentoAnexo{
 			comDocumento(outroProcesso, "Ordem de Fornecimento (OF)"),
 		}}
-		pendentes, err := ChecklistPendente(ctx, repo, processoID, 1, models.TipoObjetoConsumo)
+		pendentes, err := ChecklistPendente(ctx, repo, processoID, 1, models.TipoObjetoConsumo, false)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -130,11 +150,27 @@ func TestChecklistPendente(t *testing.T) {
 			docs = append(docs, comDocumento(processoID, nome))
 		}
 		repo := &fakeDocumentoAnexoRepository{documentos: docs}
-		pendentes, err := ChecklistPendente(ctx, repo, processoID, 5, models.TipoObjetoServico)
+		pendentes, err := ChecklistPendente(ctx, repo, processoID, 5, models.TipoObjetoServico, false)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
 		assertSameElements(t, pendentes, checklistCondicionalServico)
+	})
+
+	t.Run("exigeFiscalizacaoTerceirizacao acrescenta os documentos do Art.9º-XXXII à pendência", func(t *testing.T) {
+		docs := []models.DocumentoAnexo{}
+		for _, nome := range checklistBase[5] {
+			docs = append(docs, comDocumento(processoID, nome))
+		}
+		for _, nome := range checklistCondicionalServico {
+			docs = append(docs, comDocumento(processoID, nome))
+		}
+		repo := &fakeDocumentoAnexoRepository{documentos: docs}
+		pendentes, err := ChecklistPendente(ctx, repo, processoID, 5, models.TipoObjetoServico, true)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		assertSameElements(t, pendentes, checklistCondicionalTerceirizacao)
 	})
 }
 

@@ -112,6 +112,38 @@ func TestContratoHandler_Criar(t *testing.T) {
 		}
 	})
 
+	t.Run("exige_fiscalizacao_terceirizacao=true é persistido e devolvido", func(t *testing.T) {
+		router, _ := setupContratoRouter(t, fiscal)
+
+		corpo := map[string]any{
+			"numero_contrato":                  "126/2026",
+			"data_assinatura":                  "2026-01-15",
+			"contratada_nome":                  "Empresa Terceirizada",
+			"contratada_cnpj":                  "98.765.432/0001-10",
+			"fiscal_id":                        fiscal.ID.String(),
+			"tipo_objeto":                      "SERVICO",
+			"exige_fiscalizacao_terceirizacao": true,
+		}
+		corpoJSON, _ := json.Marshal(corpo)
+
+		req := httptest.NewRequest(http.MethodPost, "/contratos", bytes.NewReader(corpoJSON))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("esperava 201, veio %d: %s", w.Code, w.Body.String())
+		}
+
+		var resposta map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &resposta); err != nil {
+			t.Fatalf("resposta não é JSON válido: %v", err)
+		}
+		if resposta["ExigeFiscalizacaoTerceirizacao"] != true {
+			t.Fatalf("esperava ExigeFiscalizacaoTerceirizacao=true, veio %v", resposta["ExigeFiscalizacaoTerceirizacao"])
+		}
+	})
+
 	t.Run("tipo_objeto inválido retorna 400 vindo do service", func(t *testing.T) {
 		router, _ := setupContratoRouter(t, fiscal)
 

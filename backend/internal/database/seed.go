@@ -55,6 +55,14 @@ var tiposDocumentoSeed = []struct {
 	{Nome: "Relatório de Pagamento Assinado"},
 	{Nome: "Planilha de Medição de Serviços"},
 	{Nome: "Boleto DAM"},
+	// SGF-Rondonópolis, Fase 6: específicos de contratos de mão de obra
+	// terceirizada (IN SCL 04/2021 Art.9º-XXXII, alíneas a/b.1/b.2/b.3) —
+	// só entram no checklist quando Contrato.ExigeFiscalizacaoTerceirizacao
+	// é true, ver internal/service/checklist.go.
+	{Nome: "Comprovante de Pagamento de Salário"},
+	{Nome: "Protocolo GFIP"},
+	{Nome: "Guia GRF/GPS"},
+	{Nome: "Relação de Trabalhadores (SEFIP)"},
 }
 
 // Seed popula as tabelas de referência (kanban_etapas, tipos_documento) de

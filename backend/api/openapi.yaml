@@ -1324,6 +1324,7 @@ components:
         TipoObjeto: { type: string, enum: [CONSUMO, PERMANENTE, SERVICO] }
         Ativo: { type: boolean, description: "false = contrato encerrado (soft-close)." }
         DataVigenciaFim: { type: string, format: date, nullable: true, description: "Alimenta o Radar de Alertas — null se não cadastrada." }
+        ExigeFiscalizacaoTerceirizacao: { type: boolean, description: "Camada 2 (regra do SGF): marca contrato de mão de obra terceirizada, sujeito à IN SCL Nº 04/2021 — acrescenta os documentos do Art.9º-XXXII ao checklist da Etapa 5." }
         CreatedAt: { type: string, format: date-time }
         UpdatedAt: { type: string, format: date-time }
 
@@ -1340,6 +1341,7 @@ components:
         fiscal_id: { type: string, format: uuid, description: "Precisa ser um usuário com IsFiscal=true." }
         tipo_objeto: { type: string, enum: [CONSUMO, PERMANENTE, SERVICO] }
         data_vigencia_fim: { type: string, format: date, description: 'Opcional. Formato "AAAA-MM-DD" — alimenta o Radar de Alertas.' }
+        exige_fiscalizacao_terceirizacao: { type: boolean, description: "Opcional, default false. Ver Contrato.ExigeFiscalizacaoTerceirizacao." }
 
     AtualizarContratoRequest:
       type: object
@@ -1349,6 +1351,7 @@ components:
         contratada_cnpj: { type: string }
         contratada_email: { type: string, format: email }
         data_vigencia_fim: { type: string, format: date, description: 'Formato "AAAA-MM-DD". Enviar string vazia limpa a vigência cadastrada.' }
+        exige_fiscalizacao_terceirizacao: { type: boolean, description: "Ver Contrato.ExigeFiscalizacaoTerceirizacao." }
 
     ProcessoPagamento:
       type: object

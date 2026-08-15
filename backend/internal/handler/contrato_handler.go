@@ -33,6 +33,10 @@ type criarContratoRequest struct {
 	// Alertas (Fase 1 do roadmap); sem ela, o contrato não aparece no
 	// radar de vigência.
 	DataVigenciaFim string `json:"data_vigencia_fim"`
+	// ExigeFiscalizacaoTerceirizacao é opcional (default false) — marca o
+	// contrato como sujeito à IN SCL Nº 04/2021 (mão de obra
+	// terceirizada), ver o comentário do campo homônimo em models.Contrato.
+	ExigeFiscalizacaoTerceirizacao bool `json:"exige_fiscalizacao_terceirizacao"`
 }
 
 // Criar trata POST /api/v1/contratos.
@@ -44,15 +48,16 @@ func (h *ContratoHandler) Criar(c *gin.Context) {
 	}
 
 	contrato, err := h.contratoService.Criar(c.Request.Context(), service.NovoContratoInput{
-		NumeroContrato:   req.NumeroContrato,
-		PortariaNomeacao: req.PortariaNomeacao,
-		DataAssinatura:   req.DataAssinatura,
-		ContratadaNome:   req.ContratadaNome,
-		ContratadaCNPJ:   req.ContratadaCNPJ,
-		ContratadaEmail:  req.ContratadaEmail,
-		FiscalID:         req.FiscalID,
-		TipoObjeto:       req.TipoObjeto,
-		DataVigenciaFim:  req.DataVigenciaFim,
+		NumeroContrato:                 req.NumeroContrato,
+		PortariaNomeacao:               req.PortariaNomeacao,
+		DataAssinatura:                 req.DataAssinatura,
+		ContratadaNome:                 req.ContratadaNome,
+		ContratadaCNPJ:                 req.ContratadaCNPJ,
+		ContratadaEmail:                req.ContratadaEmail,
+		FiscalID:                       req.FiscalID,
+		TipoObjeto:                     req.TipoObjeto,
+		DataVigenciaFim:                req.DataVigenciaFim,
+		ExigeFiscalizacaoTerceirizacao: req.ExigeFiscalizacaoTerceirizacao,
 	})
 	if err != nil {
 		respondError(c, err)
@@ -91,11 +96,12 @@ func (h *ContratoHandler) Buscar(c *gin.Context) {
 }
 
 type atualizarContratoRequest struct {
-	PortariaNomeacao *string `json:"portaria_nomeacao"`
-	ContratadaNome   *string `json:"contratada_nome"`
-	ContratadaCNPJ   *string `json:"contratada_cnpj"`
-	ContratadaEmail  *string `json:"contratada_email"`
-	DataVigenciaFim  *string `json:"data_vigencia_fim"`
+	PortariaNomeacao               *string `json:"portaria_nomeacao"`
+	ContratadaNome                 *string `json:"contratada_nome"`
+	ContratadaCNPJ                 *string `json:"contratada_cnpj"`
+	ContratadaEmail                *string `json:"contratada_email"`
+	DataVigenciaFim                *string `json:"data_vigencia_fim"`
+	ExigeFiscalizacaoTerceirizacao *bool   `json:"exige_fiscalizacao_terceirizacao"`
 }
 
 // Atualizar trata PATCH /api/v1/contratos/:id — só os campos presentes no
@@ -114,11 +120,12 @@ func (h *ContratoHandler) Atualizar(c *gin.Context) {
 	}
 
 	contrato, err := h.contratoService.Atualizar(c.Request.Context(), id, service.AtualizarContratoInput{
-		PortariaNomeacao: req.PortariaNomeacao,
-		ContratadaNome:   req.ContratadaNome,
-		ContratadaCNPJ:   req.ContratadaCNPJ,
-		ContratadaEmail:  req.ContratadaEmail,
-		DataVigenciaFim:  req.DataVigenciaFim,
+		PortariaNomeacao:               req.PortariaNomeacao,
+		ContratadaNome:                 req.ContratadaNome,
+		ContratadaCNPJ:                 req.ContratadaCNPJ,
+		ContratadaEmail:                req.ContratadaEmail,
+		DataVigenciaFim:                req.DataVigenciaFim,
+		ExigeFiscalizacaoTerceirizacao: req.ExigeFiscalizacaoTerceirizacao,
 	})
 	if err != nil {
 		respondError(c, err)
