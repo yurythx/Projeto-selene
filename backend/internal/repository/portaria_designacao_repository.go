@@ -60,7 +60,7 @@ func (r *gormPortariaDesignacaoRepository) Update(ctx context.Context, designaca
 }
 
 func (r *gormPortariaDesignacaoRepository) ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.PortariaDesignacao, error) {
-	var designacoes []models.PortariaDesignacao
+	designacoes := []models.PortariaDesignacao{}
 
 	err := r.db.WithContext(ctx).
 		Preload("Servidor").

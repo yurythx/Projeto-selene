@@ -85,7 +85,7 @@ func (r *gormUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*model
 }
 
 func (r *gormUserRepository) List(ctx context.Context) ([]models.User, error) {
-	var users []models.User
+	users := []models.User{}
 
 	if err := r.db.WithContext(ctx).Order("nome").Find(&users).Error; err != nil {
 		return nil, fmt.Errorf("repository: listar usuários: %w", err)

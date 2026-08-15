@@ -74,7 +74,7 @@ func (r *gormOcorrenciaRepository) Update(ctx context.Context, ocorrencia *model
 }
 
 func (r *gormOcorrenciaRepository) ListByProcesso(ctx context.Context, processoID uuid.UUID) ([]models.Ocorrencia, error) {
-	var ocorrencias []models.Ocorrencia
+	ocorrencias := []models.Ocorrencia{}
 
 	err := r.db.WithContext(ctx).
 		Preload("RegistradoPor").
@@ -89,7 +89,7 @@ func (r *gormOcorrenciaRepository) ListByProcesso(ctx context.Context, processoI
 }
 
 func (r *gormOcorrenciaRepository) ListAbertasPorProcesso(ctx context.Context, processoID uuid.UUID) ([]models.Ocorrencia, error) {
-	var ocorrencias []models.Ocorrencia
+	ocorrencias := []models.Ocorrencia{}
 
 	err := r.db.WithContext(ctx).
 		Where("processo_pagamento_id = ? AND estado <> ?", processoID, models.OcorrenciaRegularizada).

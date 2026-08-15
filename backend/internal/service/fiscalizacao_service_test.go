@@ -42,6 +42,12 @@ func TestCanTransition(t *testing.T) {
 		if len(acoes) != 0 {
 			t.Fatalf("esperava nenhuma ação permitida, veio %v", acoes)
 		}
+		// nil serializaria como `null` em JSON (allowed_actions), não `[]`
+		// — ver o comentário em CanTransition sobre o bug real encontrado
+		// rodando docker-compose.prod.yml.
+		if acoes == nil {
+			t.Fatal("acoesPermitidas veio nil — deveria ser []string{}")
+		}
 	})
 
 	t.Run("checklist pendente bloqueia o avanço mas não as demais ações", func(t *testing.T) {
@@ -91,6 +97,9 @@ func TestCanTransition(t *testing.T) {
 		}
 		if len(acoes) != 0 {
 			t.Fatalf("esperava nenhuma ação disponível para processo concluído, veio %v", acoes)
+		}
+		if acoes == nil {
+			t.Fatal("acoesPermitidas veio nil — deveria ser []string{}")
 		}
 	})
 }

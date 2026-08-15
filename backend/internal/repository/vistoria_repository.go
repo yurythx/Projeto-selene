@@ -60,7 +60,7 @@ func (r *gormVistoriaRepository) FindByID(ctx context.Context, id uuid.UUID) (*m
 }
 
 func (r *gormVistoriaRepository) ListByProcesso(ctx context.Context, processoID uuid.UUID) ([]models.RegistroVistoria, error) {
-	var vistorias []models.RegistroVistoria
+	vistorias := []models.RegistroVistoria{}
 
 	err := r.db.WithContext(ctx).
 		Preload("Fotos").

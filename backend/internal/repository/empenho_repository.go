@@ -56,7 +56,7 @@ func (r *gormEmpenhoRepository) FindByID(ctx context.Context, id uuid.UUID) (*mo
 }
 
 func (r *gormEmpenhoRepository) ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.Empenho, error) {
-	var empenhos []models.Empenho
+	empenhos := []models.Empenho{}
 
 	err := r.db.WithContext(ctx).
 		Where("contrato_id = ?", contratoID).
@@ -98,7 +98,7 @@ func (r *gormMovimentacaoEmpenhoRepository) Create(ctx context.Context, moviment
 }
 
 func (r *gormMovimentacaoEmpenhoRepository) ListByEmpenho(ctx context.Context, empenhoID uuid.UUID) ([]models.MovimentacaoEmpenho, error) {
-	var movimentacoes []models.MovimentacaoEmpenho
+	movimentacoes := []models.MovimentacaoEmpenho{}
 
 	err := r.db.WithContext(ctx).
 		Where("empenho_id = ?", empenhoID).

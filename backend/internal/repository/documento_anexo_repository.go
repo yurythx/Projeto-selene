@@ -40,7 +40,7 @@ func (r *gormDocumentoAnexoRepository) Create(ctx context.Context, documento *mo
 }
 
 func (r *gormDocumentoAnexoRepository) ListByProcesso(ctx context.Context, processoID uuid.UUID) ([]models.DocumentoAnexo, error) {
-	var documentos []models.DocumentoAnexo
+	documentos := []models.DocumentoAnexo{}
 
 	err := r.db.WithContext(ctx).
 		Preload("TipoDocumento").

@@ -108,7 +108,16 @@ func (s *RadarService) Listar(ctx context.Context) ([]ItemRadar, error) {
 		return nil, fmt.Errorf("service: listar contratos ativos para o radar: %w", err)
 	}
 
-	var itens []ItemRadar
+	// itens começa como slice vazio, não nil: RadarHandler.Listar serializa
+	// isto direto pra JSON (c.JSON(200, itens)) — um slice nil vira `null`
+	// no JSON (encoding/json), não `[]`. Sem alertas em aberto (radar
+	// "limpo", o caso normal), isso quebrava /radar (RadarPage.ordenar faz
+	// [...itens]) e potencialmente KanbanBoard (itensDoProcesso faz
+	// itens.filter em cima do valor recebido) com "TypeError: ... is not
+	// iterable"/"Cannot read properties of null" — achado rodando
+	// docker-compose.prod.yml de verdade nesta sessão, num contrato de
+	// teste sem nenhum alerta de vigência/certidão.
+	itens := []ItemRadar{}
 
 	contratoAtivoPorID := make(map[uuid.UUID]bool, len(contratos))
 	for _, c := range contratos {

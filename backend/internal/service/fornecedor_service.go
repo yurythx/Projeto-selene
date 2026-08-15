@@ -191,7 +191,10 @@ func (s *FornecedorService) notificacoesDoFornecedor(ctx context.Context, contra
 		return nil, fmt.Errorf("service: listar documentos emitidos do fornecedor: %w", err)
 	}
 
-	var notificacoes []models.DocumentoEmitido
+	// Vazio, não nil, pelo mesmo motivo de RadarService.Listar: um
+	// fornecedor sem nenhuma notificação de descumprimento é o caso
+	// normal/bom, e um slice nil serializa como `null` em JSON, não `[]`.
+	notificacoes := []models.DocumentoEmitido{}
 	for _, d := range documentos {
 		if d.Tipo == models.TipoDocumentoEmitidoNotificacao {
 			notificacoes = append(notificacoes, d)

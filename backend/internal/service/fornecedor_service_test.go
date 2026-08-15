@@ -129,6 +129,15 @@ func TestFornecedorService_Buscar(t *testing.T) {
 		if dossie.ScorePontualidade != nil {
 			t.Errorf("esperava ScorePontualidade nil sem processos/transições, veio %v", *dossie.ScorePontualidade)
 		}
+		// Diferente de ScorePontualidade (que É nil de propósito, um
+		// *float64 opcional), Notificacoes é um slice que precisa vir
+		// vazio, não nil — nil serializaria como `null` em JSON, não
+		// `[]` (encoding/json). Ver o comentário em
+		// notificacoesDoFornecedor sobre o bug real encontrado rodando
+		// docker-compose.prod.yml.
+		if dossie.Notificacoes == nil {
+			t.Error("Notificacoes veio nil sem nenhuma notificação — deveria ser []models.DocumentoEmitido{}")
+		}
 	})
 
 	t.Run("score de pontualidade calcula a proporção de transições no prazo", func(t *testing.T) {

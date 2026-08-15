@@ -180,3 +180,33 @@ func TestRadarService_Listar(t *testing.T) {
 		t.Error("processo movido há 1 dia não deveria disparar o alerta de 'parado há muito tempo'")
 	}
 }
+
+// TestRadarService_Listar_SemAlertasNaoRetornaNil reproduz o bug
+// encontrado rodando docker-compose.prod.yml de verdade: sem nenhum
+// alerta em aberto (o caso "tudo em dia", nada excepcional), Listar
+// devolvia um slice nil — RadarHandler.Listar serializa isso pra JSON
+// como `null`, não `[]` (encoding/json), e o frontend quebrava
+// (RadarPage.ordenar faz [...itens], "TypeError: ... is not iterable").
+// `len(itens) == 0` sozinho não pega essa regressão (nil também tem
+// len 0) — por isso a checagem explícita `itens == nil`.
+func TestRadarService_Listar_SemAlertasNaoRetornaNil(t *testing.T) {
+	ctx := context.Background()
+
+	contratoRepo := testutil.NewFakeContratoRepository()
+	processoRepo := testutil.NewFakeProcessoPagamentoRepository()
+	docRepo := &testutil.FakeDocumentoAnexoRepository{}
+	logRepo := &testutil.FakeKanbanLogRepository{}
+
+	radarService := NewRadarService(contratoRepo, processoRepo, docRepo, logRepo)
+
+	itens, err := radarService.Listar(ctx)
+	if err != nil {
+		t.Fatalf("Listar() erro inesperado: %v", err)
+	}
+	if itens == nil {
+		t.Fatal("Listar() sem nenhum alerta devolveu nil — deveria ser []ItemRadar{} (serializa como [] em JSON, não null)")
+	}
+	if len(itens) != 0 {
+		t.Fatalf("esperava 0 itens, veio %d", len(itens))
+	}
+}

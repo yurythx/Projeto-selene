@@ -176,7 +176,13 @@ func CanTransition(
 
 	podeConcluir := isFiscal && ativo && processo.EtapaAtualID == etapaFinalID && !ocorrenciaBloqueando
 
-	var acoes []string
+	// acoesPermitidas vai pro campo JSON allowed_actions
+	// (ProcessoComFiscalizacao) — vazio, não nil, pelo mesmo motivo
+	// documentado em RadarService.Listar: um slice nil vira `null` no
+	// JSON, não `[]`. O frontend hoje já se defende disso
+	// (`?? []` em processo-dialog.tsx), mas a garantia pertence à origem
+	// do dado, não a cada consumidor ter que lembrar de tratar.
+	acoes := []string{}
 	if podeAvancar {
 		acoes = append(acoes, AcaoAvancarEtapa)
 	}
