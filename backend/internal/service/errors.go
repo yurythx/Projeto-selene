@@ -98,6 +98,27 @@ var ErrTransicaoOcorrenciaInvalida = errors.New("service: transição de estado 
 // junto com a introdução desta constante.
 var ErrDataInvalida = errors.New("service: data inválida")
 
+// ErrCNPJInvalido é retornado quando ContratadaCNPJ não tem o formato de
+// um CNPJ (14 dígitos, com ou sem máscara) — ver cnpjValido em util.go.
+// ACHADO DE REVISÃO: antes desta checagem existir, qualquer string não
+// vazia era aceita como CNPJ (só o `binding:"required"` do handler barrava
+// o campo em branco), o que corrompia silenciosamente o agrupamento por
+// CNPJ do Dossiê do Fornecedor (FornecedorService, Fase 4).
+var ErrCNPJInvalido = errors.New("service: CNPJ inválido — informe os 14 dígitos")
+
+// ErrEmailInvalido é retornado quando ContratadaEmail é preenchido mas não
+// tem formato de e-mail — o zod do formulário já valida isso no client,
+// esta é a defesa em profundidade no backend (mesmo espírito do
+// bff-schemas.ts no frontend) para quem chamar a API diretamente.
+var ErrEmailInvalido = errors.New("service: e-mail da contratada inválido")
+
+// ErrVigenciaAntesDaAssinatura é retornado quando DataVigenciaFim é
+// anterior (ou igual) a DataAssinatura — um contrato não pode vencer antes
+// (ou no mesmo dia) de ser assinado. Sem esta checagem, um erro de
+// digitação na data de vigência silenciosamente corrompe o cálculo de
+// "dias restantes" do Radar de Alertas (RadarService).
+var ErrVigenciaAntesDaAssinatura = errors.New("service: data de vigência final precisa ser posterior à data de assinatura")
+
 // ErrOcorrenciaAbertaBloqueiaAvanco é retornado por
 // FiscalizacaoService.VerificarAvancoPermitido quando existe uma
 // Ocorrencia vinculada ao processo cujo Estado ainda não é REGULARIZADA —

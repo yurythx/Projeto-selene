@@ -75,6 +75,14 @@ type fakeContratoRepository struct {
 }
 
 func (f *fakeContratoRepository) Create(ctx context.Context, contrato *models.Contrato) error {
+	// Simula o índice único idx_contratos_numero_contrato (migration
+	// 000001) — mesmo comportamento do Postgres real, pra testar o
+	// mapeamento em repository.ErrNumeroContratoDuplicado sem banco.
+	for _, c := range f.criados {
+		if c.NumeroContrato == contrato.NumeroContrato {
+			return repository.ErrNumeroContratoDuplicado
+		}
+	}
 	contrato.ID = uuid.New()
 	f.criados = append(f.criados, contrato)
 	return nil
@@ -234,6 +242,93 @@ func TestContratoServiceCriar(t *testing.T) {
 			t.Fatal("esperava ExigeFiscalizacaoTerceirizacao=true")
 		}
 	})
+
+	t.Run("CNPJ com formato inválido é rejeitado", func(t *testing.T) {
+		userRepo := newFakeUserRepository(fiscal)
+		contratoRepo := &fakeContratoRepository{}
+		svc := NewContratoService(contratoRepo, userRepo)
+
+		input := baseInput()
+		input.ContratadaCNPJ = "123"
+
+		_, err := svc.Criar(ctx, input)
+		if !errors.Is(err, ErrCNPJInvalido) {
+			t.Fatalf("esperava ErrCNPJInvalido, veio %v", err)
+		}
+	})
+
+	t.Run("e-mail da contratada inválido é rejeitado", func(t *testing.T) {
+		userRepo := newFakeUserRepository(fiscal)
+		contratoRepo := &fakeContratoRepository{}
+		svc := NewContratoService(contratoRepo, userRepo)
+
+		input := baseInput()
+		input.ContratadaEmail = "não é um e-mail"
+
+		_, err := svc.Criar(ctx, input)
+		if !errors.Is(err, ErrEmailInvalido) {
+			t.Fatalf("esperava ErrEmailInvalido, veio %v", err)
+		}
+	})
+
+	t.Run("e-mail vazio (opcional) é aceito", func(t *testing.T) {
+		userRepo := newFakeUserRepository(fiscal)
+		contratoRepo := &fakeContratoRepository{}
+		svc := NewContratoService(contratoRepo, userRepo)
+
+		input := baseInput()
+		input.ContratadaEmail = ""
+
+		_, err := svc.Criar(ctx, input)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+	})
+
+	t.Run("vigência final antes da assinatura é rejeitada", func(t *testing.T) {
+		userRepo := newFakeUserRepository(fiscal)
+		contratoRepo := &fakeContratoRepository{}
+		svc := NewContratoService(contratoRepo, userRepo)
+
+		input := baseInput()
+		input.DataAssinatura = "2026-01-15"
+		input.DataVigenciaFim = "2026-01-10" // antes da assinatura
+
+		_, err := svc.Criar(ctx, input)
+		if !errors.Is(err, ErrVigenciaAntesDaAssinatura) {
+			t.Fatalf("esperava ErrVigenciaAntesDaAssinatura, veio %v", err)
+		}
+	})
+
+	t.Run("vigência final igual à assinatura é rejeitada", func(t *testing.T) {
+		userRepo := newFakeUserRepository(fiscal)
+		contratoRepo := &fakeContratoRepository{}
+		svc := NewContratoService(contratoRepo, userRepo)
+
+		input := baseInput()
+		input.DataAssinatura = "2026-01-15"
+		input.DataVigenciaFim = "2026-01-15" // mesmo dia — não é um prazo de vigência válido
+
+		_, err := svc.Criar(ctx, input)
+		if !errors.Is(err, ErrVigenciaAntesDaAssinatura) {
+			t.Fatalf("esperava ErrVigenciaAntesDaAssinatura, veio %v", err)
+		}
+	})
+
+	t.Run("número de contrato duplicado é rejeitado", func(t *testing.T) {
+		userRepo := newFakeUserRepository(fiscal)
+		contratoRepo := &fakeContratoRepository{}
+		svc := NewContratoService(contratoRepo, userRepo)
+
+		if _, err := svc.Criar(ctx, baseInput()); err != nil {
+			t.Fatalf("falha ao criar o primeiro contrato: %v", err)
+		}
+
+		_, err := svc.Criar(ctx, baseInput()) // mesmo NumeroContrato
+		if !errors.Is(err, repository.ErrNumeroContratoDuplicado) {
+			t.Fatalf("esperava ErrNumeroContratoDuplicado, veio %v", err)
+		}
+	})
 }
 
 func TestContratoServiceAtualizarEEncerrar(t *testing.T) {
@@ -305,6 +400,49 @@ func TestContratoServiceAtualizarEEncerrar(t *testing.T) {
 		}
 		if !atualizado.ExigeFiscalizacaoTerceirizacao {
 			t.Fatal("esperava ExigeFiscalizacaoTerceirizacao=true após atualizar")
+		}
+	})
+
+	t.Run("atualizar com CNPJ inválido é rejeitado", func(t *testing.T) {
+		svc, contrato := novoServico()
+
+		cnpjInvalido := "123"
+		_, err := svc.Atualizar(ctx, contrato.ID, AtualizarContratoInput{ContratadaCNPJ: &cnpjInvalido})
+		if !errors.Is(err, ErrCNPJInvalido) {
+			t.Fatalf("esperava ErrCNPJInvalido, veio %v", err)
+		}
+	})
+
+	t.Run("atualizar com e-mail inválido é rejeitado", func(t *testing.T) {
+		svc, contrato := novoServico()
+
+		emailInvalido := "não é um e-mail"
+		_, err := svc.Atualizar(ctx, contrato.ID, AtualizarContratoInput{ContratadaEmail: &emailInvalido})
+		if !errors.Is(err, ErrEmailInvalido) {
+			t.Fatalf("esperava ErrEmailInvalido, veio %v", err)
+		}
+	})
+
+	t.Run("atualizar vigência para antes da assinatura é rejeitado", func(t *testing.T) {
+		svc, contrato := novoServico() // DataAssinatura = 2026-01-15
+
+		vigenciaInvalida := "2026-01-01"
+		_, err := svc.Atualizar(ctx, contrato.ID, AtualizarContratoInput{DataVigenciaFim: &vigenciaInvalida})
+		if !errors.Is(err, ErrVigenciaAntesDaAssinatura) {
+			t.Fatalf("esperava ErrVigenciaAntesDaAssinatura, veio %v", err)
+		}
+	})
+
+	t.Run("atualizar vigência para string vazia limpa o campo", func(t *testing.T) {
+		svc, contrato := novoServico()
+
+		vazio := ""
+		atualizado, err := svc.Atualizar(ctx, contrato.ID, AtualizarContratoInput{DataVigenciaFim: &vazio})
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if atualizado.DataVigenciaFim != nil {
+			t.Fatal("esperava DataVigenciaFim=nil após limpar o campo")
 		}
 	})
 }

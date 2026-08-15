@@ -25,23 +25,45 @@ import type { Contrato } from "@/lib/api/client";
 // numero_contrato, fiscal_id e tipo_objeto não são editáveis aqui de
 // propósito (identidade/classificação do contrato, ver comentário no
 // backend em ContratoService.Atualizar).
-const schema = z.object({
-  portaria_nomeacao: z.string().optional(),
-  contratada_nome: z.string().min(1, "Obrigatório"),
-  contratada_cnpj: z.string().min(1, "Obrigatório"),
-  contratada_email: z.string().email("E-mail inválido").optional().or(z.literal("")),
-  // Opcional — alimenta o Radar de Alertas (Fase 1 do roadmap). Campo
-  // vazio limpa a vigência cadastrada (ver AtualizarContratoInput no
-  // backend: ponteiro-pra-string distingue "não enviado" de "enviado
-  // vazio", e este form sempre envia o valor atual do input).
-  data_vigencia_fim: z.string().optional(),
-  // Editável (diferente de tipo_objeto/numero_contrato/fiscal_id): um
-  // aditivo/repactuação pode mudar a natureza da mão de obra do contrato,
-  // ver o comentário em AtualizarContratoInput no backend.
-  exige_fiscalizacao_terceirizacao: z.boolean().optional(),
-});
+//
+// buildSchema recebe a DataAssinatura do contrato (imutável, não é campo
+// deste form) pra validar data_vigencia_fim contra ela — mesma regra do
+// backend (ErrVigenciaAntesDaAssinatura): a vigência final não pode ser
+// anterior (nem igual) à assinatura.
+function buildSchema(dataAssinaturaISO: string) {
+  // A API devolve DataAssinatura como timestamp completo
+  // ("2026-01-15T00:00:00Z"), mas o <input type="date"> só produz
+  // "AAAA-MM-DD" — comparar as duas strings direto quebraria em datas
+  // iguais (prefixo é sempre "menor" que a string completa). Os 10
+  // primeiros caracteres de um timestamp ISO 8601 são sempre a data.
+  const dataAssinatura = dataAssinaturaISO.slice(0, 10);
+  return z.object({
+    portaria_nomeacao: z.string().optional(),
+    contratada_nome: z.string().min(1, "Obrigatório"),
+    contratada_cnpj: z
+      .string()
+      .min(1, "Obrigatório")
+      .refine((v) => v.replace(/\D/g, "").length === 14, "CNPJ inválido — informe os 14 dígitos"),
+    contratada_email: z.string().email("E-mail inválido").optional().or(z.literal("")),
+    // Opcional — alimenta o Radar de Alertas (Fase 1 do roadmap). Campo
+    // vazio limpa a vigência cadastrada (ver AtualizarContratoInput no
+    // backend: ponteiro-pra-string distingue "não enviado" de "enviado
+    // vazio", e este form sempre envia o valor atual do input).
+    data_vigencia_fim: z
+      .string()
+      .optional()
+      .refine(
+        (v) => !v || v > dataAssinatura,
+        "A vigência final precisa ser posterior à data de assinatura"
+      ),
+    // Editável (diferente de tipo_objeto/numero_contrato/fiscal_id): um
+    // aditivo/repactuação pode mudar a natureza da mão de obra do contrato,
+    // ver o comentário em AtualizarContratoInput no backend.
+    exige_fiscalizacao_terceirizacao: z.boolean().optional(),
+  });
+}
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<ReturnType<typeof buildSchema>>;
 
 // Dialog de edição dos dados cadastrais do contrato (contratada, e-mail,
 // portaria, vigência) — não inclui campos imutáveis após a criação
@@ -51,7 +73,7 @@ export function EditarContratoDialog({ contrato }: { contrato: Contrato }) {
   const router = useRouter();
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(buildSchema(contrato.DataAssinatura ?? "")),
     defaultValues: {
       portaria_nomeacao: contrato.PortariaNomeacao ?? "",
       contratada_nome: contrato.ContratadaNome ?? "",
@@ -143,6 +165,11 @@ export function EditarContratoDialog({ contrato }: { contrato: Contrato }) {
           <div className="space-y-2">
             <Label htmlFor="data_vigencia_fim">Fim da vigência (opcional)</Label>
             <Input id="data_vigencia_fim" type="date" {...form.register("data_vigencia_fim")} />
+            {form.formState.errors.data_vigencia_fim && (
+              <p className="text-destructive text-sm">
+                {form.formState.errors.data_vigencia_fim.message}
+              </p>
+            )}
             <p className="text-muted-foreground text-xs">
               Alimenta o Radar de Alertas de prazos legais. Deixe em branco pra limpar.
             </p>

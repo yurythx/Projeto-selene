@@ -96,6 +96,47 @@ describe("NovoContratoDialog", () => {
     await waitFor(() => expect(refreshMock).toHaveBeenCalled());
   });
 
+  it("rejeita CNPJ sem os 14 dígitos, sem chamar a API", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const user = userEvent.setup();
+
+    renderDialog();
+    await user.click(screen.getByRole("button", { name: "Novo contrato" }));
+    await user.type(screen.getByLabelText("Número do contrato"), "10/2026");
+    await user.type(screen.getByLabelText("Data de assinatura"), "2026-02-01");
+    await user.type(screen.getByLabelText("Empresa contratada"), "Fornecedora Ltda");
+    await user.type(screen.getByLabelText("CNPJ"), "123");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("CNPJ inválido — informe os 14 dígitos")).toBeInTheDocument();
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejeita vigência final anterior ou igual à data de assinatura, sem chamar a API", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const user = userEvent.setup();
+
+    renderDialog();
+    await user.click(screen.getByRole("button", { name: "Novo contrato" }));
+    await user.type(screen.getByLabelText("Número do contrato"), "10/2026");
+    await user.type(screen.getByLabelText("Data de assinatura"), "2026-02-01");
+    await user.type(screen.getByLabelText(/Fim da vigência/), "2026-01-01");
+    await user.type(screen.getByLabelText("Empresa contratada"), "Fornecedora Ltda");
+    await user.type(screen.getByLabelText("CNPJ"), "11.111.111/0001-11");
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("A vigência final precisa ser posterior à data de assinatura")
+      ).toBeInTheDocument();
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("mostra um toast de erro e mantém o dialog aberto quando a API falha", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "contrato duplicado" }), { status: 400 })

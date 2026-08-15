@@ -63,6 +63,14 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 		return nil, ErrTipoObjetoInvalido
 	}
 
+	if !cnpjValido(input.ContratadaCNPJ) {
+		return nil, ErrCNPJInvalido
+	}
+
+	if input.ContratadaEmail != "" && !emailValido(input.ContratadaEmail) {
+		return nil, ErrEmailInvalido
+	}
+
 	fiscal, err := s.userRepo.FindByID(ctx, input.FiscalID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
@@ -84,6 +92,9 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 		parsed, err := parseData(input.DataVigenciaFim)
 		if err != nil {
 			return nil, fmt.Errorf("service: data de vigência inválida: %w: %w", ErrDataInvalida, err)
+		}
+		if !parsed.After(dataAssinatura) {
+			return nil, ErrVigenciaAntesDaAssinatura
 		}
 		dataVigenciaFim = &parsed
 	}
@@ -171,9 +182,15 @@ func (s *ContratoService) Atualizar(ctx context.Context, id uuid.UUID, input Atu
 		contrato.ContratadaNome = *input.ContratadaNome
 	}
 	if input.ContratadaCNPJ != nil {
+		if !cnpjValido(*input.ContratadaCNPJ) {
+			return nil, ErrCNPJInvalido
+		}
 		contrato.ContratadaCNPJ = *input.ContratadaCNPJ
 	}
 	if input.ContratadaEmail != nil {
+		if *input.ContratadaEmail != "" && !emailValido(*input.ContratadaEmail) {
+			return nil, ErrEmailInvalido
+		}
 		contrato.ContratadaEmail = *input.ContratadaEmail
 	}
 	if input.ExigeFiscalizacaoTerceirizacao != nil {
@@ -186,6 +203,9 @@ func (s *ContratoService) Atualizar(ctx context.Context, id uuid.UUID, input Atu
 			parsed, err := parseData(*input.DataVigenciaFim)
 			if err != nil {
 				return nil, fmt.Errorf("service: data de vigência inválida: %w: %w", ErrDataInvalida, err)
+			}
+			if !parsed.After(contrato.DataAssinatura) {
+				return nil, ErrVigenciaAntesDaAssinatura
 			}
 			contrato.DataVigenciaFim = &parsed
 		}

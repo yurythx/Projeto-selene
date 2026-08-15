@@ -31,22 +31,32 @@ import { Switch } from "@/components/ui/switch";
 // (app/api/contratos/route.ts) preenche a partir do usuário logado. Ver o
 // comentário lá para o porquê (não há hoje como um não-admin listar outros
 // fiscais).
-const schema = z.object({
-  numero_contrato: z.string().min(1, "Obrigatório"),
-  data_assinatura: z.string().min(1, "Obrigatório"),
-  contratada_nome: z.string().min(1, "Obrigatório"),
-  contratada_cnpj: z.string().min(1, "Obrigatório"),
-  contratada_email: z.string().email("E-mail inválido").optional().or(z.literal("")),
-  portaria_nomeacao: z.string().optional(),
-  tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
-  // Opcional — alimenta o Radar de Alertas (Fase 1 do roadmap). Sem essa
-  // data, o contrato simplesmente não aparece no radar de vigência.
-  data_vigencia_fim: z.string().optional(),
-  // Camada 2 (regra do SGF, não da norma): marca contrato de mão de obra
-  // terceirizada, sujeito à IN SCL Nº 04/2021 — acrescenta os documentos
-  // do Art.9º-XXXII ao checklist da Etapa 5. Default false.
-  exige_fiscalizacao_terceirizacao: z.boolean().optional(),
-});
+const schema = z
+  .object({
+    numero_contrato: z.string().min(1, "Obrigatório"),
+    data_assinatura: z.string().min(1, "Obrigatório"),
+    contratada_nome: z.string().min(1, "Obrigatório"),
+    contratada_cnpj: z
+      .string()
+      .min(1, "Obrigatório")
+      .refine((v) => v.replace(/\D/g, "").length === 14, "CNPJ inválido — informe os 14 dígitos"),
+    contratada_email: z.string().email("E-mail inválido").optional().or(z.literal("")),
+    portaria_nomeacao: z.string().optional(),
+    tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
+    // Opcional — alimenta o Radar de Alertas (Fase 1 do roadmap). Sem essa
+    // data, o contrato simplesmente não aparece no radar de vigência.
+    data_vigencia_fim: z.string().optional(),
+    // Camada 2 (regra do SGF, não da norma): marca contrato de mão de obra
+    // terceirizada, sujeito à IN SCL Nº 04/2021 — acrescenta os documentos
+    // do Art.9º-XXXII ao checklist da Etapa 5. Default false.
+    exige_fiscalizacao_terceirizacao: z.boolean().optional(),
+  })
+  // Mesma regra do backend (ContratoService.Criar — ErrVigenciaAntesDaAssinatura):
+  // um contrato não pode vencer antes (ou no mesmo dia) de ser assinado.
+  .refine((v) => !v.data_vigencia_fim || v.data_vigencia_fim > v.data_assinatura, {
+    message: "A vigência final precisa ser posterior à data de assinatura",
+    path: ["data_vigencia_fim"],
+  });
 
 type FormValues = z.infer<typeof schema>;
 
@@ -146,6 +156,11 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
           <div className="space-y-2">
             <Label htmlFor="data_vigencia_fim">Fim da vigência (opcional)</Label>
             <Input id="data_vigencia_fim" type="date" {...form.register("data_vigencia_fim")} />
+            {form.formState.errors.data_vigencia_fim && (
+              <p className="text-destructive text-sm">
+                {form.formState.errors.data_vigencia_fim.message}
+              </p>
+            )}
             <p className="text-muted-foreground text-xs">
               Alimenta o Radar de Alertas de prazos legais.
             </p>

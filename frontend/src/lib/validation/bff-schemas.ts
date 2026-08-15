@@ -27,24 +27,48 @@ const dataOpcionalSchema = z
   .optional()
   .or(z.literal(""));
 
-export const novoContratoSchema = z.object({
-  numero_contrato: z.string().trim().min(1, "obrigatório").max(50),
-  portaria_nomeacao: z.string().trim().max(255).optional(),
-  data_assinatura: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado: AAAA-MM-DD"),
-  contratada_nome: z.string().trim().min(1, "obrigatório").max(255),
-  contratada_cnpj: z.string().trim().min(1, "obrigatório").max(20),
-  contratada_email: z.string().trim().email("e-mail inválido").optional().or(z.literal("")),
-  tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
-  data_vigencia_fim: dataOpcionalSchema,
-  // Camada 2 (regra do SGF, não da norma): marca contrato de mão de obra
-  // terceirizada, sujeito à IN SCL Nº 04/2021. Opcional, default false.
-  exige_fiscalizacao_terceirizacao: z.boolean().optional(),
-});
+// cnpjSchema aceita o CNPJ mascarado ("12.345.678/0001-90") ou só dígitos
+// — checa apenas a quantidade de dígitos (14), não os dígitos
+// verificadores (módulo 11): mesmo escopo do backend, ver o comentário em
+// cnpjValido (backend/internal/service/util.go) sobre por que checksum
+// fica de fora por ora.
+const cnpjSchema = z
+  .string()
+  .trim()
+  .min(1, "obrigatório")
+  .max(20)
+  .refine((v) => v.replace(/\D/g, "").length === 14, "CNPJ inválido — informe os 14 dígitos");
+
+export const novoContratoSchema = z
+  .object({
+    numero_contrato: z.string().trim().min(1, "obrigatório").max(50),
+    portaria_nomeacao: z.string().trim().max(255).optional(),
+    data_assinatura: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado: AAAA-MM-DD"),
+    contratada_nome: z.string().trim().min(1, "obrigatório").max(255),
+    contratada_cnpj: cnpjSchema,
+    contratada_email: z.string().trim().email("e-mail inválido").optional().or(z.literal("")),
+    tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
+    data_vigencia_fim: dataOpcionalSchema,
+    // Camada 2 (regra do SGF, não da norma): marca contrato de mão de obra
+    // terceirizada, sujeito à IN SCL Nº 04/2021. Opcional, default false.
+    exige_fiscalizacao_terceirizacao: z.boolean().optional(),
+  })
+  // Mesma regra do backend (ContratoService.Criar, service/errors.go —
+  // ErrVigenciaAntesDaAssinatura): um contrato não pode vencer antes (ou
+  // no mesmo dia) de ser assinado. Validado aqui também para dar o erro
+  // já no formulário, sem precisar de round-trip até o backend.
+  .refine(
+    (v) => !v.data_vigencia_fim || v.data_vigencia_fim > v.data_assinatura,
+    {
+      message: "a vigência final precisa ser posterior à data de assinatura",
+      path: ["data_vigencia_fim"],
+    }
+  );
 
 export const atualizarContratoSchema = z.object({
   portaria_nomeacao: z.string().trim().max(255).optional(),
   contratada_nome: z.string().trim().min(1, "obrigatório").max(255).optional(),
-  contratada_cnpj: z.string().trim().min(1, "obrigatório").max(20).optional(),
+  contratada_cnpj: cnpjSchema.optional(),
   contratada_email: z.string().trim().email("e-mail inválido").optional().or(z.literal("")),
   data_vigencia_fim: dataOpcionalSchema,
   exige_fiscalizacao_terceirizacao: z.boolean().optional(),

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -15,6 +16,27 @@ import (
 // ErrContratoNotFound é retornado quando nenhum contrato corresponde ao ID
 // informado.
 var ErrContratoNotFound = errors.New("repository: contrato não encontrado")
+
+// ErrNumeroContratoDuplicado é retornado ao tentar criar um contrato cujo
+// NumeroContrato já existe (violação do índice único
+// idx_contratos_numero_contrato, migration 000001). Sem este mapeamento, o
+// erro do Postgres caía no caso default de respondError e virava um 500
+// "erro interno" opaco — um cenário real (reenvio duplo do formulário,
+// número digitado igual a um contrato já cadastrado) que merece uma
+// mensagem clara em vez de um erro de servidor.
+var ErrNumeroContratoDuplicado = errors.New("repository: já existe um contrato com este número")
+
+// pgUniqueViolationCode é o SQLSTATE do Postgres para violação de
+// restrição UNIQUE (23505 — unique_violation).
+const pgUniqueViolationCode = "23505"
+
+// isUniqueViolation reconhece uma violação de UNIQUE/índice único do
+// Postgres através da cadeia de erros retornada pelo driver pgx (usado
+// pelo gorm.io/driver/postgres).
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolationCode
+}
 
 // ContratoRepository abstrai o acesso à tabela `contratos`.
 type ContratoRepository interface {
@@ -48,6 +70,9 @@ func NewContratoRepository(db *gorm.DB) ContratoRepository {
 
 func (r *gormContratoRepository) Create(ctx context.Context, contrato *models.Contrato) error {
 	if err := r.db.WithContext(ctx).Create(contrato).Error; err != nil {
+		if isUniqueViolation(err) {
+			return ErrNumeroContratoDuplicado
+		}
 		return fmt.Errorf("repository: criar contrato: %w", err)
 	}
 

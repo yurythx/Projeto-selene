@@ -40,6 +40,9 @@ func respondError(c *gin.Context, err error) {
 	}
 
 	switch {
+	case errors.Is(err, repository.ErrNumeroContratoDuplicado):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+
 	case errors.Is(err, repository.ErrUserNotFound),
 		errors.Is(err, repository.ErrContratoNotFound),
 		errors.Is(err, repository.ErrEtapaNotFound),
@@ -67,7 +70,10 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrTipoMovimentacaoInvalido),
 		errors.Is(err, service.ErrTransicaoOcorrenciaInvalida),
 		errors.Is(err, service.ErrOcorrenciaAbertaBloqueiaAvanco),
-		errors.Is(err, service.ErrDataInvalida):
+		errors.Is(err, service.ErrDataInvalida),
+		errors.Is(err, service.ErrCNPJInvalido),
+		errors.Is(err, service.ErrEmailInvalido),
+		errors.Is(err, service.ErrVigenciaAntesDaAssinatura):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 	case errors.Is(err, service.ErrCredenciaisInvalidas):
