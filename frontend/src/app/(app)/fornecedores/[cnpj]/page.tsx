@@ -35,17 +35,10 @@ function ScoreBadge({ score }: { score?: number | null }) {
     return <Badge variant="secondary">Sem dados suficientes</Badge>;
   }
   if (score >= 80) {
-    return <Badge variant="default">{score.toFixed(0)}% no prazo</Badge>;
+    return <Badge variant="success">{score.toFixed(0)}% no prazo</Badge>;
   }
   if (score >= 50) {
-    return (
-      <Badge
-        variant="outline"
-        className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400"
-      >
-        {score.toFixed(0)}% no prazo
-      </Badge>
-    );
+    return <Badge variant="warning">{score.toFixed(0)}% no prazo</Badge>;
   }
   return <Badge variant="destructive">{score.toFixed(0)}% no prazo</Badge>;
 }
@@ -110,7 +103,7 @@ export default async function FornecedorDetalhePage({
                   </TableCell>
                   <TableCell>{formatarData(contrato.DataAssinatura)}</TableCell>
                   <TableCell>
-                    <Badge variant={contrato.Ativo ? "default" : "secondary"}>
+                    <Badge variant={contrato.Ativo ? "success" : "secondary"}>
                       {contrato.Ativo ? "Ativo" : "Encerrado"}
                     </Badge>
                   </TableCell>

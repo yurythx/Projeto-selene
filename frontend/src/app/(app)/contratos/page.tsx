@@ -50,7 +50,7 @@ export default async function ContratosPage() {
         {session?.user?.isFiscal && <NovoContratoDialog fiscalNome={session.user.name ?? ""} />}
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-lg border shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -84,7 +84,7 @@ export default async function ContratosPage() {
                 <TableCell>{contrato.Fiscal?.Nome ?? "—"}</TableCell>
                 <TableCell>{formatarData(contrato.DataAssinatura)}</TableCell>
                 <TableCell>
-                  <Badge variant={contrato.Ativo ? "default" : "secondary"}>
+                  <Badge variant={contrato.Ativo ? "success" : "secondary"}>
                     {contrato.Ativo ? "Ativo" : "Encerrado"}
                   </Badge>
                 </TableCell>

@@ -109,7 +109,7 @@ function ProcessoCard({
         </Badge>
         <div className="flex items-center gap-1.5">
           {processo.Status === "Concluido" && (
-            <Badge variant="default" className="text-xs">
+            <Badge variant="success" className="text-xs">
               Pago
             </Badge>
           )}

@@ -42,7 +42,7 @@ export default async function RadarPage() {
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-lg border shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>

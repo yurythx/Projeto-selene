@@ -1,12 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import type { ItemRadar } from "@/lib/api/client";
-import { cn } from "@/lib/utils";
 
 /**
- * Badge de nível de alerta do Radar (Fase 1 do roadmap). CRITICO reaproveita
- * a variante "destructive" do design system; ATENCAO usa uma cor âmbar
- * dedicada — não existe uma variante "warning" no Badge base ainda, então
- * as classes ficam aqui em vez de inventar uma variante global só pra isso.
+ * Badge de nível de alerta do Radar (Fase 1 do roadmap). CRITICO usa a
+ * variante "destructive", ATENCAO usa "warning" — ambas do design system
+ * central (ver components/ui/badge.tsx).
  */
 export function RadarNivelBadge({
   nivel,
@@ -24,13 +22,7 @@ export function RadarNivelBadge({
   }
 
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400",
-        className
-      )}
-    >
+    <Badge variant="warning" className={className}>
       Atenção
     </Badge>
   );

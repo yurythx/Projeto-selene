@@ -57,13 +57,13 @@ export default async function ContratoDetalhePage({
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <Badge variant={contrato.Ativo ? "default" : "secondary"}>
+          <Badge variant={contrato.Ativo ? "success" : "secondary"}>
             {contrato.Ativo ? "Ativo" : "Encerrado"}
           </Badge>
           {/* Camada 2: sujeito à IN SCL Nº 04/2021 (mão de obra
               terceirizada) — ver Contrato.ExigeFiscalizacaoTerceirizacao. */}
           {contrato.ExigeFiscalizacaoTerceirizacao && (
-            <Badge variant="outline">Mão de obra terceirizada</Badge>
+            <Badge variant="info">Mão de obra terceirizada</Badge>
           )}
         </div>
       </div>

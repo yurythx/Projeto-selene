@@ -217,7 +217,7 @@ export function ProcessoDialog({
           </p>
           <p>
             <span className="text-muted-foreground">Situação: </span>
-            <Badge variant={processo.Status === "Concluido" ? "default" : "secondary"}>
+            <Badge variant={processo.Status === "Concluido" ? "success" : "secondary"}>
               {processo.Status === "Concluido" ? "Pago" : "Em andamento"}
             </Badge>
           </p>

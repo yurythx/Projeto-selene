@@ -48,7 +48,7 @@ export default async function AdminUsuariosPage() {
         <CriarUsuarioLocalDialog />
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-lg border shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -68,23 +68,18 @@ export default async function AdminUsuariosPage() {
                 <TableCell>{usuario.Email}</TableCell>
                 <TableCell>{usuario.Matricula || "—"}</TableCell>
                 <TableCell>
-                  <Badge variant={usuario.IsFiscal ? "default" : "secondary"}>
+                  <Badge variant={usuario.IsFiscal ? "success" : "secondary"}>
                     {usuario.IsFiscal ? "Sim" : "Não"}
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={usuario.IsAdmin ? "default" : "secondary"}>
+                  <Badge variant={usuario.IsAdmin ? "success" : "secondary"}>
                     {usuario.IsAdmin ? "Sim" : "Não"}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   {usuario.MustChangePassword ? (
-                    <Badge
-                      variant="outline"
-                      className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400"
-                    >
-                      Senha temporária pendente
-                    </Badge>
+                    <Badge variant="warning">Senha temporária pendente</Badge>
                   ) : (
                     "—"
                   )}

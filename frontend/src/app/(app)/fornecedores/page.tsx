@@ -30,7 +30,7 @@ export default async function FornecedoresPage() {
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-lg border shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -58,7 +58,7 @@ export default async function FornecedoresPage() {
                 <TableCell>{fornecedor.cnpj_formatado}</TableCell>
                 <TableCell>{fornecedor.qtd_contratos}</TableCell>
                 <TableCell>
-                  <Badge variant={fornecedor.qtd_contratos_ativos ? "default" : "secondary"}>
+                  <Badge variant={fornecedor.qtd_contratos_ativos ? "success" : "secondary"}>
                     {fornecedor.qtd_contratos_ativos}
                   </Badge>
                 </TableCell>
