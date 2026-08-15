@@ -11,7 +11,8 @@ import (
 
 // UserHandler expõe as rotas HTTP de administração de contas de usuário
 // (Seção 6, "Administração de Fiscais") — restritas a IsAdmin=true, ver
-// middleware.RequireAdmin.
+// middleware.RequireAdmin. Exceção: ListarServidores, aberta a qualquer
+// usuário autenticado (ver o comentário nela).
 type UserHandler struct {
 	userService *service.UserService
 	authService *service.AuthService
@@ -82,6 +83,39 @@ func (h *UserHandler) AtualizarPermissoes(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, user)
+}
+
+// ServidorOpcao é uma projeção mínima de models.User — só o necessário pra
+// popular um seletor de servidor (ex: SGF-Rondonópolis, "designar
+// fiscal/gestor/fiscal setorial de um contrato", ver DesignacaoHandler).
+// Deliberadamente SEM os campos administrativos que GET /admin/users
+// expõe (IsAdmin, IsFiscal, Matricula) — esta rota é acessível a qualquer
+// usuário autenticado, não só administradores.
+type ServidorOpcao struct {
+	ID    uuid.UUID `json:"ID"`
+	Nome  string    `json:"Nome"`
+	Email string    `json:"Email"`
+}
+
+// ListarServidores trata GET /api/v1/servidores — lista mínima (ID, Nome,
+// Email) de todos os usuários cadastrados. Não é restrita a admin: os
+// mesmos três campos já são visíveis a qualquer usuário autenticado hoje
+// via Contrato.Fiscal (aninhado em GET /contratos e /processos), então
+// não há dado novo sendo exposto aqui — só uma forma de listar todo mundo
+// de uma vez, sem precisar já conhecer um ContratoID.
+func (h *UserHandler) ListarServidores(c *gin.Context) {
+	users, err := h.userService.Listar(c.Request.Context())
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+
+	opcoes := make([]ServidorOpcao, len(users))
+	for i, u := range users {
+		opcoes[i] = ServidorOpcao{ID: u.ID, Nome: u.Nome, Email: u.Email}
+	}
+
+	c.JSON(http.StatusOK, opcoes)
 }
 
 type criarUsuarioLocalRequest struct {

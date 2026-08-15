@@ -286,6 +286,10 @@ func main() {
 		api.GET("/contratos/:id/empenhos", empenhoHandler.Listar)
 		api.GET("/empenhos/:id", empenhoHandler.Buscar)
 		api.GET("/processos/:id/ocorrencias", ocorrenciaHandler.Listar)
+		// Projeção mínima de usuários (ID/Nome/Email), pra popular o
+		// seletor de servidor de "Nova designação" — ver o comentário em
+		// UserHandler.ListarServidores sobre por que não é admin-only.
+		api.GET("/servidores", userHandler.ListarServidores)
 
 		// Escrita/movimentação do Kanban: restrita a fiscais habilitados
 		// e sujeita a rate limit (por usuário autenticado).

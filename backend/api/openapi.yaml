@@ -1005,6 +1005,27 @@ paths:
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
 
+  /api/v1/servidores:
+    get:
+      tags: [Usuários]
+      summary: Lista uma projeção mínima (ID/Nome/Email) de todos os usuários
+      description: >-
+        Não é admin-only (ao contrário de /admin/users): usada pra popular
+        seletores de servidor, ex. SGF-Rondonópolis "Nova designação".
+        ID/Nome/Email já são visíveis a qualquer usuário autenticado hoje
+        via Contrato.Fiscal aninhado em /contratos e /processos — esta
+        rota não expõe dado novo, só uma forma de listar todo mundo sem
+        precisar já conhecer um ContratoID.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ServidorOpcao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
   /api/v1/admin/users:
     get:
       tags: [Administração]
@@ -1308,6 +1329,14 @@ components:
         Matricula: { type: string }
         CriadoEm: { type: string, format: date-time }
         AtualizadoEm: { type: string, format: date-time }
+
+    ServidorOpcao:
+      type: object
+      description: 'Projeção mínima de Usuario (só ID/Nome/Email) usada pra popular seletores de servidor — ver GET /servidores.'
+      properties:
+        ID: { type: string, format: uuid }
+        Nome: { type: string }
+        Email: { type: string, format: email }
 
     Contrato:
       type: object
