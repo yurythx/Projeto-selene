@@ -198,6 +198,7 @@ Todas sob `/api/v1`, exigem `Authorization: Bearer <JWT>` exceto `/health` e `/m
 | `/processos/:id/ocorrencias` | GET | autenticado |
 | `/processos/:id/ocorrencias` | POST | fiscal |
 | `/ocorrencias/:id/notificar`, `/tratar`, `/regularizar` | POST | fiscal |
+| `/servidores` | GET | autenticado (projeção mínima ID/Nome/Email — **não** é admin-only, ver abaixo) |
 | `/admin/users`, `/admin/users/:id` | GET | admin |
 | `/admin/users/:id` | PATCH | admin |
 | `/admin/users/local` | POST | admin |
@@ -214,7 +215,7 @@ Um contrato `Encerrar`ado (`Ativo=false`) não aceita novos `POST /processos` �
 
 Adequação estrita a duas Instruções Normativas da Prefeitura de Rondonópolis — Matriz Normativa completa (artigo por artigo) em `.claude/plans/projeto-selene-rippling-kite.md`. Extensão 100% aditiva: nenhuma tabela/coluna/rota anterior mudou de nome ou comportamento.
 
-- **`PortariaDesignacao`** (`internal/service/designacao_service.go`) — histórico auditável de designação de fiscal/suplente/gestor/fiscal setorial por contrato (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10). `Contrato.FiscalID` continua existindo como cache de leitura rápida do fiscal ativo; esta tabela é a fonte de verdade.
+- **`PortariaDesignacao`** (`internal/service/designacao_service.go`) — histórico auditável de designação de fiscal/suplente/gestor/fiscal setorial por contrato (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10). `Contrato.FiscalID` continua existindo como cache de leitura rápida do fiscal ativo; esta tabela é a fonte de verdade. `GET /servidores` (`UserHandler.ListarServidores`) expõe uma projeção mínima (ID/Nome/Email) de todos os usuários, aberta a qualquer autenticado — não admin-only como `/admin/users` — pra popular o seletor de servidor do formulário "Nova designação" no frontend.
 - **`Empenho` / `MovimentacaoEmpenho`** (`empenho_service.go`) — acompanhamento **paralelo/informativo** de saldo (IN01 Art.5º-VIII; IN04 Art.5º-XXII). **Não é a fonte de verdade orçamentária** — essa continua sendo exclusiva dos sistemas corporativos da prefeitura (mesma decisão já documentada para `Contrato`). Saldo sempre reconstruído do histórico de movimentações, nunca denormalizado.
 - **`Ocorrencia`** (`ocorrencia_service.go`) — registro/tratativa de ocorrências (IN01 Art.3º-III/Art.5º-IV,IX; IN04 Art.3º-VIII/Art.5º-VIII,XVI), ciclo linear `REGISTRADA → NOTIFICADA → EM_TRATAMENTO → REGULARIZADA`. Uma ocorrência não regularizada **bloqueia de verdade** `POST /processos/:id/avancar` (`FiscalizacaoService.VerificarAvancoPermitido`, chamado pelo handler antes de `KanbanService.AvancarEtapa`) — regra de Camada 2 do SGF, não da norma, confirmada com o time do projeto.
 - **`FiscalizacaoService`** (`fiscalizacao_service.go`) — computa, só na leitura de `GET /processos/:id` (nunca persiste), três campos extras sobre o `ProcessoPagamento` de sempre: `estado_fiscalizacao` (rótulo de Camada 2 derivado da etapa Kanban), `acao_ou_espera` (`ACAO_FISCAL`/`ESPERA_EXTERNA`) e `allowed_actions` (vocabulário fechado que o frontend usa pra decidir quais botões mostrar).
