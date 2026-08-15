@@ -80,9 +80,12 @@ func (r *gormProcessoPagamentoRepository) ListByEtapa(ctx context.Context, etapa
 		return ResultadoPaginado[models.ProcessoPagamento]{}, fmt.Errorf("repository: contar processos por etapa: %w", err)
 	}
 
-	var processos []models.ProcessoPagamento
+	processos := []models.ProcessoPagamento{}
 	err := r.db.WithContext(ctx).
 		Preload("Contrato").
+		// Contrato.Fiscal: usado pelo quadro Kanban pra mostrar o avatar
+		// (iniciais) do fiscal responsável em cada card.
+		Preload("Contrato.Fiscal").
 		Where("etapa_atual_id = ?", etapaID).
 		Order("created_at").
 		Offset(pagina.Offset()).
@@ -101,7 +104,7 @@ func (r *gormProcessoPagamentoRepository) ListByEtapa(ctx context.Context, etapa
 }
 
 func (r *gormProcessoPagamentoRepository) ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.ProcessoPagamento, error) {
-	var processos []models.ProcessoPagamento
+	processos := []models.ProcessoPagamento{}
 
 	err := r.db.WithContext(ctx).
 		Preload("EtapaAtual").
@@ -116,7 +119,7 @@ func (r *gormProcessoPagamentoRepository) ListByContrato(ctx context.Context, co
 }
 
 func (r *gormProcessoPagamentoRepository) ListAtivosComContrato(ctx context.Context) ([]models.ProcessoPagamento, error) {
-	var processos []models.ProcessoPagamento
+	processos := []models.ProcessoPagamento{}
 
 	err := r.db.WithContext(ctx).
 		Preload("Contrato").

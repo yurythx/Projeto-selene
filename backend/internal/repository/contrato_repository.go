@@ -76,7 +76,7 @@ func (r *gormContratoRepository) List(ctx context.Context, pagina Pagina) (Resul
 		return ResultadoPaginado[models.Contrato]{}, fmt.Errorf("repository: contar contratos: %w", err)
 	}
 
-	var contratos []models.Contrato
+	contratos := []models.Contrato{}
 	err := r.db.WithContext(ctx).
 		Preload("Fiscal").
 		Order("numero_contrato").
@@ -96,7 +96,7 @@ func (r *gormContratoRepository) List(ctx context.Context, pagina Pagina) (Resul
 }
 
 func (r *gormContratoRepository) ListAtivos(ctx context.Context) ([]models.Contrato, error) {
-	var contratos []models.Contrato
+	contratos := []models.Contrato{}
 
 	err := r.db.WithContext(ctx).
 		Where("ativo = ?", true).
@@ -110,7 +110,7 @@ func (r *gormContratoRepository) ListAtivos(ctx context.Context) ([]models.Contr
 }
 
 func (r *gormContratoRepository) ListTodos(ctx context.Context) ([]models.Contrato, error) {
-	var contratos []models.Contrato
+	contratos := []models.Contrato{}
 
 	err := r.db.WithContext(ctx).
 		Preload("Fiscal").

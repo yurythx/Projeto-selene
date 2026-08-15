@@ -69,7 +69,7 @@ func (r *gormDocumentoEmitidoRepository) FindByCodigoVerificacao(ctx context.Con
 }
 
 func (r *gormDocumentoEmitidoRepository) ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.DocumentoEmitido, error) {
-	var documentos []models.DocumentoEmitido
+	documentos := []models.DocumentoEmitido{}
 
 	err := r.db.WithContext(ctx).
 		Preload("GeradoPor").
@@ -89,7 +89,7 @@ func (r *gormDocumentoEmitidoRepository) ListByContratoIDs(ctx context.Context, 
 		return nil, nil
 	}
 
-	var documentos []models.DocumentoEmitido
+	documentos := []models.DocumentoEmitido{}
 
 	err := r.db.WithContext(ctx).
 		Preload("GeradoPor").

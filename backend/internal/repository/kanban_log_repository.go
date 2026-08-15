@@ -44,7 +44,7 @@ func (r *gormKanbanLogRepository) Create(ctx context.Context, log *models.Kanban
 }
 
 func (r *gormKanbanLogRepository) ListByProcesso(ctx context.Context, processoID uuid.UUID) ([]models.KanbanLog, error) {
-	var logs []models.KanbanLog
+	logs := []models.KanbanLog{}
 
 	err := r.db.WithContext(ctx).
 		Preload("Usuario").
@@ -65,7 +65,7 @@ func (r *gormKanbanLogRepository) ListByProcessos(ctx context.Context, processoI
 		return nil, nil
 	}
 
-	var logs []models.KanbanLog
+	logs := []models.KanbanLog{}
 
 	err := r.db.WithContext(ctx).
 		Where("processo_pagamento_id IN ?", processoIDs).
