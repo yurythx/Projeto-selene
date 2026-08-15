@@ -89,7 +89,7 @@ Sobe dois servidores locais (`playwright.config.ts`): um stub do backend em mem�
 
 A sessão do Auth.js é **injetada direto num cookie** (`e2e/fixtures/auth.ts`, via `next-auth/jwt.encode()` com o mesmo `AUTH_SECRET` do servidor de teste) em vez de logar de verdade pelo Keycloak — não faz sentido (nem seria seguro) usar credenciais reais da instância de produção da prefeitura em CI. O que os specs cobrem é o comportamento do frontend a partir de uma sessão válida; o fluxo de login em si (redirect, `client_id`, discovery document) foi validado manualmente contra o Keycloak real antes deste commit.
 
-Specs em `e2e/*.spec.ts` (21 testes): redirecionamento de quem não tem sessão, login local (credenciais corretas/erradas, troca de senha obrigatória), CRUD de contratos, o board do Kanban (incluindo o 422 de checklist incompleto, upload de documento e vistoria de campo), Dossiê do Fornecedor, a tela de administração (visibilidade por `is_admin`), e `sgf.spec.ts` (Ocorrências bloqueando/liberando o avanço de etapa, Empenho com saldo, Designações — histórico e o fluxo completo de "Nova designação").
+Specs em `e2e/*.spec.ts` (23 testes): redirecionamento de quem não tem sessão, login local (credenciais corretas/erradas, troca de senha obrigatória), CRUD de contratos, o board do Kanban (incluindo o 422 de checklist incompleto, upload de documento e vistoria de campo), Dossiê do Fornecedor, a tela de administração (visibilidade por `is_admin`), `sgf.spec.ts` (Ocorrências bloqueando/liberando o avanço de etapa, Empenho com saldo, Designações — histórico e o fluxo completo de "Nova designação"), e `csp.spec.ts` (nonce presente no header, nenhuma violação de CSP no console ao abrir Select/Dialog).
 
 **Nota sobre `vitest.config.mts`**: `pool: "threads"` + `fileParallelism: false` não são só estilo — o pool padrão do Vitest 4 (`"forks"`, um processo filho por arquivo de teste) trava esperando os workers responderem em ambientes com poucos CPUs/contêineres (reproduzido em CI e num container Docker local simples: `Timeout waiting for worker to respond`, suíte inteira falha com "no tests found" mesmo com o código correto). `"threads"` usa `worker_threads` (sem spawn de processo) e é bem mais robusto nesse cenário.
 
@@ -177,13 +177,13 @@ Adequação às IN SCL 01/2019 e 04/2021 (ver `backend/README.md` para a Matriz 
 - [x] Arquitetura BFF: browser nunca chama o backend Go direto, só os Route Handlers do próprio Next
 - [x] `fiscal_id`/autorização sempre resolvidos server-side a partir da sessão — nunca aceitos do corpo da requisição do client
 - [x] Defesa em profundidade contra CSRF nos 22 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
-- [x] Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) via `next.config.ts`
+- [x] Security headers: CSP com nonce via `src/proxy.ts` (por requisição); X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy via `next.config.ts` (estáticos, não dependem de nonce)
 - [x] `loading.tsx` (streaming) e `error.tsx`/`global-error.tsx` (boundary de erro amigável) nas rotas principais
-- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes unitários/componente + 21 E2E (Playwright)
+- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes unitários/componente + 23 E2E (Playwright)
 - [x] CI (lint + testes unitários + testes E2E + build + imagem Docker), mesmo pipeline do backend
 - [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root
 - [x] Tipos gerados a partir do OpenAPI do backend (`openapi-typescript`) — sem duplicar contratos de API à mão
-- [ ] CSP com nonce (hoje usa `'unsafe-inline'` pra scripts/estilos — mudar pra nonce via `proxy.ts` exigiria forçar renderização dinâmica em todas as páginas; ver `next.config.ts` para o raciocínio)
+- [x] CSP com nonce em `script-src` (`'nonce-x' 'strict-dynamic'`, sem `'unsafe-inline'`) — gerado por requisição em `src/proxy.ts`, viável porque toda página já é dinamicamente renderizada (confirmado no output de `next build`: nenhuma rota estática). `style-src` mantém `'unsafe-inline'` de propósito — nonce não cobre o atributo `style="..."` inline que o base-ui usa pra posicionar Select/Dialog/Popover; confirmado empiricamente (`e2e/csp.spec.ts`, não só por dedução) que apertar sem isso quebra esses componentes.
 - [ ] Paginação de verdade na listagem de contratos e nas colunas do Kanban (hoje busca até 100 registros de uma vez, sem UI de "próxima página")
 - [ ] Rate limiting nos Route Handlers do BFF — hoje só existe no backend Go (que já rate-limita as rotas de escrita por usuário); redundante mas não coberto no lado do Next
 
