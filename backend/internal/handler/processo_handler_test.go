@@ -23,13 +23,15 @@ func setupProcessoRouter(t *testing.T, usuario *models.User) *gin.Engine {
 	contratoRepo := testutil.NewFakeContratoRepository()
 	processoRepo := testutil.NewFakeProcessoPagamentoRepository()
 	docRepo := &testutil.FakeDocumentoAnexoRepository{}
+	ocorrenciaRepo := testutil.NewFakeOcorrenciaRepository()
 
 	// db=nil é seguro aqui: só exercitamos Listar/Buscar (Listar ->
 	// ListByEtapa, Buscar -> FindByID), nenhum dos dois passa por
 	// s.db.Transaction — isso só acontece em CriarProcesso/AvancarEtapa,
 	// não testados neste arquivo.
 	kanbanService := service.NewKanbanService(nil, processoRepo, contratoRepo, docRepo, noopNotifier{})
-	h := handler.NewProcessoHandler(kanbanService)
+	fiscalizacaoService := service.NewFiscalizacaoService(docRepo, ocorrenciaRepo)
+	h := handler.NewProcessoHandler(kanbanService, fiscalizacaoService)
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {

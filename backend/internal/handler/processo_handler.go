@@ -14,12 +14,13 @@ import (
 // ProcessoHandler expõe as rotas HTTP do quadro Kanban: criação de cards,
 // consulta por etapa/id, avanço de etapa e conclusão de pagamento.
 type ProcessoHandler struct {
-	kanbanService *service.KanbanService
+	kanbanService       *service.KanbanService
+	fiscalizacaoService *service.FiscalizacaoService
 }
 
 // NewProcessoHandler constrói um ProcessoHandler.
-func NewProcessoHandler(kanbanService *service.KanbanService) *ProcessoHandler {
-	return &ProcessoHandler{kanbanService: kanbanService}
+func NewProcessoHandler(kanbanService *service.KanbanService, fiscalizacaoService *service.FiscalizacaoService) *ProcessoHandler {
+	return &ProcessoHandler{kanbanService: kanbanService, fiscalizacaoService: fiscalizacaoService}
 }
 
 type criarProcessoRequest struct {
@@ -77,8 +78,18 @@ func (h *ProcessoHandler) Listar(c *gin.Context) {
 	c.JSON(http.StatusOK, resultado)
 }
 
-// Buscar trata GET /api/v1/processos/:id.
+// Buscar trata GET /api/v1/processos/:id. A resposta inclui, além dos
+// campos já existentes de ProcessoPagamento, a leitura enriquecida de
+// Camada 2 do SGF-Rondonópolis (estado_fiscalizacao, acao_ou_espera,
+// allowed_actions — ver FiscalizacaoService.Decorar e o plano, seção
+// De/Para).
 func (h *ProcessoHandler) Buscar(c *gin.Context) {
+	usuario, ok := middleware.UserFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "usuário não autenticado"})
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id inválido"})
@@ -91,11 +102,20 @@ func (h *ProcessoHandler) Buscar(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, processo)
+	decorado, err := h.fiscalizacaoService.Decorar(c.Request.Context(), processo, usuario.IsFiscal)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, decorado)
 }
 
 // Avancar trata POST /api/v1/processos/:id/avancar — move o card para a
-// próxima etapa se o checklist da etapa atual estiver completo.
+// próxima etapa se o checklist da etapa atual estiver completo E não
+// houver Ocorrencia aberta vinculada (trava de Camada 2 do SGF,
+// verificada ANTES de chegar em KanbanService.AvancarEtapa — ver
+// FiscalizacaoService.VerificarAvancoPermitido e o plano, seção De/Para).
 func (h *ProcessoHandler) Avancar(c *gin.Context) {
 	usuario, ok := middleware.UserFromContext(c)
 	if !ok {
@@ -106,6 +126,11 @@ func (h *ProcessoHandler) Avancar(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "id inválido"})
+		return
+	}
+
+	if err := h.fiscalizacaoService.VerificarAvancoPermitido(c.Request.Context(), id); err != nil {
+		respondError(c, err)
 		return
 	}
 

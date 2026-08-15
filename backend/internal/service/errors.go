@@ -65,3 +65,43 @@ var ErrSenhaFraca = errors.New("service: senha precisa ter pelo menos 8 caracter
 // provisionada via Keycloak (PasswordHash nulo) — a senha dela é
 // gerenciada pelo Keycloak, não pelo Selene.
 var ErrContaSemSenhaLocal = errors.New("service: esta conta não usa senha local (login via Keycloak)")
+
+// ErrValorInvalido é retornado quando um valor monetário informado
+// (Empenho.ValorInicial ou MovimentacaoEmpenho.Valor) não é positivo —
+// ver EmpenhoService.
+var ErrValorInvalido = errors.New("service: valor precisa ser maior que zero")
+
+// ErrTipoMovimentacaoInvalido é retornado ao tentar registrar
+// manualmente uma movimentação do tipo INICIAL — esse tipo só é criado
+// automaticamente por EmpenhoService.CriarEmpenho, nunca via
+// RegistrarMovimentacao.
+var ErrTipoMovimentacaoInvalido = errors.New("service: tipo de movimentação inválido para este lançamento")
+
+// ErrTransicaoOcorrenciaInvalida é retornado ao tentar mover uma
+// Ocorrencia para um estado que não é o próximo passo válido do fluxo
+// linear REGISTRADA→NOTIFICADA→EM_TRATAMENTO→REGULARIZADA (ver
+// OcorrenciaService e o comentário em models.EstadoOcorrencia).
+var ErrTransicaoOcorrenciaInvalida = errors.New("service: transição de estado da ocorrência não permitida a partir do estado atual")
+
+// ErrDataInvalida é retornado quando uma data recebida da API (formato
+// esperado "AAAA-MM-DD", ver parseData em util.go) não pôde ser
+// interpretada — usado via `fmt.Errorf("...: %w: %w", ErrDataInvalida,
+// errOriginal)` para que errors.Is funcione e o handler mapeie pra 400,
+// preservando o erro original de time.Parse na mensagem/log.
+//
+// ACHADO DE REVISÃO: antes desta constante existir, os três pontos de
+// parseData em ContratoService (DataAssinatura/DataVigenciaFim em Criar e
+// Atualizar) só envolviam o erro de time.Parse com fmt.Errorf, sem
+// nenhum sentinel — respondError (handler/errors.go) não reconhecia esse
+// erro e caía no default (500 "erro interno"), quando o correto é 400
+// (erro do cliente, data mal formatada). Corrigido nos três call sites
+// junto com a introdução desta constante.
+var ErrDataInvalida = errors.New("service: data inválida")
+
+// ErrOcorrenciaAbertaBloqueiaAvanco é retornado por
+// FiscalizacaoService.VerificarAvancoPermitido quando existe uma
+// Ocorrencia vinculada ao processo cujo Estado ainda não é REGULARIZADA —
+// trava de ESCRITA de Camada 2 (regra do SGF, não da norma; confirmada
+// explicitamente com o usuário), aplicada pelo handler ANTES de chamar
+// KanbanService.AvancarEtapa.
+var ErrOcorrenciaAbertaBloqueiaAvanco = errors.New("service: existe ocorrência aberta vinculada a este processo — regularize antes de avançar")

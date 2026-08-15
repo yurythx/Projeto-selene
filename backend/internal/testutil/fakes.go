@@ -503,3 +503,172 @@ func (f *FakeFotoVistoriaRepository) FindByVistoriaAndHash(ctx context.Context, 
 }
 
 var _ repository.FotoVistoriaRepository = (*FakeFotoVistoriaRepository)(nil)
+
+// --- PortariaDesignacaoRepository ---
+
+type FakePortariaDesignacaoRepository struct {
+	Designacoes map[uuid.UUID]*models.PortariaDesignacao
+}
+
+func NewFakePortariaDesignacaoRepository(designacoes ...*models.PortariaDesignacao) *FakePortariaDesignacaoRepository {
+	byID := make(map[uuid.UUID]*models.PortariaDesignacao, len(designacoes))
+	for _, d := range designacoes {
+		byID[d.ID] = d
+	}
+	return &FakePortariaDesignacaoRepository{Designacoes: byID}
+}
+
+func (f *FakePortariaDesignacaoRepository) Create(ctx context.Context, designacao *models.PortariaDesignacao) error {
+	if designacao.ID == uuid.Nil {
+		designacao.ID = uuid.New()
+	}
+	f.Designacoes[designacao.ID] = designacao
+	return nil
+}
+
+func (f *FakePortariaDesignacaoRepository) Update(ctx context.Context, designacao *models.PortariaDesignacao) error {
+	f.Designacoes[designacao.ID] = designacao
+	return nil
+}
+
+func (f *FakePortariaDesignacaoRepository) ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.PortariaDesignacao, error) {
+	var out []models.PortariaDesignacao
+	for _, d := range f.Designacoes {
+		if d.ContratoID == contratoID {
+			out = append(out, *d)
+		}
+	}
+	return out, nil
+}
+
+func (f *FakePortariaDesignacaoRepository) FindAtivaPorContratoEPapel(ctx context.Context, contratoID uuid.UUID, papel models.PapelDesignacao) (*models.PortariaDesignacao, error) {
+	for _, d := range f.Designacoes {
+		if d.ContratoID == contratoID && d.Papel == papel && d.DataRevogacao == nil {
+			return d, nil
+		}
+	}
+	return nil, repository.ErrPortariaDesignacaoNotFound
+}
+
+var _ repository.PortariaDesignacaoRepository = (*FakePortariaDesignacaoRepository)(nil)
+
+// --- EmpenhoRepository / MovimentacaoEmpenhoRepository ---
+
+type FakeEmpenhoRepository struct {
+	Empenhos map[uuid.UUID]*models.Empenho
+}
+
+func NewFakeEmpenhoRepository(empenhos ...*models.Empenho) *FakeEmpenhoRepository {
+	byID := make(map[uuid.UUID]*models.Empenho, len(empenhos))
+	for _, e := range empenhos {
+		byID[e.ID] = e
+	}
+	return &FakeEmpenhoRepository{Empenhos: byID}
+}
+
+func (f *FakeEmpenhoRepository) Create(ctx context.Context, empenho *models.Empenho) error {
+	if empenho.ID == uuid.Nil {
+		empenho.ID = uuid.New()
+	}
+	f.Empenhos[empenho.ID] = empenho
+	return nil
+}
+
+func (f *FakeEmpenhoRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.Empenho, error) {
+	if e, ok := f.Empenhos[id]; ok {
+		return e, nil
+	}
+	return nil, repository.ErrEmpenhoNotFound
+}
+
+func (f *FakeEmpenhoRepository) ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.Empenho, error) {
+	var out []models.Empenho
+	for _, e := range f.Empenhos {
+		if e.ContratoID == contratoID {
+			out = append(out, *e)
+		}
+	}
+	return out, nil
+}
+
+var _ repository.EmpenhoRepository = (*FakeEmpenhoRepository)(nil)
+
+type FakeMovimentacaoEmpenhoRepository struct {
+	Movimentacoes []models.MovimentacaoEmpenho
+}
+
+func (f *FakeMovimentacaoEmpenhoRepository) Create(ctx context.Context, movimentacao *models.MovimentacaoEmpenho) error {
+	if movimentacao.ID == uuid.Nil {
+		movimentacao.ID = uuid.New()
+	}
+	f.Movimentacoes = append(f.Movimentacoes, *movimentacao)
+	return nil
+}
+
+func (f *FakeMovimentacaoEmpenhoRepository) ListByEmpenho(ctx context.Context, empenhoID uuid.UUID) ([]models.MovimentacaoEmpenho, error) {
+	var out []models.MovimentacaoEmpenho
+	for _, m := range f.Movimentacoes {
+		if m.EmpenhoID == empenhoID {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+var _ repository.MovimentacaoEmpenhoRepository = (*FakeMovimentacaoEmpenhoRepository)(nil)
+
+// --- OcorrenciaRepository ---
+
+type FakeOcorrenciaRepository struct {
+	Ocorrencias map[uuid.UUID]*models.Ocorrencia
+}
+
+func NewFakeOcorrenciaRepository(ocorrencias ...*models.Ocorrencia) *FakeOcorrenciaRepository {
+	byID := make(map[uuid.UUID]*models.Ocorrencia, len(ocorrencias))
+	for _, o := range ocorrencias {
+		byID[o.ID] = o
+	}
+	return &FakeOcorrenciaRepository{Ocorrencias: byID}
+}
+
+func (f *FakeOcorrenciaRepository) Create(ctx context.Context, ocorrencia *models.Ocorrencia) error {
+	if ocorrencia.ID == uuid.Nil {
+		ocorrencia.ID = uuid.New()
+	}
+	f.Ocorrencias[ocorrencia.ID] = ocorrencia
+	return nil
+}
+
+func (f *FakeOcorrenciaRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.Ocorrencia, error) {
+	if o, ok := f.Ocorrencias[id]; ok {
+		return o, nil
+	}
+	return nil, repository.ErrOcorrenciaNotFound
+}
+
+func (f *FakeOcorrenciaRepository) Update(ctx context.Context, ocorrencia *models.Ocorrencia) error {
+	f.Ocorrencias[ocorrencia.ID] = ocorrencia
+	return nil
+}
+
+func (f *FakeOcorrenciaRepository) ListByProcesso(ctx context.Context, processoID uuid.UUID) ([]models.Ocorrencia, error) {
+	var out []models.Ocorrencia
+	for _, o := range f.Ocorrencias {
+		if o.ProcessoPagamentoID != nil && *o.ProcessoPagamentoID == processoID {
+			out = append(out, *o)
+		}
+	}
+	return out, nil
+}
+
+func (f *FakeOcorrenciaRepository) ListAbertasPorProcesso(ctx context.Context, processoID uuid.UUID) ([]models.Ocorrencia, error) {
+	var out []models.Ocorrencia
+	for _, o := range f.Ocorrencias {
+		if o.ProcessoPagamentoID != nil && *o.ProcessoPagamentoID == processoID && o.Estado != models.OcorrenciaRegularizada {
+			out = append(out, *o)
+		}
+	}
+	return out, nil
+}
+
+var _ repository.OcorrenciaRepository = (*FakeOcorrenciaRepository)(nil)

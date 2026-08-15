@@ -60,6 +60,15 @@ tags:
       Consolidação por CNPJ de contratos, histórico de notificações de
       descumprimento e Score de Pontualidade (Fase 4 do roadmap de
       módulos).
+  - name: SGF — Fiscalização
+    description: >
+      Adequação estrita à IN SCL Nº 01/2019 e IN SCL Nº 04/2021
+      (Prefeitura de Rondonópolis): designação auditável de
+      fiscal/gestor/fiscal setorial, acompanhamento paralelo/informativo
+      de saldo de empenho e registro/tratativa de ocorrências — ver
+      `.claude/plans/projeto-selene-rippling-kite.md` para a Matriz
+      Normativa completa. Extensão aditiva do Kanban existente, nenhuma
+      rota/campo anterior muda de comportamento.
   - name: Administração
     description: Gestão de contas de usuário — restrito a administradores.
 
@@ -477,12 +486,18 @@ paths:
     get:
       tags: [Processos de Pagamento]
       summary: Busca um processo por ID
+      description: >
+        Além dos campos já existentes de ProcessoPagamento, a resposta
+        inclui a leitura de Camada 2 do SGF-Rondonópolis
+        (estado_fiscalizacao, acao_ou_espera, allowed_actions) — ver
+        ProcessoComFiscalizacao e o plano, seção De/Para. Nenhum campo
+        anterior muda de nome/tipo.
       responses:
         "200":
           description: OK.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProcessoPagamento" }
+              schema: { $ref: "#/components/schemas/ProcessoComFiscalizacao" }
         "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
@@ -588,6 +603,9 @@ paths:
         PDF pronto para impressão/assinatura física. Layout funcional
         próprio do Selene, não o modelo oficial da prefeitura (nenhum
         template real foi fornecido — ver README, seção "Limitações").
+        SGF-Rondonópolis: inclui as seções de Ocorrências e Empenho
+        (acompanhamento paralelo/informativo) quando o processo tiver
+        alguma vinculada — omitidas quando não há dado.
       responses:
         "200":
           description: PDF gerado.
@@ -723,6 +741,235 @@ paths:
         "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/contratos/{id}/designacoes:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    get:
+      tags: [SGF — Fiscalização]
+      summary: Lista o histórico de designações do contrato
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PortariaDesignacao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Designa fiscal/suplente/gestor/fiscal setorial
+      description: >
+        Uma nova designação do mesmo papel revoga automaticamente a
+        anterior (DataRevogacao). Papel=FISCAL também sincroniza
+        Contrato.FiscalID (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DesignarRequest" }
+      responses:
+        "201":
+          description: Designado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortariaDesignacao" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/contratos/{id}/empenhos:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    get:
+      tags: [SGF — Fiscalização]
+      summary: Lista os empenhos do contrato
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Empenho" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Abre um novo empenho (registro paralelo/informativo)
+      description: >
+        Já registra a movimentação INICIAL automaticamente (IN01
+        Art.5º-VIII; IN04 Art.5º-XXII) — ver o comentário em
+        components/schemas/Empenho sobre isto não ser a fonte de verdade
+        orçamentária.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CriarEmpenhoRequest" }
+      responses:
+        "201":
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Empenho" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/empenhos/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [SGF — Fiscalização]
+      summary: Busca um empenho, com o saldo reconstruído do histórico
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmpenhoComSaldo" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/empenhos/{id}/movimentacoes:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Registra um reforço, anulação ou apropriação de fatura
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistrarMovimentacaoRequest" }
+      responses:
+        "201":
+          description: Registrada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MovimentacaoEmpenho" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}/ocorrencias:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    get:
+      tags: [SGF — Fiscalização]
+      summary: Lista as ocorrências do processo
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ocorrencia" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Registra uma nova ocorrência
+      description: >
+        Abre no estado REGISTRADA. ContratoID é resolvido automaticamente
+        a partir do processo. Enquanto não regularizada, bloqueia
+        AVANCAR_ETAPA neste processo (regra de Camada 2, ver o plano).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistrarOcorrenciaRequest" }
+      responses:
+        "201":
+          description: Registrada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ocorrencia" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/ocorrencias/{id}/notificar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Transiciona REGISTRADA → NOTIFICADA
+      description: Comunicação formal ao Gestor (IN04 Art.5º-XVI).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ocorrencia" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/ocorrencias/{id}/tratar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Transiciona NOTIFICADA → EM_TRATAMENTO
+      description: O Gestor já definiu as medidas a tomar (IN04 Art.5º-XVII).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ocorrencia" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/ocorrencias/{id}/regularizar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Transiciona EM_TRATAMENTO → REGULARIZADA
+      description: A partir daqui, esta ocorrência para de bloquear AVANCAR_ETAPA no processo.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ocorrencia" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
 
   /api/v1/fornecedores:
     get:
@@ -1113,8 +1360,31 @@ components:
         EtapaAtualID: { type: integer, minimum: 1, maximum: 6 }
         EtapaAtual: { $ref: "#/components/schemas/KanbanEtapa" }
         Status: { type: string, enum: [Ativo, Concluido] }
+        EmpenhoID: { type: string, format: uuid, nullable: true, description: "SGF-Rondonópolis: liga este processo ao Empenho paralelo/informativo quando a fatura do mês foi apropriada contra ele. Null pra processos que não adotam esse acompanhamento." }
         CreatedAt: { type: string, format: date-time }
         UpdatedAt: { type: string, format: date-time }
+
+    ProcessoComFiscalizacao:
+      description: >
+        Resposta de GET /processos/{id} — todos os campos de
+        ProcessoPagamento mais a leitura de Camada 2 computada pelo SGF
+        (nunca persistida). Ver o plano, seção De/Para.
+      allOf:
+        - $ref: "#/components/schemas/ProcessoPagamento"
+        - type: object
+          properties:
+            estado_fiscalizacao:
+              type: string
+              enum: [A_EXECUTAR_CONFERIR, EM_ANALISE_EXTERNA, DOCUMENTAR_ATESTAR, PENDENCIA_DEVOLVIDO, CONCLUIDO]
+              description: "Rótulo de Camada 2 (regra do SGF, não da norma) derivado da etapa atual — vira PENDENCIA_DEVOLVIDO independente da etapa quando há Ocorrencia aberta vinculada."
+            acao_ou_espera:
+              type: string
+              enum: [ACAO_FISCAL, ESPERA_EXTERNA]
+              description: "Se a etapa atual exige ação ativa do fiscal ou está em tramitação fora do seu controle direto (ex: Contabilidade/Tesouraria)."
+            allowed_actions:
+              type: array
+              items: { type: string, enum: [AVANCAR_ETAPA, CONCLUIR_PAGAMENTO, ANEXAR_DOCUMENTO, REGISTRAR_OCORRENCIA, REGISTRAR_MOVIMENTACAO_EMPENHO] }
+              description: "Vocabulário fechado que o frontend usa pra decidir quais botões mostrar — substitui a checagem client-side de EtapaAtualID/Status que existia antes."
 
     DocumentoAnexo:
       type: object
@@ -1130,3 +1400,114 @@ components:
         EnviadoPor: { $ref: "#/components/schemas/Usuario" }
         DataUpload: { type: string, format: date-time }
         DataValidade: { type: string, format: date, nullable: true, description: "Só preenchida pra tipos com ExigeValidade=true (certidões)." }
+
+    PortariaDesignacao:
+      type: object
+      description: >
+        Histórico auditável de designação de fiscal/suplente/gestor/fiscal
+        setorial por contrato (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10).
+        Imutável — uma nova designação do mesmo papel revoga a anterior
+        (DataRevogacao), nunca sobrescreve.
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        ServidorID: { type: string, format: uuid }
+        Servidor: { $ref: "#/components/schemas/Usuario" }
+        Papel: { type: string, enum: [FISCAL, FISCAL_SUPLENTE, GESTOR, FISCAL_SETORIAL] }
+        NumeroPortaria: { type: string }
+        PublicadoDiorondon: { type: string }
+        DataDesignacao: { type: string, format: date }
+        DataRevogacao: { type: string, format: date, nullable: true, description: "Preenchida quando esta designação é substituída por uma nova do mesmo papel." }
+        CriadoPorID: { type: string, format: uuid }
+        CreatedAt: { type: string, format: date-time }
+
+    DesignarRequest:
+      type: object
+      required: [servidor_id, papel]
+      properties:
+        servidor_id: { type: string, format: uuid }
+        papel: { type: string, enum: [FISCAL, FISCAL_SUPLENTE, GESTOR, FISCAL_SETORIAL] }
+        numero_portaria: { type: string }
+        publicado_diorondon: { type: string }
+        data_designacao: { type: string, example: "2026-01-15", description: 'Opcional. Formato "AAAA-MM-DD" — default é a data atual.' }
+
+    Empenho:
+      type: object
+      description: >
+        Registro PARALELO/informativo de empenho — apoia a obrigação do
+        FISCAL de controlar o saldo (IN01 Art.5º-VIII; IN04 Art.5º-XXII),
+        NÃO é fonte de verdade orçamentária (essa é exclusiva dos sistemas
+        corporativos da prefeitura).
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        NumeroEmpenho: { type: string }
+        DataEmissao: { type: string, format: date }
+        ValorInicial: { type: integer, format: int64, description: "Centavos." }
+        CreatedAt: { type: string, format: date-time }
+
+    EmpenhoComSaldo:
+      description: Resposta de GET /empenhos/{id} — inclui o saldo reconstruído do histórico de movimentações.
+      allOf:
+        - $ref: "#/components/schemas/Empenho"
+        - type: object
+          properties:
+            saldo: { type: integer, format: int64, description: "Centavos. Sempre recalculado a partir de MovimentacaoEmpenho, nunca lido de um campo denormalizado." }
+
+    CriarEmpenhoRequest:
+      type: object
+      required: [numero_empenho, data_emissao, valor_inicial]
+      properties:
+        numero_empenho: { type: string }
+        data_emissao: { type: string, example: "2026-01-15", description: 'Formato "AAAA-MM-DD".' }
+        valor_inicial: { type: integer, format: int64, description: "Centavos, maior que zero." }
+
+    MovimentacaoEmpenho:
+      type: object
+      description: Lançamento imutável no histórico de um Empenho.
+      properties:
+        ID: { type: string, format: uuid }
+        EmpenhoID: { type: string, format: uuid }
+        Tipo: { type: string, enum: [INICIAL, REFORCO, ANULACAO, FATURA_APROPRIADA] }
+        Valor: { type: integer, format: int64, description: "Centavos, sempre positivo — o sinal é implícito pelo Tipo." }
+        ProcessoPagamentoID: { type: string, format: uuid, nullable: true, description: "Só preenchido quando Tipo=FATURA_APROPRIADA." }
+        Observacao: { type: string }
+        RegistradoPorID: { type: string, format: uuid }
+        CreatedAt: { type: string, format: date-time }
+
+    RegistrarMovimentacaoRequest:
+      type: object
+      required: [tipo, valor]
+      properties:
+        tipo: { type: string, enum: [REFORCO, ANULACAO, FATURA_APROPRIADA], description: "INICIAL não é aceito aqui — é criado automaticamente por POST /contratos/{id}/empenhos." }
+        valor: { type: integer, format: int64, description: "Centavos, maior que zero." }
+        processo_pagamento_id: { type: string, format: uuid, description: "Opcional — usar quando tipo=FATURA_APROPRIADA." }
+        observacao: { type: string }
+
+    Ocorrencia:
+      type: object
+      description: >
+        Registro formal de ocorrência da execução contratual (IN01
+        Art.3º-III/Art.5º-IV,IX; IN04 Art.3º-VIII/Art.5º-VIII,XVI). Ciclo
+        de vida linear REGISTRADA→NOTIFICADA→EM_TRATAMENTO→REGULARIZADA
+        (simplificação de Camada 2 — ver o plano, seção "Lacunas
+        conhecidas", sobre o ramo de escalonamento da IN04 Art.5º-XVII
+        ainda não modelado).
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        ProcessoPagamentoID: { type: string, format: uuid, nullable: true }
+        Descricao: { type: string }
+        Estado: { type: string, enum: [REGISTRADA, NOTIFICADA, EM_TRATAMENTO, REGULARIZADA] }
+        RegistradoPorID: { type: string, format: uuid }
+        RegistradoPor: { $ref: "#/components/schemas/Usuario" }
+        DataNotificacaoGestor: { type: string, format: date, nullable: true }
+        DataRegularizacao: { type: string, format: date, nullable: true }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+
+    RegistrarOcorrenciaRequest:
+      type: object
+      required: [descricao]
+      properties:
+        descricao: { type: string }

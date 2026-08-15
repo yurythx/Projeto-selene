@@ -49,6 +49,9 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrDocumentoEmitidoNotFound),
 		errors.Is(err, repository.ErrVistoriaNotFound),
 		errors.Is(err, repository.ErrFotoVistoriaNotFound),
+		errors.Is(err, repository.ErrPortariaDesignacaoNotFound),
+		errors.Is(err, repository.ErrEmpenhoNotFound),
+		errors.Is(err, repository.ErrOcorrenciaNotFound),
 		errors.Is(err, service.ErrFornecedorNaoEncontrado):
 		c.JSON(http.StatusNotFound, gin.H{"error": "recurso não encontrado"})
 
@@ -59,7 +62,12 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrContratoEncerrado),
 		errors.Is(err, service.ErrMotivoObrigatorio),
 		errors.Is(err, service.ErrSenhaFraca),
-		errors.Is(err, service.ErrContaSemSenhaLocal):
+		errors.Is(err, service.ErrContaSemSenhaLocal),
+		errors.Is(err, service.ErrValorInvalido),
+		errors.Is(err, service.ErrTipoMovimentacaoInvalido),
+		errors.Is(err, service.ErrTransicaoOcorrenciaInvalida),
+		errors.Is(err, service.ErrOcorrenciaAbertaBloqueiaAvanco),
+		errors.Is(err, service.ErrDataInvalida):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 	case errors.Is(err, service.ErrCredenciaisInvalidas):

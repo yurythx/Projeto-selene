@@ -98,6 +98,13 @@ func main() {
 	vistoriaRepo := repository.NewVistoriaRepository(db)
 	fotoVistoriaRepo := repository.NewFotoVistoriaRepository(db)
 
+	// SGF-Rondonópolis (Fase 2 do plano) — ver
+	// .claude/plans/projeto-selene-rippling-kite.md.
+	portariaDesignacaoRepo := repository.NewPortariaDesignacaoRepository(db)
+	empenhoRepo := repository.NewEmpenhoRepository(db)
+	movimentacaoEmpenhoRepo := repository.NewMovimentacaoEmpenhoRepository(db)
+	ocorrenciaRepo := repository.NewOcorrenciaRepository(db)
+
 	// Chave RSA do login local (usuário/senha) — gerada uma vez por
 	// processo, ver a "LIMITAÇÃO CONHECIDA" documentada em
 	// internal/localauth.KeyPair sobre sessões locais não sobreviverem a
@@ -122,7 +129,7 @@ func main() {
 	})
 	kanbanService := service.NewKanbanService(db, processoRepo, contratoRepo, docRepo, notifier)
 
-	relatorioService, err := service.NewRelatorioService(processoRepo, docRepo)
+	relatorioService, err := service.NewRelatorioService(processoRepo, docRepo, ocorrenciaRepo, empenhoRepo, movimentacaoEmpenhoRepo)
 	if err != nil {
 		fatal("falha ao inicializar serviço de relatório", err)
 	}
@@ -134,6 +141,12 @@ func main() {
 	vistoriaService := service.NewVistoriaService(vistoriaRepo, fotoVistoriaRepo, processoRepo, cfg.StorageDir)
 
 	fornecedorService := service.NewFornecedorService(contratoRepo, processoRepo, logRepo, docEmitidoRepo)
+
+	// SGF-Rondonópolis (Fase 2 do plano).
+	designacaoService := service.NewDesignacaoService(portariaDesignacaoRepo, contratoRepo)
+	empenhoService := service.NewEmpenhoService(empenhoRepo, movimentacaoEmpenhoRepo, contratoRepo)
+	ocorrenciaService := service.NewOcorrenciaService(ocorrenciaRepo, processoRepo)
+	fiscalizacaoService := service.NewFiscalizacaoService(docRepo, ocorrenciaRepo)
 
 	// --- Middleware de autenticação ---
 	// O contexto de fundo é usado apenas para o fetch inicial do JWKS na
@@ -167,7 +180,7 @@ func main() {
 	// --- Handlers ---
 	healthHandler := handler.NewHealthHandler(db)
 	contratoHandler := handler.NewContratoHandler(contratoService)
-	processoHandler := handler.NewProcessoHandler(kanbanService)
+	processoHandler := handler.NewProcessoHandler(kanbanService, fiscalizacaoService)
 	documentoHandler := handler.NewDocumentoHandler(documentoService)
 	relatorioHandler := handler.NewRelatorioHandler(relatorioService)
 	userHandler := handler.NewUserHandler(userService, authService)
@@ -177,6 +190,9 @@ func main() {
 	geradorDocumentosHandler := handler.NewGeradorDocumentosHandler(geradorDocumentosService)
 	vistoriaHandler := handler.NewVistoriaHandler(vistoriaService)
 	fornecedorHandler := handler.NewFornecedorHandler(fornecedorService)
+	designacaoHandler := handler.NewDesignacaoHandler(designacaoService)
+	empenhoHandler := handler.NewEmpenhoHandler(empenhoService)
+	ocorrenciaHandler := handler.NewOcorrenciaHandler(ocorrenciaService)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -265,6 +281,12 @@ func main() {
 		api.GET("/fornecedores", fornecedorHandler.Listar)
 		api.GET("/fornecedores/:cnpj", fornecedorHandler.Buscar)
 
+		// SGF-Rondonópolis (Fase 2 do plano): leitura.
+		api.GET("/contratos/:id/designacoes", designacaoHandler.Listar)
+		api.GET("/contratos/:id/empenhos", empenhoHandler.Listar)
+		api.GET("/empenhos/:id", empenhoHandler.Buscar)
+		api.GET("/processos/:id/ocorrencias", ocorrenciaHandler.Listar)
+
 		// Escrita/movimentação do Kanban: restrita a fiscais habilitados
 		// e sujeita a rate limit (por usuário autenticado).
 		fiscal := api.Group("")
@@ -287,6 +309,15 @@ func main() {
 			// fotográfico e geolocalização.
 			fiscal.POST("/processos/:id/vistorias", vistoriaHandler.Registrar)
 			fiscal.POST("/vistorias/:id/fotos", vistoriaHandler.AnexarFoto)
+
+			// SGF-Rondonópolis (Fase 2 do plano): escrita.
+			fiscal.POST("/contratos/:id/designacoes", designacaoHandler.Designar)
+			fiscal.POST("/contratos/:id/empenhos", empenhoHandler.Criar)
+			fiscal.POST("/empenhos/:id/movimentacoes", empenhoHandler.RegistrarMovimentacao)
+			fiscal.POST("/processos/:id/ocorrencias", ocorrenciaHandler.Registrar)
+			fiscal.POST("/ocorrencias/:id/notificar", ocorrenciaHandler.Notificar)
+			fiscal.POST("/ocorrencias/:id/tratar", ocorrenciaHandler.IniciarTratamento)
+			fiscal.POST("/ocorrencias/:id/regularizar", ocorrenciaHandler.Regularizar)
 		}
 
 		// Administração de contas: restrita a administradores.
