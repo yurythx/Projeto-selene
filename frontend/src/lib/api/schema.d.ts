@@ -2274,6 +2274,8 @@ export interface components {
              * @description Alimenta o Radar de Alertas — null se não cadastrada.
              */
             DataVigenciaFim?: string | null;
+            /** @description Camada 2 (regra do SGF): marca contrato de mão de obra terceirizada, sujeito à IN SCL Nº 04/2021 — acrescenta os documentos do Art.9º-XXXII ao checklist da Etapa 5. */
+            ExigeFiscalizacaoTerceirizacao?: boolean;
             /** Format: date-time */
             CreatedAt?: string;
             /** Format: date-time */
@@ -2304,6 +2306,8 @@ export interface components {
              * @description Opcional. Formato "AAAA-MM-DD" — alimenta o Radar de Alertas.
              */
             data_vigencia_fim?: string;
+            /** @description Opcional, default false. Ver Contrato.ExigeFiscalizacaoTerceirizacao. */
+            exige_fiscalizacao_terceirizacao?: boolean;
         };
         AtualizarContratoRequest: {
             portaria_nomeacao?: string;
@@ -2316,6 +2320,8 @@ export interface components {
              * @description Formato "AAAA-MM-DD". Enviar string vazia limpa a vigência cadastrada.
              */
             data_vigencia_fim?: string;
+            /** @description Ver Contrato.ExigeFiscalizacaoTerceirizacao. */
+            exige_fiscalizacao_terceirizacao?: boolean;
         };
         ProcessoPagamento: {
             /** Format: uuid */

@@ -56,9 +56,16 @@ export default async function ContratoDetalhePage({
             {contrato.TipoObjeto ? TIPO_OBJETO_LABEL[contrato.TipoObjeto] : "—"}
           </p>
         </div>
-        <Badge variant={contrato.Ativo ? "default" : "secondary"}>
-          {contrato.Ativo ? "Ativo" : "Encerrado"}
-        </Badge>
+        <div className="flex flex-col items-end gap-1">
+          <Badge variant={contrato.Ativo ? "default" : "secondary"}>
+            {contrato.Ativo ? "Ativo" : "Encerrado"}
+          </Badge>
+          {/* Camada 2: sujeito à IN SCL Nº 04/2021 (mão de obra
+              terceirizada) — ver Contrato.ExigeFiscalizacaoTerceirizacao. */}
+          {contrato.ExigeFiscalizacaoTerceirizacao && (
+            <Badge variant="outline">Mão de obra terceirizada</Badge>
+          )}
+        </div>
       </div>
 
       <Card>

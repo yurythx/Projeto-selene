@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 // fiscal_id NÃO é um campo do formulário — o Route Handler
 // (app/api/contratos/route.ts) preenche a partir do usuário logado. Ver o
@@ -41,6 +42,10 @@ const schema = z.object({
   // Opcional — alimenta o Radar de Alertas (Fase 1 do roadmap). Sem essa
   // data, o contrato simplesmente não aparece no radar de vigência.
   data_vigencia_fim: z.string().optional(),
+  // Camada 2 (regra do SGF, não da norma): marca contrato de mão de obra
+  // terceirizada, sujeito à IN SCL Nº 04/2021 — acrescenta os documentos
+  // do Art.9º-XXXII ao checklist da Etapa 5. Default false.
+  exige_fiscalizacao_terceirizacao: z.boolean().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -63,7 +68,17 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
       portaria_nomeacao: "",
       tipo_objeto: "SERVICO",
       data_vigencia_fim: "",
+      exige_fiscalizacao_terceirizacao: false,
     },
+  });
+
+  // useWatch (não form.watch()) — o React Compiler não consegue memoizar
+  // com segurança a função retornada por watch(), o que gera um warning de
+  // lint (react-hooks/incompatible-library); useWatch é a alternativa
+  // recomendada pelo react-hook-form pra esse mesmo caso de uso.
+  const exigeFiscalizacaoTerceirizacao = useWatch({
+    control: form.control,
+    name: "exige_fiscalizacao_terceirizacao",
   });
 
   const mutation = useMutation({
@@ -192,6 +207,25 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
               <Label htmlFor="portaria_nomeacao">Portaria de nomeação</Label>
               <Input id="portaria_nomeacao" {...form.register("portaria_nomeacao")} />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="exige_fiscalizacao_terceirizacao">
+                Mão de obra terceirizada
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                Sujeito à IN SCL Nº 04/2021 — acrescenta os documentos
+                trabalhistas mensais (Art.9º-XXXII) ao checklist da Etapa 5.
+              </p>
+            </div>
+            <Switch
+              id="exige_fiscalizacao_terceirizacao"
+              checked={exigeFiscalizacaoTerceirizacao ?? false}
+              onCheckedChange={(checked) =>
+                form.setValue("exige_fiscalizacao_terceirizacao", checked)
+              }
+            />
           </div>
 
           <p className="text-muted-foreground text-sm">

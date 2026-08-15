@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,10 @@ const schema = z.object({
   // backend: ponteiro-pra-string distingue "não enviado" de "enviado
   // vazio", e este form sempre envia o valor atual do input).
   data_vigencia_fim: z.string().optional(),
+  // Editável (diferente de tipo_objeto/numero_contrato/fiscal_id): um
+  // aditivo/repactuação pode mudar a natureza da mão de obra do contrato,
+  // ver o comentário em AtualizarContratoInput no backend.
+  exige_fiscalizacao_terceirizacao: z.boolean().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -53,7 +58,17 @@ export function EditarContratoDialog({ contrato }: { contrato: Contrato }) {
       contratada_cnpj: contrato.ContratadaCNPJ ?? "",
       contratada_email: contrato.ContratadaEmail ?? "",
       data_vigencia_fim: contrato.DataVigenciaFim ?? "",
+      exige_fiscalizacao_terceirizacao: contrato.ExigeFiscalizacaoTerceirizacao ?? false,
     },
+  });
+
+  // useWatch (não form.watch()) — o React Compiler não consegue memoizar
+  // com segurança a função retornada por watch(), o que gera um warning de
+  // lint (react-hooks/incompatible-library); useWatch é a alternativa
+  // recomendada pelo react-hook-form pra esse mesmo caso de uso.
+  const exigeFiscalizacaoTerceirizacao = useWatch({
+    control: form.control,
+    name: "exige_fiscalizacao_terceirizacao",
   });
 
   const mutation = useMutation({
@@ -131,6 +146,25 @@ export function EditarContratoDialog({ contrato }: { contrato: Contrato }) {
             <p className="text-muted-foreground text-xs">
               Alimenta o Radar de Alertas de prazos legais. Deixe em branco pra limpar.
             </p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="exige_fiscalizacao_terceirizacao">
+                Mão de obra terceirizada
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                Sujeito à IN SCL Nº 04/2021 — acrescenta os documentos
+                trabalhistas mensais (Art.9º-XXXII) ao checklist da Etapa 5.
+              </p>
+            </div>
+            <Switch
+              id="exige_fiscalizacao_terceirizacao"
+              checked={exigeFiscalizacaoTerceirizacao ?? false}
+              onCheckedChange={(checked) =>
+                form.setValue("exige_fiscalizacao_terceirizacao", checked)
+              }
+            />
           </div>
 
           <DialogFooter>

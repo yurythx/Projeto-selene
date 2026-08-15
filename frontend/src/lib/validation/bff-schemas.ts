@@ -36,6 +36,9 @@ export const novoContratoSchema = z.object({
   contratada_email: z.string().trim().email("e-mail inválido").optional().or(z.literal("")),
   tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
   data_vigencia_fim: dataOpcionalSchema,
+  // Camada 2 (regra do SGF, não da norma): marca contrato de mão de obra
+  // terceirizada, sujeito à IN SCL Nº 04/2021. Opcional, default false.
+  exige_fiscalizacao_terceirizacao: z.boolean().optional(),
 });
 
 export const atualizarContratoSchema = z.object({
@@ -44,6 +47,7 @@ export const atualizarContratoSchema = z.object({
   contratada_cnpj: z.string().trim().min(1, "obrigatório").max(20).optional(),
   contratada_email: z.string().trim().email("e-mail inválido").optional().or(z.literal("")),
   data_vigencia_fim: dataOpcionalSchema,
+  exige_fiscalizacao_terceirizacao: z.boolean().optional(),
 });
 
 export const novoProcessoSchema = z.object({
