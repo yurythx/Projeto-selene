@@ -1,6 +1,6 @@
 # 🌙 Projeto Selene — Backend
 
-API em Go (Gin + GORM + Postgres), autenticação via Keycloak (OIDC/JWT), Clean Architecture. Ver [../README.md](../README.md) para a visão geral do monorepo (backend + frontend).
+API em Go (Gin + GORM + Postgres), autenticação via Keycloak (OIDC/JWT) **e** login local (usuário/senha), Clean Architecture. Ver [../README.md](../README.md) para a visão geral do monorepo (backend + frontend) e a lista de módulos.
 
 ---
 
@@ -34,6 +34,28 @@ Fluxo de dependência: `handler → service → repository → gorm/postgres`. C
 6. **Contabilidade (Liquidação e Pagamento)** — etapa final; `POST /processos/:id/concluir` marca como pago.
 
 Toda transição é atômica com a gravação em `kanban_logs` (mesma transação SQL) — ver `internal/service/kanban_service.go`.
+
+### Módulos além do núcleo
+
+Cada um tem seu próprio trio repository/service/handler, seguindo exatamente o padrão descrito acima — nenhum altera o funil do Kanban em si, todos são extensões aditivas:
+
+- **Radar de Alertas** (`radar_service.go`) — calcula, na hora da requisição (sem job/cron), alertas de vigência de contrato, certidão vencida/vencendo e processo parado há muito tempo na mesma etapa.
+- **Gerador de Documentos Legais** (`gerador_documentos_service.go`) — Notificação de Descumprimento, Atesto (com QR code de verificação pública via `GET /verificar/:codigo`, rota sem autenticação de propósito) e Minuta de Aditivo, registrados em `documentos_emitidos`.
+- **Vistorias de Campo** (`vistoria_service.go`) — registro fotográfico com geolocalização opcional, dedupe de foto por SHA-256 (mesma lógica de `DocumentoService.Upload`), Relatório de Campo em PDF.
+- **Dossiê do Fornecedor** (`fornecedor_service.go`) — só leitura: agrega `Contrato`/`ProcessoPagamento`/`KanbanLog`/`DocumentoEmitido` por CNPJ, sem tabela própria.
+- **Login local** (`auth_service.go`, `internal/localauth/`) — autenticação usuário/senha como alternativa ao Keycloak. Ver a seção [Autenticação](#autenticação) abaixo.
+- **SGF-Rondonópolis** (`designacao_service.go`, `empenho_service.go`, `ocorrencia_service.go`, `fiscalizacao_service.go`) — adequação estrita à IN SCL Nº 01/2019 e IN SCL Nº 04/2021. Ver a seção [SGF-Rondonópolis](#sgf-rondonópolis-in-scl-012019-e-042021) abaixo.
+
+---
+
+## Autenticação
+
+Dois emissores de token, tratados de forma idêntica pelo resto da API a partir daí (`middleware.NewAuthMiddleware` tenta Keycloak primeiro, cai para local se falhar — ver `internal/middleware/auth.go`):
+
+- **Keycloak** (OIDC/JWKS) — o caminho institucional. Usuário é provisionado just-in-time (`UserService.FindOrCreateByKeycloakID`) no primeiro login.
+- **Login local** (`POST /auth/login`, público, rate-limitado por IP) — usuário/senha com bcrypt, token RS256 assinado por uma chave RSA efêmera gerada em memória a cada boot do processo (`internal/localauth`). **Limitação conhecida**: sessões locais não sobrevivem a um restart do backend (Keycloak não é afetado — chaves diferentes, infra separada). Contas locais são criadas só por um admin (`POST /admin/users/local`) — sem autocadastro público — e nascem com `must_change_password=true`, forçando a troca no primeiro login (aplicado no frontend, ver `frontend/README.md`).
+
+`models.User.KeycloakID` é `*string` (nullable) e `PasswordHash` também — exatamente um dos dois é preenchido por usuário, nunca os dois.
 
 ---
 
@@ -143,27 +165,61 @@ Todas sob `/api/v1`, exigem `Authorization: Bearer <JWT>` exceto `/health` e `/m
 |---|---|---|
 | `/health` | GET | pública |
 | `/metrics` | GET | pública (restrinja por rede em produção) |
+| `/verificar/:codigo` | GET | pública (autenticidade de documento emitido, QR code) |
+| `/auth/login` | POST | pública (rate-limitada por IP) |
 | `/me` | GET | autenticado |
+| `/auth/trocar-senha` | POST | autenticado |
 | `/kanban/etapas`, `/kanban/tipos-documento` | GET | autenticado |
+| `/radar` | GET | autenticado |
 | `/contratos`, `/contratos/:id` | GET | autenticado |
 | `/contratos` | POST | fiscal |
 | `/contratos/:id` | PATCH | fiscal |
 | `/contratos/:id/encerrar` | POST | fiscal |
-| `/processos`, `/processos/:id` | GET | autenticado |
+| `/contratos/:id/notificacao`, `/contratos/:id/minuta-aditivo` | POST | fiscal (retornam PDF) |
+| `/processos`, `/processos/:id` | GET | autenticado (`:id` inclui a leitura SGF decorada — ver abaixo) |
 | `/processos` | POST | fiscal |
-| `/processos/:id/avancar` | POST | fiscal (valida checklist) |
+| `/processos/:id/avancar` | POST | fiscal (valida checklist **e** ocorrência aberta) |
 | `/processos/:id/concluir` | POST | fiscal |
 | `/processos/:id/documentos` | GET | autenticado |
 | `/processos/:id/documentos` | POST (multipart) | fiscal |
 | `/processos/:id/relatorio` | GET | autenticado (retorna PDF) |
+| `/processos/:id/atesto` | POST | fiscal (retorna PDF) |
+| `/processos/:id/vistorias` | GET | autenticado |
+| `/processos/:id/vistorias` | POST | fiscal |
+| `/vistorias/:id/fotos` | POST (multipart) | fiscal |
+| `/vistorias/:id/relatorio` | GET | autenticado (retorna PDF) |
+| `/fornecedores`, `/fornecedores/:cnpj` | GET | autenticado |
+| `/contratos/:id/designacoes` | GET | autenticado |
+| `/contratos/:id/designacoes` | POST | fiscal |
+| `/contratos/:id/empenhos` | GET | autenticado |
+| `/contratos/:id/empenhos` | POST | fiscal |
+| `/empenhos/:id` | GET | autenticado (inclui saldo reconstruído) |
+| `/empenhos/:id/movimentacoes` | POST | fiscal |
+| `/processos/:id/ocorrencias` | GET | autenticado |
+| `/processos/:id/ocorrencias` | POST | fiscal |
+| `/ocorrencias/:id/notificar`, `/tratar`, `/regularizar` | POST | fiscal |
 | `/admin/users`, `/admin/users/:id` | GET | admin |
 | `/admin/users/:id` | PATCH | admin |
+| `/admin/users/local` | POST | admin |
 
 Rotas de escrita (grupo "fiscal") têm rate limit por usuário autenticado (`RATE_LIMIT_RPS`/`RATE_LIMIT_BURST`).
 
 `IsFiscal`/`IsAdmin` são flags na tabela `users`. **Não há bootstrap automático de admin** — o primeiro precisa ser promovido manualmente: `UPDATE users SET is_admin = true WHERE email = '...'`.
 
 Um contrato `Encerrar`ado (`Ativo=false`) não aceita novos `POST /processos` — o histórico continua consultável.
+
+---
+
+## SGF-Rondonópolis (IN SCL 01/2019 e 04/2021)
+
+Adequação estrita a duas Instruções Normativas da Prefeitura de Rondonópolis — Matriz Normativa completa (artigo por artigo) em `.claude/plans/projeto-selene-rippling-kite.md`. Extensão 100% aditiva: nenhuma tabela/coluna/rota anterior mudou de nome ou comportamento.
+
+- **`PortariaDesignacao`** (`internal/service/designacao_service.go`) — histórico auditável de designação de fiscal/suplente/gestor/fiscal setorial por contrato (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10). `Contrato.FiscalID` continua existindo como cache de leitura rápida do fiscal ativo; esta tabela é a fonte de verdade.
+- **`Empenho` / `MovimentacaoEmpenho`** (`empenho_service.go`) — acompanhamento **paralelo/informativo** de saldo (IN01 Art.5º-VIII; IN04 Art.5º-XXII). **Não é a fonte de verdade orçamentária** — essa continua sendo exclusiva dos sistemas corporativos da prefeitura (mesma decisão já documentada para `Contrato`). Saldo sempre reconstruído do histórico de movimentações, nunca denormalizado.
+- **`Ocorrencia`** (`ocorrencia_service.go`) — registro/tratativa de ocorrências (IN01 Art.3º-III/Art.5º-IV,IX; IN04 Art.3º-VIII/Art.5º-VIII,XVI), ciclo linear `REGISTRADA → NOTIFICADA → EM_TRATAMENTO → REGULARIZADA`. Uma ocorrência não regularizada **bloqueia de verdade** `POST /processos/:id/avancar` (`FiscalizacaoService.VerificarAvancoPermitido`, chamado pelo handler antes de `KanbanService.AvancarEtapa`) — regra de Camada 2 do SGF, não da norma, confirmada com o time do projeto.
+- **`FiscalizacaoService`** (`fiscalizacao_service.go`) — computa, só na leitura de `GET /processos/:id` (nunca persiste), três campos extras sobre o `ProcessoPagamento` de sempre: `estado_fiscalizacao` (rótulo de Camada 2 derivado da etapa Kanban), `acao_ou_espera` (`ACAO_FISCAL`/`ESPERA_EXTERNA`) e `allowed_actions` (vocabulário fechado que o frontend usa pra decidir quais botões mostrar).
+
+**Lacunas conhecidas, deixadas de propósito para uma fase futura** (ver o plano): o ramo de escalonamento da IN04 Art.5º-XVII (`ESCALADA`) não está modelado; os papéis "Unidade Administrativa de Fiscalização" e "Coordenador de Fiscal" não têm representação no domínio; o checklist específico de mão de obra terceirizada (Anexos II/III da IN04) ainda não foi incorporado ao `checklist.go`.
 
 ---
 
@@ -198,4 +254,5 @@ Um contrato `Encerrar`ado (`Ativo=false`) não aceita novos `POST /processos` �
 - **Relatório de Pagamento**: gera um PDF funcional com todas as tags do domínio preenchidas, em layout simples — não é o modelo oficial da prefeitura (nenhum template real foi fornecido). Trocar é uma mudança isolada em `internal/service/relatorio_service.go`.
 - **Rate limiting em memória**: o limite por usuário é aplicado por instância do processo. Com múltiplas réplicas atrás de um load balancer, cada réplica tem seu próprio contador — o limite efetivo por usuário escala com o número de réplicas. Um backend compartilhado (Redis) resolveria isso, mas não foi adicionado antes de haver um deploy multi-réplica de verdade.
 - **`Contrato.Ativo` e `gorm:"default:true"`**: o GORM omite essa coluna do `INSERT` quando o valor Go é `false` (zero-value), deixando o Postgres aplicar o `DEFAULT true` — `Create` com `Ativo: false` explícito NÃO funciona como se espera. `ContratoService.Criar` sempre define `Ativo: true` explicitamente; para encerrar, use `Update` (via `ContratoService.Encerrar`), que não tem essa omissão. Documentado no próprio campo em `internal/models/contrato.go`.
-- **Selene não controla saldo orçamentário** — isso é responsabilidade dos sistemas corporativos da prefeitura (Agile); o sistema foca 100% em compliance documental.
+- **Selene não controla saldo orçamentário** — isso é responsabilidade dos sistemas corporativos da prefeitura (Agile); o sistema foca 100% em compliance documental. O `Empenho`/`MovimentacaoEmpenho` do SGF-Rondonópolis (ver seção acima) não muda essa decisão: é um acompanhamento paralelo/informativo alimentado manualmente pelo fiscal, nunca a fonte de verdade — em caso de divergência, o sistema corporativo prevalece.
+- **Login local — sessão não sobrevive a restart do backend**: a chave RSA que assina os tokens locais é gerada em memória a cada boot (`internal/localauth`), de propósito (evita gerenciar segredo persistente pra uma funcionalidade secundária); sessões via Keycloak não são afetadas.
