@@ -2,6 +2,7 @@ import { signIn } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { CredentialsLoginForm } from "@/components/login/credentials-login-form";
+import { sanitizeCallbackUrl } from "@/lib/safe-redirect";
 
 export default async function LoginPage({
   searchParams,
@@ -9,7 +10,17 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   const { callbackUrl } = await searchParams;
-  const destino = callbackUrl ?? "/";
+  // sanitizeCallbackUrl: callbackUrl vem de query param (controlado por
+  // quem monta o link) — sem isso, um link como
+  // "/login?callbackUrl=https://site-falso.example.com" redirecionaria a
+  // vítima, LOGO DEPOIS de um login de verdade, pra fora do Selene (Open
+  // Redirect / CWE-601, achado em auditoria de segurança). O botão
+  // Keycloak abaixo já teria alguma proteção interna do Auth.js
+  // (signIn/redirectTo valida same-origin por padrão), mas
+  // CredentialsLoginForm faz router.push(callbackUrl) manualmente no
+  // client — sem passar por essa validação — então o destino já sai
+  // sanitizado daqui, uma única vez, para os dois caminhos.
+  const destino = sanitizeCallbackUrl(callbackUrl);
 
   return (
     <div className="flex min-h-svh items-center justify-center px-4">
