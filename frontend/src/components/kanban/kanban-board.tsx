@@ -16,6 +16,12 @@ import { RadarNivelBadge } from "@/components/radar/radar-badge";
 import { ProcessoDialog } from "./processo-dialog";
 import { NovoProcessoDialog } from "./novo-processo-dialog";
 
+/**
+ * O quadro `/kanban`: 6 colunas fixas (uma por KanbanEtapa), cards
+ * clicáveis abrindo o ProcessoDialog (drawer). Cada card mostra o badge
+ * de nível de alerta mais crítico do Radar correlacionado a ele (ver
+ * `lib/radar.ts`), quando houver.
+ */
 export function KanbanBoard({
   etapas,
   colunasIniciais,

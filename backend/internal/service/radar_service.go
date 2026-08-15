@@ -206,6 +206,9 @@ func (s *RadarService) Listar(ctx context.Context) ([]ItemRadar, error) {
 	return itens, nil
 }
 
+// inicioDoDia zera a hora/minuto/segundo de t (UTC) — usado por diasAte
+// pra contar em dias inteiros, não frações (evita "faltam 4.5 dias" por
+// causa de horário de execução da requisição).
 func inicioDoDia(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
@@ -216,6 +219,10 @@ func diasAte(de, para time.Time) int {
 	return int(inicioDoDia(para).Sub(inicioDoDia(de)).Hours() / 24)
 }
 
+// nivelVigencia classifica o alerta de fim de vigência de contrato pelos
+// limiares configurados (limiarVigenciaCriticoDias/AtencaoDias) — o bool
+// de retorno é false quando ainda falta tempo demais pra gerar alerta
+// (nenhum dos dois limiares foi cruzado).
 func nivelVigencia(diasRestantes int) (NivelAlerta, bool) {
 	switch {
 	case diasRestantes <= limiarVigenciaCriticoDias:
@@ -227,6 +234,9 @@ func nivelVigencia(diasRestantes int) (NivelAlerta, bool) {
 	}
 }
 
+// nivelCertidao classifica o alerta de certidão vencida/vencendo — mesmo
+// espírito de nivelVigencia, mas certidão já vencida (diasRestantes < 0)
+// é sempre CRÍTICO, não passa pelo limiar de atenção.
 func nivelCertidao(diasRestantes int) (NivelAlerta, bool) {
 	switch {
 	case diasRestantes < 0:
@@ -238,6 +248,8 @@ func nivelCertidao(diasRestantes int) (NivelAlerta, bool) {
 	}
 }
 
+// mensagemVigencia monta o texto do alerta de vigência — fraseado
+// diferente conforme o prazo já passou ou não (diasRestantes negativo).
 func mensagemVigencia(diasRestantes int) string {
 	if diasRestantes < 0 {
 		return fmt.Sprintf("Vigência do contrato venceu há %d dias", -diasRestantes)
@@ -245,6 +257,9 @@ func mensagemVigencia(diasRestantes int) string {
 	return fmt.Sprintf("Faltam %d dias para o fim da vigência do contrato", diasRestantes)
 }
 
+// mensagemCertidao monta o texto do alerta de certidão — mesmo espírito
+// de mensagemVigencia, fraseado mais curto (a mensagem completa é montada
+// por quem chama, com o nome da certidão na frente).
 func mensagemCertidao(diasRestantes int) string {
 	if diasRestantes < 0 {
 		return fmt.Sprintf("vencida há %d dias", -diasRestantes)

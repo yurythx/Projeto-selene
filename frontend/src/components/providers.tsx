@@ -6,6 +6,8 @@ import type { Session } from "next-auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 
+// Providers agrupa os client-side providers que envolvem toda a árvore
+// (ver app/layout.tsx): sessão do Auth.js e cache do TanStack Query.
 export function Providers({
   children,
   session,

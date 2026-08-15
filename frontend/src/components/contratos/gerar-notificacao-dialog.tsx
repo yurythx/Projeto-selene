@@ -35,6 +35,9 @@ const MOTIVOS_COMUNS = [
   "OUTRO",
 ];
 
+// Dialog do Gerador de Documentos Legais — gera a Notificação de
+// Descumprimento (PDF) do contrato, com motivo escolhido de uma lista
+// (ou texto livre em "OUTRO").
 export function GerarNotificacaoDialog({ contratoId }: { contratoId: string }) {
   const [open, setOpen] = useState(false);
   const [motivoSelecionado, setMotivoSelecionado] = useState("");

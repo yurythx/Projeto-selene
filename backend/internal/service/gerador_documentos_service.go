@@ -94,6 +94,9 @@ func novoPDF(titulo string) (*fpdf.Fpdf, func(string) string) {
 	return pdf, tr
 }
 
+// campoPDF desenha uma linha rótulo/valor em duas células lado a lado
+// (rótulo em negrito, largura fixa de 50mm; valor no restante da
+// largura) — o mesmo par visual repetido em todos os PDFs deste pacote.
 func campoPDF(pdf *fpdf.Fpdf, tr func(string) string, rotulo, valor string) {
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.CellFormat(50, 8, tr(rotulo), "1", 0, "L", false, 0, "")
@@ -348,6 +351,9 @@ func (s *GeradorDocumentosService) conteudoQR(codigo string) string {
 	return fmt.Sprintf("%s/verificar/%s", s.publicURL, codigo)
 }
 
+// rotuloTipoAditivo traduz o enum de tipo_aditivo (VALOR/PRAZO/
+// VALOR_E_PRAZO, ver MinutaAditivoRequest) pro texto exibido na Minuta —
+// tipo desconhecido retorna o próprio valor cru, nunca quebra a geração.
 func rotuloTipoAditivo(tipo string) string {
 	switch tipo {
 	case "VALOR":
@@ -361,6 +367,8 @@ func rotuloTipoAditivo(tipo string) string {
 	}
 }
 
+// renderizarPDF serializa o documento fpdf montado em bytes — último
+// passo comum de todo gerador deste pacote (Notificação, Atesto, Minuta).
 func renderizarPDF(pdf *fpdf.Fpdf) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

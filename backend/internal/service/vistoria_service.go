@@ -237,6 +237,9 @@ func (s *VistoriaService) GerarRelatorioCampo(ctx context.Context, vistoriaID uu
 	return renderizarPDF(pdf)
 }
 
+// formatarCoordenadas exibe lat/lng com 6 casas decimais (~11cm de
+// precisão) ou "Não capturadas" quando a geolocalização faltou (ver o
+// comentário em models.RegistroVistoria sobre isso ser esperado, não erro).
 func formatarCoordenadas(lat, lng *float64) string {
 	if lat == nil || lng == nil {
 		return "Não capturadas"

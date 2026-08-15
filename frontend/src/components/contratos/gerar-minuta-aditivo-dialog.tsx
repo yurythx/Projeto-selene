@@ -36,6 +36,9 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+// Dialog do Gerador de Documentos Legais — questionário curto
+// (tipo_aditivo + justificativa técnica, valor/prazo novo conforme o
+// tipo) que gera a Minuta de Aditivo (PDF) do contrato.
 export function GerarMinutaAditivoDialog({ contratoId }: { contratoId: string }) {
   const [open, setOpen] = useState(false);
 

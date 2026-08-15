@@ -22,6 +22,12 @@ const NAV_ITEMS = [
   { href: "/fornecedores", label: "Fornecedores" },
 ];
 
+/**
+ * Barra de navegação do topo (grupo de rotas autenticadas `(app)`) — link
+ * "Administração" só aparece pra `session.user.isAdmin`. Avatar mostra as
+ * iniciais do nome (ou e-mail, se o nome não vier na sessão) e um menu
+ * com "Sair".
+ */
 export function Nav() {
   const pathname = usePathname();
   const { data: session } = useSession();

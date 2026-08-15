@@ -181,6 +181,10 @@ func (s *FornecedorService) Buscar(ctx context.Context, cnpj string) (*Fornecedo
 	}, nil
 }
 
+// notificacoesDoFornecedor busca todos os DocumentoEmitido dos contratos
+// informados (todos os contratos do mesmo CNPJ) e filtra só as
+// Notificações de Descumprimento — usado por Buscar pra montar o
+// histórico de penalidades do Dossiê.
 func (s *FornecedorService) notificacoesDoFornecedor(ctx context.Context, contratoIDs []uuid.UUID) ([]models.DocumentoEmitido, error) {
 	documentos, err := s.docEmitidoRepo.ListByContratoIDs(ctx, contratoIDs)
 	if err != nil {

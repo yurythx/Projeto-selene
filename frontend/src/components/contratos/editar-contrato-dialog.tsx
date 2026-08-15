@@ -38,6 +38,9 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+// Dialog de edição dos dados cadastrais do contrato (contratada, e-mail,
+// portaria, vigência) — não inclui campos imutáveis após a criação
+// (número do contrato, fiscal, tipo de objeto).
 export function EditarContratoDialog({ contrato }: { contrato: Contrato }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();

@@ -35,6 +35,11 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+// Dialog de abertura de um novo processo de pagamento (card do Kanban) —
+// escolhe o contrato e o mês de referência; entra sempre na Etapa 1. Sem
+// checagem de "fiscal dono do contrato" (ver o comentário no README do
+// frontend) — qualquer fiscal pode abrir processo pra qualquer contrato
+// ativo.
 export function NovoProcessoDialog({
   open,
   onOpenChange,

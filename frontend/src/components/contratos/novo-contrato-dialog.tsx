@@ -45,6 +45,9 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+// Dialog de cadastro de contrato — fiscalNome é só exibição (o
+// fiscal_id de verdade é sempre resolvido server-side a partir da sessão
+// pela rota BFF, nunca enviado pelo client, ver route.ts).
 export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
