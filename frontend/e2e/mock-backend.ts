@@ -165,9 +165,63 @@ interface Vistoria {
   CreatedAt: string;
 }
 
+// SGF-Rondonópolis (adequação às IN SCL 01/2019 e 04/2021) — ver o plano
+// em .claude/plans/projeto-selene-rippling-kite.md.
+interface PortariaDesignacao {
+  ID: string;
+  ContratoID: string;
+  ServidorID: string;
+  Servidor: Usuario;
+  Papel: "FISCAL" | "FISCAL_SUPLENTE" | "GESTOR" | "FISCAL_SETORIAL";
+  NumeroPortaria: string;
+  PublicadoDiorondon: string;
+  DataDesignacao: string;
+  DataRevogacao: string | null;
+  CriadoPorID: string;
+  CreatedAt: string;
+}
+
+interface Empenho {
+  ID: string;
+  ContratoID: string;
+  NumeroEmpenho: string;
+  DataEmissao: string;
+  ValorInicial: number;
+  CreatedAt: string;
+}
+
+interface MovimentacaoEmpenho {
+  ID: string;
+  EmpenhoID: string;
+  Tipo: "INICIAL" | "REFORCO" | "ANULACAO" | "FATURA_APROPRIADA";
+  Valor: number;
+  ProcessoPagamentoID: string | null;
+  Observacao: string;
+  RegistradoPorID: string;
+  CreatedAt: string;
+}
+
+interface Ocorrencia {
+  ID: string;
+  ContratoID: string;
+  ProcessoPagamentoID: string | null;
+  Descricao: string;
+  Estado: "REGISTRADA" | "NOTIFICADA" | "EM_TRATAMENTO" | "REGULARIZADA";
+  RegistradoPorID: string;
+  RegistradoPor: Usuario;
+  DataNotificacaoGestor: string | null;
+  DataRegularizacao: string | null;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
 let contratos: Contrato[] = [];
 let processos: Processo[] = [];
 let vistorias: Vistoria[] = [];
+let designacoes: PortariaDesignacao[] = [];
+let empenhos: Empenho[] = [];
+let movimentacoesEmpenho: MovimentacaoEmpenho[] = [];
+let ocorrencias: Ocorrencia[] = [];
 const documentosPorProcesso = new Map<string, Documento[]>();
 
 function resetState() {
@@ -176,11 +230,69 @@ function resetState() {
   contratos = [contratoSeed];
   processos = [criarProcessoSeed(contratoSeed)];
   vistorias = [];
+  designacoes = [];
+  empenhos = [];
+  movimentacoesEmpenho = [];
+  ocorrencias = [];
   documentosPorProcesso.clear();
   usuarios = usuariosSeed();
   senhasLocais = {
     "fiscal.local@example.com": "senha12345",
     "novo.local@example.com": "temporaria123",
+  };
+}
+
+// Mesma tabela De/Para do backend (ver
+// internal/service/fiscalizacao_service.go) — reimplementada aqui em
+// miniatura só pro stub responder de forma plausível ao drawer do Kanban;
+// não precisa ser bit-a-bit idêntica (o stub já simplifica outras coisas,
+// como o processoChecklistPendenteId acima).
+const mapaEtapaEstado: Record<number, string> = {
+  1: "A_EXECUTAR_CONFERIR",
+  2: "EM_ANALISE_EXTERNA",
+  3: "A_EXECUTAR_CONFERIR",
+  4: "DOCUMENTAR_ATESTAR",
+  5: "DOCUMENTAR_ATESTAR",
+  6: "EM_ANALISE_EXTERNA",
+};
+const mapaEtapaAcao: Record<number, string> = {
+  1: "ACAO_FISCAL",
+  2: "ESPERA_EXTERNA",
+  3: "ACAO_FISCAL",
+  4: "ACAO_FISCAL",
+  5: "ACAO_FISCAL",
+  6: "ESPERA_EXTERNA",
+};
+
+function decorarProcesso(processo: Processo) {
+  const ocorrenciasAbertas = ocorrencias.filter(
+    (o) => o.ProcessoPagamentoID === processo.ID && o.Estado !== "REGULARIZADA"
+  );
+
+  let estado_fiscalizacao: string;
+  const allowed_actions: string[] = [];
+
+  if (processo.Status === "Concluido") {
+    estado_fiscalizacao = "CONCLUIDO";
+  } else if (ocorrenciasAbertas.length > 0) {
+    estado_fiscalizacao = "PENDENCIA_DEVOLVIDO";
+  } else {
+    estado_fiscalizacao = mapaEtapaEstado[processo.EtapaAtualID] ?? "A_EXECUTAR_CONFERIR";
+  }
+
+  if (processo.Status === "Ativo") {
+    allowed_actions.push("ANEXAR_DOCUMENTO", "REGISTRAR_OCORRENCIA", "REGISTRAR_MOVIMENTACAO_EMPENHO");
+    if (ocorrenciasAbertas.length === 0) {
+      if (processo.EtapaAtualID < 6) allowed_actions.push("AVANCAR_ETAPA");
+      else allowed_actions.push("CONCLUIR_PAGAMENTO");
+    }
+  }
+
+  return {
+    ...processo,
+    estado_fiscalizacao,
+    acao_ou_espera: mapaEtapaAcao[processo.EtapaAtualID] ?? "ACAO_FISCAL",
+    allowed_actions,
   };
 }
 
@@ -311,6 +423,14 @@ const server = createServer((req, res) => {
       return json(res, 201, novo);
     }
 
+    const processoIdMatch = pathname.match(/^\/api\/v1\/processos\/([^/]+)$/);
+    if (processoIdMatch && req.method === "GET") {
+      const [, id] = processoIdMatch;
+      const processo = processos.find((p) => p.ID === id);
+      if (!processo) return json(res, 404, { error: "não encontrado" });
+      return json(res, 200, decorarProcesso(processo));
+    }
+
     const processoAcaoMatch = pathname.match(/^\/api\/v1\/processos\/([^/]+)\/(avancar|concluir)$/);
     if (processoAcaoMatch && req.method === "POST") {
       const [, id, acao] = processoAcaoMatch;
@@ -436,6 +556,150 @@ const server = createServer((req, res) => {
       const pdfFalso = Buffer.from("%PDF-1.4 relatorio de campo de teste");
       res.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": pdfFalso.length });
       return res.end(pdfFalso);
+    }
+
+    // SGF-Rondonópolis (adequação às IN SCL 01/2019 e 04/2021) — mesmo
+    // espírito do resto do stub: só o suficiente pra exercitar o fluxo do
+    // frontend, sem reimplementar a lógica de negócio do backend real.
+    const ocorrenciasDoProcessoMatch = pathname.match(/^\/api\/v1\/processos\/([^/]+)\/ocorrencias$/);
+    if (ocorrenciasDoProcessoMatch) {
+      const [, processoId] = ocorrenciasDoProcessoMatch;
+      if (req.method === "GET") {
+        return json(res, 200, ocorrencias.filter((o) => o.ProcessoPagamentoID === processoId));
+      }
+      if (req.method === "POST") {
+        const processo = processos.find((p) => p.ID === processoId);
+        if (!processo) return json(res, 404, { error: "não encontrado" });
+        const corpo = bodyAsJSON();
+        const agora = new Date().toISOString();
+        const nova: Ocorrencia = {
+          ID: nextId("ocorrencia"),
+          ContratoID: processo.ContratoID,
+          ProcessoPagamentoID: processoId,
+          Descricao: corpo.descricao ?? "",
+          Estado: "REGISTRADA",
+          RegistradoPorID: "fiscal-1",
+          RegistradoPor: usuarios[0],
+          DataNotificacaoGestor: null,
+          DataRegularizacao: null,
+          CreatedAt: agora,
+          UpdatedAt: agora,
+        };
+        ocorrencias.push(nova);
+        return json(res, 201, nova);
+      }
+    }
+
+    const transicaoOcorrenciaMatch = pathname.match(
+      /^\/api\/v1\/ocorrencias\/([^/]+)\/(notificar|tratar|regularizar)$/
+    );
+    if (transicaoOcorrenciaMatch && req.method === "POST") {
+      const [, id, acao] = transicaoOcorrenciaMatch;
+      const ocorrencia = ocorrencias.find((o) => o.ID === id);
+      if (!ocorrencia) return json(res, 404, { error: "não encontrado" });
+      const proximaAcao: Record<string, [Ocorrencia["Estado"], Ocorrencia["Estado"]]> = {
+        notificar: ["REGISTRADA", "NOTIFICADA"],
+        tratar: ["NOTIFICADA", "EM_TRATAMENTO"],
+        regularizar: ["EM_TRATAMENTO", "REGULARIZADA"],
+      };
+      const [origem, destino] = proximaAcao[acao];
+      if (ocorrencia.Estado !== origem) {
+        return json(res, 400, { error: "transição de estado da ocorrência não permitida a partir do estado atual" });
+      }
+      ocorrencia.Estado = destino;
+      ocorrencia.UpdatedAt = new Date().toISOString();
+      if (destino === "NOTIFICADA") ocorrencia.DataNotificacaoGestor = ocorrencia.UpdatedAt;
+      if (destino === "REGULARIZADA") ocorrencia.DataRegularizacao = ocorrencia.UpdatedAt;
+      return json(res, 200, ocorrencia);
+    }
+
+    const designacoesMatch = pathname.match(/^\/api\/v1\/contratos\/([^/]+)\/designacoes$/);
+    if (designacoesMatch) {
+      const [, contratoId] = designacoesMatch;
+      if (req.method === "GET") {
+        return json(res, 200, designacoes.filter((d) => d.ContratoID === contratoId));
+      }
+      if (req.method === "POST") {
+        const corpo = bodyAsJSON();
+        const servidor = usuarios.find((u) => u.ID === corpo.servidor_id) ?? usuarios[0];
+        const nova: PortariaDesignacao = {
+          ID: nextId("designacao"),
+          ContratoID: contratoId,
+          ServidorID: servidor.ID,
+          Servidor: servidor,
+          Papel: corpo.papel ?? "FISCAL",
+          NumeroPortaria: corpo.numero_portaria ?? "",
+          PublicadoDiorondon: corpo.publicado_diorondon ?? "",
+          DataDesignacao: corpo.data_designacao ?? new Date().toISOString(),
+          DataRevogacao: null,
+          CriadoPorID: "fiscal-1",
+          CreatedAt: new Date().toISOString(),
+        };
+        designacoes.push(nova);
+        return json(res, 201, nova);
+      }
+    }
+
+    const empenhosDoContratoMatch = pathname.match(/^\/api\/v1\/contratos\/([^/]+)\/empenhos$/);
+    if (empenhosDoContratoMatch) {
+      const [, contratoId] = empenhosDoContratoMatch;
+      if (req.method === "GET") {
+        return json(res, 200, empenhos.filter((e) => e.ContratoID === contratoId));
+      }
+      if (req.method === "POST") {
+        const corpo = bodyAsJSON();
+        const novo: Empenho = {
+          ID: nextId("empenho"),
+          ContratoID: contratoId,
+          NumeroEmpenho: corpo.numero_empenho ?? "",
+          DataEmissao: corpo.data_emissao ?? new Date().toISOString(),
+          ValorInicial: corpo.valor_inicial ?? 0,
+          CreatedAt: new Date().toISOString(),
+        };
+        empenhos.push(novo);
+        movimentacoesEmpenho.push({
+          ID: nextId("movimentacao"),
+          EmpenhoID: novo.ID,
+          Tipo: "INICIAL",
+          Valor: novo.ValorInicial,
+          ProcessoPagamentoID: null,
+          Observacao: "",
+          RegistradoPorID: "fiscal-1",
+          CreatedAt: new Date().toISOString(),
+        });
+        return json(res, 201, novo);
+      }
+    }
+
+    const empenhoIdMatch = pathname.match(/^\/api\/v1\/empenhos\/([^/]+)$/);
+    if (empenhoIdMatch && req.method === "GET") {
+      const [, id] = empenhoIdMatch;
+      const empenho = empenhos.find((e) => e.ID === id);
+      if (!empenho) return json(res, 404, { error: "não encontrado" });
+      const saldo = movimentacoesEmpenho
+        .filter((m) => m.EmpenhoID === id)
+        .reduce((acc, m) => (m.Tipo === "INICIAL" || m.Tipo === "REFORCO" ? acc + m.Valor : acc - m.Valor), 0);
+      return json(res, 200, { ...empenho, saldo });
+    }
+
+    const movimentacaoEmpenhoMatch = pathname.match(/^\/api\/v1\/empenhos\/([^/]+)\/movimentacoes$/);
+    if (movimentacaoEmpenhoMatch && req.method === "POST") {
+      const [, empenhoId] = movimentacaoEmpenhoMatch;
+      const empenho = empenhos.find((e) => e.ID === empenhoId);
+      if (!empenho) return json(res, 404, { error: "não encontrado" });
+      const corpo = bodyAsJSON();
+      const nova: MovimentacaoEmpenho = {
+        ID: nextId("movimentacao"),
+        EmpenhoID: empenhoId,
+        Tipo: corpo.tipo,
+        Valor: corpo.valor ?? 0,
+        ProcessoPagamentoID: corpo.processo_pagamento_id ?? null,
+        Observacao: corpo.observacao ?? "",
+        RegistradoPorID: "fiscal-1",
+        CreatedAt: new Date().toISOString(),
+      };
+      movimentacoesEmpenho.push(nova);
+      return json(res, 201, nova);
     }
 
     // Módulo 4 do roadmap (Dossiê do Fornecedor) — agrupa os contratos em

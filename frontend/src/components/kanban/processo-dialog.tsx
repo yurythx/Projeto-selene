@@ -22,11 +22,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { TipoDocumento, ProcessoPagamento, DocumentoAnexo, ItemRadar } from "@/lib/api/client";
+import type {
+  TipoDocumento,
+  ProcessoPagamento,
+  ProcessoComFiscalizacao,
+  DocumentoAnexo,
+  ItemRadar,
+  AllowedAction,
+} from "@/lib/api/client";
 import { RadarNivelBadge } from "@/components/radar/radar-badge";
 import { abrirPDFDeResposta } from "@/lib/abrir-pdf";
 import { VistoriasDialog } from "./vistorias-dialog";
+import { OcorrenciasDialog } from "./ocorrencias-dialog";
 import { TriangleAlertIcon } from "lucide-react";
+
+const estadoFiscalizacaoLabel: Record<string, string> = {
+  A_EXECUTAR_CONFERIR: "A executar / conferir",
+  EM_ANALISE_EXTERNA: "Em análise externa",
+  DOCUMENTAR_ATESTAR: "Documentar / atestar",
+  PENDENCIA_DEVOLVIDO: "Pendência — ocorrência aberta",
+  CONCLUIDO: "Concluído",
+};
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -37,6 +53,13 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+/**
+ * Drawer aberto ao clicar num card do Kanban — mostra dados do
+ * contrato/processo, alertas do Radar, documentos anexados (com upload),
+ * e os botões de ação (avançar etapa, marcar como pago, gerar atesto),
+ * além dos dois dialogs aninhados (Vistorias, Ocorrências — botão
+ * "Ocorrências" e "Vistorias de Campo" no rodapé).
+ */
 export function ProcessoDialog({
   processo,
   tiposDocumento,
@@ -57,6 +80,7 @@ export function ProcessoDialog({
   const [tipoSelecionado, setTipoSelecionado] = useState<string>("");
   const [pendentes, setPendentes] = useState<string[] | null>(null);
   const [vistoriasOpen, setVistoriasOpen] = useState(false);
+  const [ocorrenciasOpen, setOcorrenciasOpen] = useState(false);
 
   const tipoDocumentoSelecionado = tiposDocumento.find(
     (tipo) => String(tipo.ID) === tipoSelecionado
@@ -67,6 +91,21 @@ export function ProcessoDialog({
     queryFn: () => fetchJSON<DocumentoAnexo[]>(`/api/processos/${processo.ID}/documentos`),
     enabled: open,
   });
+
+  // SGF-Rondonópolis: allowed_actions/estado_fiscalizacao/acao_ou_espera só
+  // existem na resposta de GET /processos/{id} (ver
+  // FiscalizacaoService.Decorar no backend), não na listagem que alimentou
+  // o `processo` recebido por prop — refeito aqui a cada abertura do
+  // drawer. Enquanto carrega/se falhar, cai para a leitura antiga
+  // (EtapaAtualID/Status) via podeAvancarFallback/podeConcluirFallback
+  // abaixo, pra nunca deixar os botões desaparecerem por um problema de
+  // rede momentâneo.
+  const processoDetalhadoQuery = useQuery({
+    queryKey: ["processo", processo.ID],
+    queryFn: () => fetchJSON<ProcessoComFiscalizacao>(`/api/processos/${processo.ID}`),
+    enabled: open,
+  });
+  const allowedActions: AllowedAction[] = processoDetalhadoQuery.data?.allowed_actions ?? [];
 
   const uploadMutation = useMutation({
     mutationFn: async (formData: FormData) =>
@@ -146,8 +185,17 @@ export function ProcessoDialog({
     form.reset();
   }
 
-  const podeConcluir = processo.EtapaAtualID === 6 && processo.Status !== "Concluido";
-  const podeAvancar = processo.Status !== "Concluido" && processo.EtapaAtualID !== 6;
+  // Fallback (a leitura antiga, EtapaAtualID/Status) só entra em jogo
+  // enquanto processoDetalhadoQuery ainda não respondeu — assim que
+  // responde, allowed_actions manda: já reflete checklist pendente E
+  // ocorrência aberta (SGF), nenhum dos dois a leitura antiga considerava.
+  const decorado = processoDetalhadoQuery.data;
+  const podeConcluir = decorado
+    ? allowedActions.includes("CONCLUIR_PAGAMENTO")
+    : processo.EtapaAtualID === 6 && processo.Status !== "Concluido";
+  const podeAvancar = decorado
+    ? allowedActions.includes("AVANCAR_ETAPA")
+    : processo.Status !== "Concluido" && processo.EtapaAtualID !== 6;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -173,6 +221,14 @@ export function ProcessoDialog({
               {processo.Status === "Concluido" ? "Pago" : "Em andamento"}
             </Badge>
           </p>
+          {decorado?.estado_fiscalizacao && (
+            <p>
+              <span className="text-muted-foreground">Estado (SGF): </span>
+              <Badge variant={decorado.estado_fiscalizacao === "PENDENCIA_DEVOLVIDO" ? "destructive" : "outline"}>
+                {estadoFiscalizacaoLabel[decorado.estado_fiscalizacao] ?? decorado.estado_fiscalizacao}
+              </Badge>
+            </p>
+          )}
         </div>
 
         {alertasRadar.length > 0 && (
@@ -279,6 +335,9 @@ export function ProcessoDialog({
             <Button type="button" variant="outline" onClick={() => setVistoriasOpen(true)}>
               Vistorias de Campo
             </Button>
+            <Button type="button" variant="outline" onClick={() => setOcorrenciasOpen(true)}>
+              Ocorrências
+            </Button>
             {isFiscal && (
               <>
                 <Button
@@ -313,6 +372,12 @@ export function ProcessoDialog({
         isFiscal={isFiscal}
         open={vistoriasOpen}
         onOpenChange={setVistoriasOpen}
+      />
+      <OcorrenciasDialog
+        processoId={processo.ID!}
+        isFiscal={isFiscal}
+        open={ocorrenciasOpen}
+        onOpenChange={setOcorrenciasOpen}
       />
     </Dialog>
   );

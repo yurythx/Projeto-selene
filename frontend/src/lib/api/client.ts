@@ -9,6 +9,8 @@ export type ErroSimples = components["schemas"]["ErroSimples"];
 export type KanbanEtapa = components["schemas"]["KanbanEtapa"];
 export type TipoDocumento = components["schemas"]["TipoDocumento"];
 export type ProcessoPagamento = components["schemas"]["ProcessoPagamento"];
+export type ProcessoComFiscalizacao = components["schemas"]["ProcessoComFiscalizacao"];
+export type AllowedAction = "AVANCAR_ETAPA" | "CONCLUIR_PAGAMENTO" | "ANEXAR_DOCUMENTO" | "REGISTRAR_OCORRENCIA" | "REGISTRAR_MOVIMENTACAO_EMPENHO";
 export type DocumentoAnexo = components["schemas"]["DocumentoAnexo"];
 export type ItemRadar = components["schemas"]["ItemRadar"];
 export type MinutaAditivoRequest = components["schemas"]["MinutaAditivoRequest"];
@@ -17,6 +19,17 @@ export type RegistroVistoria = components["schemas"]["RegistroVistoria"];
 export type FotoVistoria = components["schemas"]["FotoVistoria"];
 export type FornecedorResumo = components["schemas"]["FornecedorResumo"];
 export type FornecedorDossie = components["schemas"]["FornecedorDossie"];
+
+// --- SGF-Rondonópolis (adequação às IN SCL 01/2019 e 04/2021) ---
+export type PortariaDesignacao = components["schemas"]["PortariaDesignacao"];
+export type DesignarRequest = components["schemas"]["DesignarRequest"];
+export type Empenho = components["schemas"]["Empenho"];
+export type EmpenhoComSaldo = components["schemas"]["EmpenhoComSaldo"];
+export type CriarEmpenhoRequest = components["schemas"]["CriarEmpenhoRequest"];
+export type MovimentacaoEmpenho = components["schemas"]["MovimentacaoEmpenho"];
+export type RegistrarMovimentacaoRequest = components["schemas"]["RegistrarMovimentacaoRequest"];
+export type Ocorrencia = components["schemas"]["Ocorrencia"];
+export type RegistrarOcorrenciaRequest = components["schemas"]["RegistrarOcorrenciaRequest"];
 
 /** Corpo de POST /processos/{id}/vistorias. */
 export interface NovaVistoriaRequest {
@@ -183,7 +196,12 @@ export function listarProcessos(accessToken: string, etapaId: number, pagina = 1
 }
 
 export function buscarProcesso(accessToken: string, id: string) {
-  return apiFetch<ProcessoPagamento>(`/api/v1/processos/${id}`, accessToken);
+  // ProcessoComFiscalizacao, não ProcessoPagamento: GET /processos/{id} é o
+  // único endpoint decorado com a leitura de Camada 2 do SGF-Rondonópolis
+  // (estado_fiscalizacao/acao_ou_espera/allowed_actions) — ver
+  // backend/internal/service/fiscalizacao_service.go. Os campos de
+  // ProcessoPagamento continuam todos presentes (allOf no OpenAPI).
+  return apiFetch<ProcessoComFiscalizacao>(`/api/v1/processos/${id}`, accessToken);
 }
 
 export function criarProcesso(accessToken: string, contratoId: string, mesReferencia: string) {
@@ -266,6 +284,64 @@ export function listarFornecedores(accessToken: string) {
 
 export function buscarFornecedor(accessToken: string, cnpj: string) {
   return apiFetch<FornecedorDossie>(`/api/v1/fornecedores/${cnpj}`, accessToken);
+}
+
+// --- SGF-Rondonópolis: designação, empenho, ocorrência ---
+
+export function listarDesignacoes(accessToken: string, contratoId: string) {
+  return apiFetch<PortariaDesignacao[]>(`/api/v1/contratos/${contratoId}/designacoes`, accessToken);
+}
+
+export function designar(accessToken: string, contratoId: string, dados: DesignarRequest) {
+  return apiFetch<PortariaDesignacao>(`/api/v1/contratos/${contratoId}/designacoes`, accessToken, {
+    method: "POST",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function listarEmpenhos(accessToken: string, contratoId: string) {
+  return apiFetch<Empenho[]>(`/api/v1/contratos/${contratoId}/empenhos`, accessToken);
+}
+
+export function criarEmpenho(accessToken: string, contratoId: string, dados: CriarEmpenhoRequest) {
+  return apiFetch<Empenho>(`/api/v1/contratos/${contratoId}/empenhos`, accessToken, {
+    method: "POST",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function buscarEmpenho(accessToken: string, empenhoId: string) {
+  return apiFetch<EmpenhoComSaldo>(`/api/v1/empenhos/${empenhoId}`, accessToken);
+}
+
+export function registrarMovimentacaoEmpenho(accessToken: string, empenhoId: string, dados: RegistrarMovimentacaoRequest) {
+  return apiFetch<MovimentacaoEmpenho>(`/api/v1/empenhos/${empenhoId}/movimentacoes`, accessToken, {
+    method: "POST",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function listarOcorrencias(accessToken: string, processoId: string) {
+  return apiFetch<Ocorrencia[]>(`/api/v1/processos/${processoId}/ocorrencias`, accessToken);
+}
+
+export function registrarOcorrencia(accessToken: string, processoId: string, dados: RegistrarOcorrenciaRequest) {
+  return apiFetch<Ocorrencia>(`/api/v1/processos/${processoId}/ocorrencias`, accessToken, {
+    method: "POST",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function notificarOcorrencia(accessToken: string, ocorrenciaId: string) {
+  return apiFetch<Ocorrencia>(`/api/v1/ocorrencias/${ocorrenciaId}/notificar`, accessToken, { method: "POST" });
+}
+
+export function tratarOcorrencia(accessToken: string, ocorrenciaId: string) {
+  return apiFetch<Ocorrencia>(`/api/v1/ocorrencias/${ocorrenciaId}/tratar`, accessToken, { method: "POST" });
+}
+
+export function regularizarOcorrencia(accessToken: string, ocorrenciaId: string) {
+  return apiFetch<Ocorrencia>(`/api/v1/ocorrencias/${ocorrenciaId}/regularizar`, accessToken, { method: "POST" });
 }
 
 /**

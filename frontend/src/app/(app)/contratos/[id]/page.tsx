@@ -8,6 +8,8 @@ import { EditarContratoDialog } from "@/components/contratos/editar-contrato-dia
 import { EncerrarContratoButton } from "@/components/contratos/encerrar-contrato-button";
 import { GerarNotificacaoDialog } from "@/components/contratos/gerar-notificacao-dialog";
 import { GerarMinutaAditivoDialog } from "@/components/contratos/gerar-minuta-aditivo-dialog";
+import { DesignacoesCard } from "@/components/contratos/designacoes-card";
+import { EmpenhosCard } from "@/components/contratos/empenhos-card";
 
 const TIPO_OBJETO_LABEL: Record<string, string> = {
   CONSUMO: "Consumo",
@@ -99,6 +101,11 @@ export default async function ContratoDetalhePage({
           <GerarMinutaAditivoDialog contratoId={contrato.ID!} />
         </div>
       )}
+
+      {/* SGF-Rondonópolis: adequação às IN SCL 01/2019 e 04/2021 — ver o
+          plano em .claude/plans/projeto-selene-rippling-kite.md. */}
+      <DesignacoesCard contratoId={contrato.ID!} />
+      <EmpenhosCard contratoId={contrato.ID!} isFiscal={isFiscal} />
     </div>
   );
 }

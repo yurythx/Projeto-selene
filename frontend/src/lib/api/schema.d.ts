@@ -827,7 +827,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Busca um processo por ID */
+        /**
+         * Busca um processo por ID
+         * @description Além dos campos já existentes de ProcessoPagamento, a resposta inclui a leitura de Camada 2 do SGF-Rondonópolis (estado_fiscalizacao, acao_ou_espera, allowed_actions) — ver ProcessoComFiscalizacao e o plano, seção De/Para. Nenhum campo anterior muda de nome/tipo.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -845,7 +848,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ProcessoPagamento"];
+                        "application/json": components["schemas"]["ProcessoComFiscalizacao"];
                     };
                 };
                 400: components["responses"]["RequisicaoInvalida"];
@@ -1063,7 +1066,7 @@ export interface paths {
         };
         /**
          * Gera o Relatório de Pagamento (PDF)
-         * @description PDF pronto para impressão/assinatura física. Layout funcional próprio do Selene, não o modelo oficial da prefeitura (nenhum template real foi fornecido — ver README, seção "Limitações").
+         * @description PDF pronto para impressão/assinatura física. Layout funcional próprio do Selene, não o modelo oficial da prefeitura (nenhum template real foi fornecido — ver README, seção "Limitações"). SGF-Rondonópolis: inclui as seções de Ocorrências e Empenho (acompanhamento paralelo/informativo) quando o processo tiver alguma vinculada — omitidas quando não há dado.
          */
         get: {
             parameters: {
@@ -1331,6 +1334,467 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contratos/{id}/designacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ContratoId"];
+            };
+            cookie?: never;
+        };
+        /** Lista o histórico de designações do contrato */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PortariaDesignacao"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        /**
+         * Designa fiscal/suplente/gestor/fiscal setorial
+         * @description Uma nova designação do mesmo papel revoga automaticamente a anterior (DataRevogacao). Papel=FISCAL também sincroniza Contrato.FiscalID (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DesignarRequest"];
+                };
+            };
+            responses: {
+                /** @description Designado. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PortariaDesignacao"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contratos/{id}/empenhos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ContratoId"];
+            };
+            cookie?: never;
+        };
+        /** Lista os empenhos do contrato */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Empenho"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        /**
+         * Abre um novo empenho (registro paralelo/informativo)
+         * @description Já registra a movimentação INICIAL automaticamente (IN01 Art.5º-VIII; IN04 Art.5º-XXII) — ver o comentário em components/schemas/Empenho sobre isto não ser a fonte de verdade orçamentária.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CriarEmpenhoRequest"];
+                };
+            };
+            responses: {
+                /** @description Criado. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Empenho"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/empenhos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Busca um empenho, com o saldo reconstruído do histórico */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EmpenhoComSaldo"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/empenhos/{id}/movimentacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Registra um reforço, anulação ou apropriação de fatura */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RegistrarMovimentacaoRequest"];
+                };
+            };
+            responses: {
+                /** @description Registrada. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MovimentacaoEmpenho"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/processos/{id}/ocorrencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+            };
+            cookie?: never;
+        };
+        /** Lista as ocorrências do processo */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        /**
+         * Registra uma nova ocorrência
+         * @description Abre no estado REGISTRADA. ContratoID é resolvido automaticamente a partir do processo. Enquanto não regularizada, bloqueia AVANCAR_ETAPA neste processo (regra de Camada 2, ver o plano).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RegistrarOcorrenciaRequest"];
+                };
+            };
+            responses: {
+                /** @description Registrada. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ocorrencias/{id}/notificar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transiciona REGISTRADA → NOTIFICADA
+         * @description Comunicação formal ao Gestor (IN04 Art.5º-XVI).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ocorrencias/{id}/tratar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transiciona NOTIFICADA → EM_TRATAMENTO
+         * @description O Gestor já definiu as medidas a tomar (IN04 Art.5º-XVII).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ocorrencias/{id}/regularizar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transiciona EM_TRATAMENTO → REGULARIZADA
+         * @description A partir daqui, esta ocorrência para de bloquear AVANCAR_ETAPA no processo.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1865,10 +2329,30 @@ export interface components {
             EtapaAtual?: components["schemas"]["KanbanEtapa"];
             /** @enum {string} */
             Status?: "Ativo" | "Concluido";
+            /**
+             * Format: uuid
+             * @description SGF-Rondonópolis: liga este processo ao Empenho paralelo/informativo quando a fatura do mês foi apropriada contra ele. Null pra processos que não adotam esse acompanhamento.
+             */
+            EmpenhoID?: string | null;
             /** Format: date-time */
             CreatedAt?: string;
             /** Format: date-time */
             UpdatedAt?: string;
+        };
+        /** @description Resposta de GET /processos/{id} — todos os campos de ProcessoPagamento mais a leitura de Camada 2 computada pelo SGF (nunca persistida). Ver o plano, seção De/Para. */
+        ProcessoComFiscalizacao: components["schemas"]["ProcessoPagamento"] & {
+            /**
+             * @description Rótulo de Camada 2 (regra do SGF, não da norma) derivado da etapa atual — vira PENDENCIA_DEVOLVIDO independente da etapa quando há Ocorrencia aberta vinculada.
+             * @enum {string}
+             */
+            estado_fiscalizacao?: "A_EXECUTAR_CONFERIR" | "EM_ANALISE_EXTERNA" | "DOCUMENTAR_ATESTAR" | "PENDENCIA_DEVOLVIDO" | "CONCLUIDO";
+            /**
+             * @description Se a etapa atual exige ação ativa do fiscal ou está em tramitação fora do seu controle direto (ex: Contabilidade/Tesouraria).
+             * @enum {string}
+             */
+            acao_ou_espera?: "ACAO_FISCAL" | "ESPERA_EXTERNA";
+            /** @description Vocabulário fechado que o frontend usa pra decidir quais botões mostrar — substitui a checagem client-side de EtapaAtualID/Status que existia antes. */
+            allowed_actions?: ("AVANCAR_ETAPA" | "CONCLUIR_PAGAMENTO" | "ANEXAR_DOCUMENTO" | "REGISTRAR_OCORRENCIA" | "REGISTRAR_MOVIMENTACAO_EMPENHO")[];
         };
         /** @description CaminhoStorage (path local no servidor) é omitido de propósito — nunca serializado (json:"-"). */
         DocumentoAnexo: {
@@ -1892,6 +2376,150 @@ export interface components {
              * @description Só preenchida pra tipos com ExigeValidade=true (certidões).
              */
             DataValidade?: string | null;
+        };
+        /** @description Histórico auditável de designação de fiscal/suplente/gestor/fiscal setorial por contrato (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10). Imutável — uma nova designação do mesmo papel revoga a anterior (DataRevogacao), nunca sobrescreve. */
+        PortariaDesignacao: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ContratoID?: string;
+            /** Format: uuid */
+            ServidorID?: string;
+            Servidor?: components["schemas"]["Usuario"];
+            /** @enum {string} */
+            Papel?: "FISCAL" | "FISCAL_SUPLENTE" | "GESTOR" | "FISCAL_SETORIAL";
+            NumeroPortaria?: string;
+            PublicadoDiorondon?: string;
+            /** Format: date */
+            DataDesignacao?: string;
+            /**
+             * Format: date
+             * @description Preenchida quando esta designação é substituída por uma nova do mesmo papel.
+             */
+            DataRevogacao?: string | null;
+            /** Format: uuid */
+            CriadoPorID?: string;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        DesignarRequest: {
+            /** Format: uuid */
+            servidor_id: string;
+            /** @enum {string} */
+            papel: "FISCAL" | "FISCAL_SUPLENTE" | "GESTOR" | "FISCAL_SETORIAL";
+            numero_portaria?: string;
+            publicado_diorondon?: string;
+            /**
+             * @description Opcional. Formato "AAAA-MM-DD" — default é a data atual.
+             * @example 2026-01-15
+             */
+            data_designacao?: string;
+        };
+        /** @description Registro PARALELO/informativo de empenho — apoia a obrigação do FISCAL de controlar o saldo (IN01 Art.5º-VIII; IN04 Art.5º-XXII), NÃO é fonte de verdade orçamentária (essa é exclusiva dos sistemas corporativos da prefeitura). */
+        Empenho: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ContratoID?: string;
+            NumeroEmpenho?: string;
+            /** Format: date */
+            DataEmissao?: string;
+            /**
+             * Format: int64
+             * @description Centavos.
+             */
+            ValorInicial?: number;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        /** @description Resposta de GET /empenhos/{id} — inclui o saldo reconstruído do histórico de movimentações. */
+        EmpenhoComSaldo: components["schemas"]["Empenho"] & {
+            /**
+             * Format: int64
+             * @description Centavos. Sempre recalculado a partir de MovimentacaoEmpenho, nunca lido de um campo denormalizado.
+             */
+            saldo?: number;
+        };
+        CriarEmpenhoRequest: {
+            numero_empenho: string;
+            /**
+             * @description Formato "AAAA-MM-DD".
+             * @example 2026-01-15
+             */
+            data_emissao: string;
+            /**
+             * Format: int64
+             * @description Centavos, maior que zero.
+             */
+            valor_inicial: number;
+        };
+        /** @description Lançamento imutável no histórico de um Empenho. */
+        MovimentacaoEmpenho: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            EmpenhoID?: string;
+            /** @enum {string} */
+            Tipo?: "INICIAL" | "REFORCO" | "ANULACAO" | "FATURA_APROPRIADA";
+            /**
+             * Format: int64
+             * @description Centavos, sempre positivo — o sinal é implícito pelo Tipo.
+             */
+            Valor?: number;
+            /**
+             * Format: uuid
+             * @description Só preenchido quando Tipo=FATURA_APROPRIADA.
+             */
+            ProcessoPagamentoID?: string | null;
+            Observacao?: string;
+            /** Format: uuid */
+            RegistradoPorID?: string;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        RegistrarMovimentacaoRequest: {
+            /**
+             * @description INICIAL não é aceito aqui — é criado automaticamente por POST /contratos/{id}/empenhos.
+             * @enum {string}
+             */
+            tipo: "REFORCO" | "ANULACAO" | "FATURA_APROPRIADA";
+            /**
+             * Format: int64
+             * @description Centavos, maior que zero.
+             */
+            valor: number;
+            /**
+             * Format: uuid
+             * @description Opcional — usar quando tipo=FATURA_APROPRIADA.
+             */
+            processo_pagamento_id?: string;
+            observacao?: string;
+        };
+        /** @description Registro formal de ocorrência da execução contratual (IN01 Art.3º-III/Art.5º-IV,IX; IN04 Art.3º-VIII/Art.5º-VIII,XVI). Ciclo de vida linear REGISTRADA→NOTIFICADA→EM_TRATAMENTO→REGULARIZADA (simplificação de Camada 2 — ver o plano, seção "Lacunas conhecidas", sobre o ramo de escalonamento da IN04 Art.5º-XVII ainda não modelado). */
+        Ocorrencia: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ContratoID?: string;
+            /** Format: uuid */
+            ProcessoPagamentoID?: string | null;
+            Descricao?: string;
+            /** @enum {string} */
+            Estado?: "REGISTRADA" | "NOTIFICADA" | "EM_TRATAMENTO" | "REGULARIZADA";
+            /** Format: uuid */
+            RegistradoPorID?: string;
+            RegistradoPor?: components["schemas"]["Usuario"];
+            /** Format: date */
+            DataNotificacaoGestor?: string | null;
+            /** Format: date */
+            DataRegularizacao?: string | null;
+            /** Format: date-time */
+            CreatedAt?: string;
+            /** Format: date-time */
+            UpdatedAt?: string;
+        };
+        RegistrarOcorrenciaRequest: {
+            descricao: string;
         };
     };
     responses: {

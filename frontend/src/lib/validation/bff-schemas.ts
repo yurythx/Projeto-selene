@@ -105,3 +105,36 @@ export const trocarSenhaSchema = z.object({
   senha_atual: z.string().min(1, "obrigatório"),
   senha_nova: z.string().min(8, "mínimo 8 caracteres"),
 });
+
+// SGF-Rondonópolis (adequação às IN SCL 01/2019 e 04/2021) — ver o plano
+// em .claude/plans/projeto-selene-rippling-kite.md.
+export const designarSchema = z.object({
+  servidor_id: z.string().uuid(),
+  papel: z.enum(["FISCAL", "FISCAL_SUPLENTE", "GESTOR", "FISCAL_SETORIAL"]),
+  numero_portaria: z.string().trim().max(50).optional(),
+  publicado_diorondon: z.string().trim().max(50).optional(),
+  // "AAAA-MM-DD" — mesma convenção de data_assinatura/data_emissao (a
+  // coluna portarias_designacao.data_designacao é `date`, não
+  // `timestamptz`; ver o comentário em DesignarInput no backend).
+  data_designacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado: AAAA-MM-DD").optional(),
+});
+
+export const criarEmpenhoSchema = z.object({
+  numero_empenho: z.string().trim().min(1, "obrigatório").max(50),
+  data_emissao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "formato esperado: AAAA-MM-DD"),
+  // Centavos — o form converte de reais (string "R$ 1.000,00") pra
+  // inteiro antes de chegar aqui, mesmo espírito de dataOpcionalSchema
+  // combinando com o formato do <input> nativo.
+  valor_inicial: z.number().int().positive("precisa ser maior que zero"),
+});
+
+export const registrarMovimentacaoSchema = z.object({
+  tipo: z.enum(["REFORCO", "ANULACAO", "FATURA_APROPRIADA"]),
+  valor: z.number().int().positive("precisa ser maior que zero"),
+  processo_pagamento_id: z.string().uuid().optional(),
+  observacao: z.string().trim().max(2000).optional(),
+});
+
+export const registrarOcorrenciaSchema = z.object({
+  descricao: z.string().trim().min(1, "obrigatório").max(4000),
+});
