@@ -72,14 +72,14 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 
 	dataAssinatura, err := parseData(input.DataAssinatura)
 	if err != nil {
-		return nil, fmt.Errorf("service: data de assinatura inválida: %w", err)
+		return nil, fmt.Errorf("service: data de assinatura inválida: %w: %w", ErrDataInvalida, err)
 	}
 
 	var dataVigenciaFim *time.Time
 	if input.DataVigenciaFim != "" {
 		parsed, err := parseData(input.DataVigenciaFim)
 		if err != nil {
-			return nil, fmt.Errorf("service: data de vigência inválida: %w", err)
+			return nil, fmt.Errorf("service: data de vigência inválida: %w: %w", ErrDataInvalida, err)
 		}
 		dataVigenciaFim = &parsed
 	}
@@ -172,7 +172,7 @@ func (s *ContratoService) Atualizar(ctx context.Context, id uuid.UUID, input Atu
 		} else {
 			parsed, err := parseData(*input.DataVigenciaFim)
 			if err != nil {
-				return nil, fmt.Errorf("service: data de vigência inválida: %w", err)
+				return nil, fmt.Errorf("service: data de vigência inválida: %w: %w", ErrDataInvalida, err)
 			}
 			contrato.DataVigenciaFim = &parsed
 		}
