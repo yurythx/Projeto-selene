@@ -111,7 +111,7 @@ export default async function ContratoDetalhePage({
 
       {/* SGF-Rondonópolis: adequação às IN SCL 01/2019 e 04/2021 — ver o
           plano em .claude/plans/projeto-selene-rippling-kite.md. */}
-      <DesignacoesCard contratoId={contrato.ID!} />
+      <DesignacoesCard contratoId={contrato.ID!} isFiscal={isFiscal} />
       <EmpenhosCard contratoId={contrato.ID!} isFiscal={isFiscal} />
     </div>
   );

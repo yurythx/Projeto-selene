@@ -21,6 +21,7 @@ export type FornecedorResumo = components["schemas"]["FornecedorResumo"];
 export type FornecedorDossie = components["schemas"]["FornecedorDossie"];
 
 // --- SGF-Rondonópolis (adequação às IN SCL 01/2019 e 04/2021) ---
+export type ServidorOpcao = components["schemas"]["ServidorOpcao"];
 export type PortariaDesignacao = components["schemas"]["PortariaDesignacao"];
 export type DesignarRequest = components["schemas"]["DesignarRequest"];
 export type Empenho = components["schemas"]["Empenho"];
@@ -287,6 +288,11 @@ export function buscarFornecedor(accessToken: string, cnpj: string) {
 }
 
 // --- SGF-Rondonópolis: designação, empenho, ocorrência ---
+
+/** Projeção mínima de todos os usuários (ID/Nome/Email) — popula o seletor de servidor de "Nova designação". Não é admin-only, ver o handler. */
+export function listarServidores(accessToken: string) {
+  return apiFetch<ServidorOpcao[]>("/api/v1/servidores", accessToken);
+}
 
 export function listarDesignacoes(accessToken: string, contratoId: string) {
   return apiFetch<PortariaDesignacao[]>(`/api/v1/contratos/${contratoId}/designacoes`, accessToken);

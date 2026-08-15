@@ -34,14 +34,14 @@ let senhasLocais: Record<string, string> = {};
 
 function usuariosSeed(): Usuario[] {
   return [
-    { ID: "fiscal-1", Nome: "Fiscal Teste", Email: "fiscal@example.com", IsFiscal: true, IsAdmin: false, Matricula: "001" },
-    { ID: "admin-1", Nome: "Admin Teste", Email: "admin@example.com", IsFiscal: false, IsAdmin: true, Matricula: "002" },
+    { ID: "22222222-2222-4222-8222-222222222222", Nome: "Fiscal Teste", Email: "fiscal@example.com", IsFiscal: true, IsAdmin: false, Matricula: "001" },
+    { ID: "33333333-3333-4333-8333-333333333333", Nome: "Admin Teste", Email: "admin@example.com", IsFiscal: false, IsAdmin: true, Matricula: "002" },
     // Conta de login local já "pronta" (senha já trocada) — usada pelo
     // spec que exercita o fluxo de login tradicional.
-    { ID: "local-1", Nome: "Fiscal Local", Email: "fiscal.local@example.com", IsFiscal: true, IsAdmin: false, Matricula: "", MustChangePassword: false },
+    { ID: "44444444-4444-4444-8444-444444444444", Nome: "Fiscal Local", Email: "fiscal.local@example.com", IsFiscal: true, IsAdmin: false, Matricula: "", MustChangePassword: false },
     // Conta com senha temporária pendente — usada pelo spec de troca de
     // senha obrigatória.
-    { ID: "local-2", Nome: "Novo Fiscal Local", Email: "novo.local@example.com", IsFiscal: true, IsAdmin: false, Matricula: "", MustChangePassword: true },
+    { ID: "55555555-5555-4555-8555-555555555555", Nome: "Novo Fiscal Local", Email: "novo.local@example.com", IsFiscal: true, IsAdmin: false, Matricula: "", MustChangePassword: true },
   ];
 }
 
@@ -128,7 +128,7 @@ function criarContratoSeed(): Contrato {
     ContratadaNome: "Fornecedora Seed Ltda",
     ContratadaCNPJ: "00.000.000/0001-00",
     ContratadaEmail: "contato@fornecedora-seed.example",
-    FiscalID: "fiscal-1",
+    FiscalID: "22222222-2222-4222-8222-222222222222",
     Fiscal: usuarios[0],
     TipoObjeto: "SERVICO",
     Ativo: true,
@@ -470,7 +470,7 @@ const server = createServer((req, res) => {
           TipoDocumento: tiposDocumento[0],
           NomeArquivo: "arquivo-teste.pdf",
           HashArquivo: "hash-fake",
-          EnviadoPorID: "fiscal-1",
+          EnviadoPorID: "22222222-2222-4222-8222-222222222222",
           EnviadoPor: usuarios[0],
           DataUpload: new Date().toISOString(),
         };
@@ -527,7 +527,7 @@ const server = createServer((req, res) => {
         const nova = {
           ID: nextId("vistoria"),
           ProcessoPagamentoID: processoId,
-          FiscalID: "fiscal-1",
+          FiscalID: "22222222-2222-4222-8222-222222222222",
           Fiscal: usuarios[0],
           DataHora: new Date().toISOString(),
           Latitude: corpo.latitude ?? null,
@@ -578,7 +578,7 @@ const server = createServer((req, res) => {
           ProcessoPagamentoID: processoId,
           Descricao: corpo.descricao ?? "",
           Estado: "REGISTRADA",
-          RegistradoPorID: "fiscal-1",
+          RegistradoPorID: "22222222-2222-4222-8222-222222222222",
           RegistradoPor: usuarios[0],
           DataNotificacaoGestor: null,
           DataRegularizacao: null,
@@ -613,6 +613,16 @@ const server = createServer((req, res) => {
       return json(res, 200, ocorrencia);
     }
 
+    if (pathname === "/api/v1/servidores" && req.method === "GET") {
+      // Projeção mínima (ID/Nome/Email), mesmo contrato do backend real —
+      // ver UserHandler.ListarServidores.
+      return json(
+        res,
+        200,
+        usuarios.map((u) => ({ ID: u.ID, Nome: u.Nome, Email: u.Email }))
+      );
+    }
+
     const designacoesMatch = pathname.match(/^\/api\/v1\/contratos\/([^/]+)\/designacoes$/);
     if (designacoesMatch) {
       const [, contratoId] = designacoesMatch;
@@ -632,7 +642,7 @@ const server = createServer((req, res) => {
           PublicadoDiorondon: corpo.publicado_diorondon ?? "",
           DataDesignacao: corpo.data_designacao ?? new Date().toISOString(),
           DataRevogacao: null,
-          CriadoPorID: "fiscal-1",
+          CriadoPorID: "22222222-2222-4222-8222-222222222222",
           CreatedAt: new Date().toISOString(),
         };
         designacoes.push(nova);
@@ -664,7 +674,7 @@ const server = createServer((req, res) => {
           Valor: novo.ValorInicial,
           ProcessoPagamentoID: null,
           Observacao: "",
-          RegistradoPorID: "fiscal-1",
+          RegistradoPorID: "22222222-2222-4222-8222-222222222222",
           CreatedAt: new Date().toISOString(),
         });
         return json(res, 201, novo);
@@ -695,7 +705,7 @@ const server = createServer((req, res) => {
         Valor: corpo.valor ?? 0,
         ProcessoPagamentoID: corpo.processo_pagamento_id ?? null,
         Observacao: corpo.observacao ?? "",
-        RegistradoPorID: "fiscal-1",
+        RegistradoPorID: "22222222-2222-4222-8222-222222222222",
         CreatedAt: new Date().toISOString(),
       };
       movimentacoesEmpenho.push(nova);

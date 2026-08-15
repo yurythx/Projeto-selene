@@ -100,4 +100,27 @@ test.describe("Designações (contrato)", () => {
     await expect(page.getByText("Histórico de designação (SGF)")).toBeVisible();
     await expect(page.getByText("Nenhuma designação registrada ainda.")).toBeVisible();
   });
+
+  test("nova designação: escolhe servidor e papel, aparece no histórico", async ({ page }) => {
+    await page.goto("/contratos");
+    await page.getByRole("link", { name: "1/2026" }).click();
+
+    await page.getByRole("button", { name: "Nova designação" }).click();
+
+    await page.getByRole("combobox", { name: "Servidor" }).click();
+    await page.getByText("Admin Teste (admin@example.com)").click();
+
+    await page.getByRole("combobox", { name: "Papel" }).click();
+    await page.getByText("Fiscal Setorial").click();
+
+    await page.getByRole("button", { name: "Registrar" }).click();
+
+    await expect(page.getByText("Designação registrada.")).toBeVisible();
+    // Escopado a <main>: o popup (fechado) do Select "Papel" continua
+    // montado no DOM fora dele (base-ui mantém o conteúdo do listbox,
+    // só oculto), então um getByText solto encontraria as duas ocorrências.
+    const conteudo = page.getByRole("main");
+    await expect(conteudo.getByText("Admin Teste", { exact: true })).toBeVisible();
+    await expect(conteudo.getByText("Fiscal Setorial", { exact: true })).toBeVisible();
+  });
 });

@@ -1888,6 +1888,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/servidores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista uma projeção mínima (ID/Nome/Email) de todos os usuários
+         * @description Não é admin-only (ao contrário de /admin/users): usada pra popular seletores de servidor, ex. SGF-Rondonópolis "Nova designação". ID/Nome/Email já são visíveis a qualquer usuário autenticado hoje via Contrato.Fiscal aninhado em /contratos e /processos — esta rota não expõe dado novo, só uma forma de listar todo mundo sem precisar já conhecer um ContratoID.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServidorOpcao"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -2249,6 +2289,14 @@ export interface components {
             CriadoEm?: string;
             /** Format: date-time */
             AtualizadoEm?: string;
+        };
+        /** @description Projeção mínima de Usuario (só ID/Nome/Email) usada pra popular seletores de servidor — ver GET /servidores. */
+        ServidorOpcao: {
+            /** Format: uuid */
+            ID?: string;
+            Nome?: string;
+            /** Format: email */
+            Email?: string;
         };
         Contrato: {
             /** Format: uuid */
