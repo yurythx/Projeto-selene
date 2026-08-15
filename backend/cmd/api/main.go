@@ -206,6 +206,12 @@ func main() {
 		middleware.StructuredLogger(),
 		middleware.Metrics(),
 		middleware.NewCORS(cfg.CORSAllowedOrigins),
+		// Achado em auditoria de segurança: sem isso, qualquer endpoint
+		// JSON aceitava um corpo de tamanho arbitrário (só os dois
+		// endpoints de upload multipart tinham limite próprio) — DoS por
+		// exaustão de memória com um corpo de vários GB. Ver o comentário
+		// em MaxBodySize sobre por que multipart é pulado aqui.
+		middleware.MaxBodySize(),
 	)
 
 	// TrustedProxies vazio (default) = nenhum proxy é confiável, o Gin
