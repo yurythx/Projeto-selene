@@ -18,7 +18,15 @@ import { signOut } from "@/auth";
  * novo com 401 e volta aqui — loop infinito, reproduzido e corrigido
  * antes do commit (ver e2e/session.spec.ts).
  */
-export async function GET(request: Request) {
+export async function GET() {
   await signOut({ redirect: false });
-  return NextResponse.redirect(new URL("/login", request.url));
+  // NUNCA `new URL("/login", request.url)` — no build standalone em
+  // Docker, o Next monta request.url a partir de HOSTNAME/PORT internos
+  // do container (HOSTNAME=0.0.0.0), não do Host real da requisição; o
+  // redirect saía como "http://0.0.0.0:3000/login", que o navegador
+  // rejeita (net::ERR_ADDRESS_INVALID — reproduzido ao vivo antes desta
+  // correção). Mesma causa-raiz já documentada pra AUTH_URL em
+  // docker-compose.yml — reaproveita a mesma env var, já configurada com
+  // a origem pública correta (obrigatória, ver o comentário lá).
+  return NextResponse.redirect(new URL("/login", process.env.AUTH_URL));
 }
