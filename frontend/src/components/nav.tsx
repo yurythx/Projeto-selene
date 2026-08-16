@@ -8,12 +8,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const NAV_ITEMS = [
   { href: "/kanban", label: "Kanban" },
@@ -72,31 +74,55 @@ export function Nav() {
           </nav>
         </div>
 
-        {session?.user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <Avatar className="size-8">
-                    <AvatarFallback>{iniciais}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{session.user.name}</p>
-                  <p className="text-muted-foreground text-xs leading-none">{session.user.email}</p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => signOut({ redirectTo: "/login" })}>
-                Sair
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          {session?.user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full"
+                    aria-label={`Menu de ${session.user.name ?? session.user.email}`}
+                  >
+                    <Avatar className="size-8">
+                      <AvatarFallback>{iniciais}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                {/* DropdownMenuLabel (Menu.GroupLabel do base-ui) exige um
+                    Menu.Group ancestral — sem ele, useMenuGroupRootContext()
+                    lança "Base UI error #31: MenuGroupContext is missing" e
+                    quebra a página inteira (ErrorBoundary) toda vez que
+                    alguém abre este menu. Achado testando o toggle de tema
+                    ao lado — o mesmo clique que expôs o bug de onSelect vs
+                    onClick também revelou este. */}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{session.user.name}</p>
+                      <p className="text-muted-foreground text-xs leading-none">
+                        {session.user.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                {/* onClick, não onSelect — DropdownMenuItem é @base-ui/react/menu
+                  (não Radix): a prop que existe de verdade é onClick (ver
+                  MenuItemProps); onSelect é ignorado (não é um evento nativo
+                  de clique), então este botão nunca chamava signOut() antes
+                  desta correção. Achado ao testar o toggle de tema abaixo. */}
+              <DropdownMenuItem onClick={() => signOut({ redirectTo: "/login" })}>
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
     </header>
   );
