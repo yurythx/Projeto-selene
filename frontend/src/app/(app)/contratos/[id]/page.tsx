@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { buscarContrato, ApiError } from "@/lib/api/client";
@@ -41,6 +41,14 @@ export default async function ContratoDetalhePage({
   } catch (erro) {
     if (erro instanceof ApiError && (erro.status === 404 || erro.status === 400)) {
       notFound();
+    }
+    // 401 = sessão inválida (não "contrato não encontrado"), ver o
+    // comentário de requireApi em lib/api/client.ts — o mesmo tratamento
+    // (inclusive a rota intermediária que limpa o cookie, sem ela vira
+    // loop de redirect), só que inline aqui porque esta página já tem
+    // seu próprio catch.
+    if (erro instanceof ApiError && erro.status === 401) {
+      redirect("/api/auth/sessao-invalida");
     }
     throw erro;
   }

@@ -1,4 +1,5 @@
 import "server-only";
+import { redirect } from "next/navigation";
 import type { components } from "./schema";
 
 export type Contrato = components["schemas"]["Contrato"];
@@ -107,6 +108,47 @@ export async function apiFetch<T>(
   }
 
   return (await res.json()) as T;
+}
+
+/**
+ * Envolve uma chamada de apiFetch feita por um Server Component de
+ * PÁGINA — nunca por um Route Handler (ver o aviso abaixo) — pra tratar
+ * 401 ("token inválido ou expirado") como o que ele é: sessão inválida,
+ * não uma falha passageira do backend. Sem isso, o ApiError borbulhava
+ * pro error.tsx da rota, que mostra "backend pode estar indisponível,
+ * tente de novo" — mensagem enganosa aqui, já que "tentar de novo"
+ * reenviaria o mesmo token quebrado e cairia no mesmo 401 de novo.
+ *
+ * Cenário real que expôs a falta disto: a chave que assina os tokens de
+ * login local é gerada em memória a cada boot do backend (ver a
+ * LIMITAÇÃO CONHECIDA em internal/localauth/localauth.go) — todo
+ * restart/redeploy invalida silenciosamente sessões locais já abertas, e
+ * o usuário só via a tela de erro genérica em vez de ser levado pro
+ * login de novo.
+ *
+ * Redireciona pra /api/auth/sessao-invalida (não direto pra /login) —
+ * essa rota limpa o cookie de sessão antes de mandar pro /login. Um
+ * redirect("/login") direto NÃO basta: o cookie de sessão continua
+ * criptograficamente válido pro Auth.js (só o accessToken embutido é que
+ * o backend rejeitou), então proxy.ts (GUEST_ONLY_ROUTES) via sessão
+ * presente manda de volta pra "/" → /kanban → 401 de novo → aqui de
+ * novo — loop infinito, reproduzido antes desta versão do fix (ver
+ * e2e/session.spec.ts e o comentário na própria rota).
+ *
+ * NUNCA usar em Route Handlers (app/api/**\/route.ts): redirect() lança
+ * um sinal específico de renderização de página que eles não devem
+ * capturar — precisam continuar devolvendo o JSON de erro original (ver
+ * o catch em cada route.ts) pro fetch() do client interpretar.
+ */
+export async function requireApi<T>(promise: Promise<T>): Promise<T> {
+  try {
+    return await promise;
+  } catch (erro) {
+    if (erro instanceof ApiError && erro.status === 401) {
+      redirect("/api/auth/sessao-invalida");
+    }
+    throw erro;
+  }
 }
 
 export function listarContratos(accessToken: string, pagina = 1, tamanho = 20) {

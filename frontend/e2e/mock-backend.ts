@@ -224,8 +224,16 @@ let movimentacoesEmpenho: MovimentacaoEmpenho[] = [];
 let ocorrencias: Ocorrencia[] = [];
 const documentosPorProcesso = new Map<string, Documento[]>();
 
+// Liga/desliga via POST /__e2e__/forcar-401 — simula o cenário real que
+// expôs a falta de requireApi (lib/api/client.ts): o backend rejeitando
+// um token que o frontend achava válido (ex: reinício do backend
+// invalidando sessões de login local, ver a LIMITAÇÃO CONHECIDA em
+// internal/localauth/localauth.go).
+let forcar401 = false;
+
 function resetState() {
   seq = 0;
+  forcar401 = false;
   const contratoSeed = criarContratoSeed();
   contratos = [contratoSeed];
   processos = [criarProcessoSeed(contratoSeed)];
@@ -336,7 +344,19 @@ const server = createServer((req, res) => {
       return json(res, 204, null);
     }
 
+    if (pathname === "/__e2e__/forcar-401" && req.method === "POST") {
+      forcar401 = true;
+      return json(res, 204, null);
+    }
+
     if (pathname === "/health") return json(res, 200, { status: "ok" });
+
+    // Aplicado depois de reset/health (endpoints de controle/infra, não
+    // de domínio) e antes de qualquer rota /api/v1 — mesmo formato de
+    // corpo que o middleware Go real usa (ver internal/middleware/auth.go).
+    if (forcar401 && pathname.startsWith("/api/v1/") && pathname !== "/api/v1/auth/login") {
+      return json(res, 401, { error: "token inválido ou expirado" });
+    }
 
     if (pathname === "/api/v1/kanban/etapas") return json(res, 200, etapas);
     if (pathname === "/api/v1/kanban/tipos-documento") return json(res, 200, tiposDocumento);

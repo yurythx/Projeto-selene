@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
-import { listarContratos } from "@/lib/api/client";
+import { listarContratos, requireApi } from "@/lib/api/client";
 import {
   Table,
   TableBody,
@@ -35,7 +35,7 @@ export default async function ContratosPage() {
     return null;
   }
 
-  const resultado = await listarContratos(accessToken);
+  const resultado = await requireApi(listarContratos(accessToken));
 
   return (
     <div className="space-y-6">

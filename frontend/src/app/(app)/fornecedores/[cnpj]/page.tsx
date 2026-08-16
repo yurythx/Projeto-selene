@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getAccessToken } from "@/lib/auth-token";
 import { buscarFornecedor, ApiError } from "@/lib/api/client";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,13 @@ export default async function FornecedorDetalhePage({
   } catch (erro) {
     if (erro instanceof ApiError && (erro.status === 404 || erro.status === 400)) {
       notFound();
+    }
+    // 401 = sessão inválida, ver o comentário de requireApi em
+    // lib/api/client.ts — mesmo tratamento (inclusive a rota
+    // intermediária que limpa o cookie, sem ela vira loop de redirect),
+    // inline porque esta página já tem seu próprio catch.
+    if (erro instanceof ApiError && erro.status === 401) {
+      redirect("/api/auth/sessao-invalida");
     }
     throw erro;
   }

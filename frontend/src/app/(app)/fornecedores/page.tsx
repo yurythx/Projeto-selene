@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAccessToken } from "@/lib/auth-token";
-import { listarFornecedores } from "@/lib/api/client";
+import { listarFornecedores, requireApi } from "@/lib/api/client";
 import {
   Table,
   TableBody,
@@ -18,7 +18,7 @@ export default async function FornecedoresPage() {
     return null;
   }
 
-  const fornecedores = await listarFornecedores(accessToken);
+  const fornecedores = await requireApi(listarFornecedores(accessToken));
 
   return (
     <div className="space-y-6">

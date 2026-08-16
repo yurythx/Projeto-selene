@@ -1,4 +1,5 @@
 import { Nav } from "@/components/nav";
+import { SessionErrorWatcher } from "@/components/session-error-watcher";
 
 // Layout do grupo de rotas autenticadas — /login fica fora deste grupo e
 // não recebe o Nav. A checagem de autenticação em si é feita no proxy.ts
@@ -6,6 +7,7 @@ import { Nav } from "@/components/nav";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
+      <SessionErrorWatcher />
       <Nav />
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
         {children}

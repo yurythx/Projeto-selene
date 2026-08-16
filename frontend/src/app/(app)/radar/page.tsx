@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAccessToken } from "@/lib/auth-token";
-import { listarRadar, type ItemRadar } from "@/lib/api/client";
+import { listarRadar, requireApi, type ItemRadar } from "@/lib/api/client";
 import { RADAR_TIPO_LABEL } from "@/lib/radar";
 import {
   Table,
@@ -28,7 +28,7 @@ export default async function RadarPage() {
     return null;
   }
 
-  const itens = ordenar(await listarRadar(accessToken));
+  const itens = ordenar(await requireApi(listarRadar(accessToken)));
   const criticos = itens.filter((i) => i.nivel === "CRITICO").length;
 
   return (

@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
-import { listarUsuarios } from "@/lib/api/client";
+import { listarUsuarios, requireApi } from "@/lib/api/client";
 import {
   Table,
   TableBody,
@@ -33,7 +33,7 @@ export default async function AdminUsuariosPage() {
     );
   }
 
-  const usuarios = await listarUsuarios(accessToken);
+  const usuarios = await requireApi(listarUsuarios(accessToken));
 
   return (
     <div className="space-y-6">
