@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/go-pdf/fpdf"
 	"github.com/google/uuid"
@@ -30,11 +32,12 @@ import (
 // Pagamento Assinado" no checklist da Etapa 5). Trocar pelo layout
 // oficial da prefeitura é uma mudança isolada nesta função.
 type RelatorioService struct {
-	processoRepo     repository.ProcessoPagamentoRepository
-	docRepo          repository.DocumentoAnexoRepository
-	ocorrenciaRepo   repository.OcorrenciaRepository
-	empenhoRepo      repository.EmpenhoRepository
-	movimentacaoRepo repository.MovimentacaoEmpenhoRepository
+	processoRepo        repository.ProcessoPagamentoRepository
+	docRepo             repository.DocumentoAnexoRepository
+	ocorrenciaRepo      repository.OcorrenciaRepository
+	empenhoRepo         repository.EmpenhoRepository
+	movimentacaoRepo    repository.MovimentacaoEmpenhoRepository
+	modeloDocumentoRepo repository.ModeloDocumentoRepository
 }
 
 // NewRelatorioService constrói um RelatorioService.
@@ -44,13 +47,15 @@ func NewRelatorioService(
 	ocorrenciaRepo repository.OcorrenciaRepository,
 	empenhoRepo repository.EmpenhoRepository,
 	movimentacaoRepo repository.MovimentacaoEmpenhoRepository,
+	modeloDocumentoRepo repository.ModeloDocumentoRepository,
 ) (*RelatorioService, error) {
 	return &RelatorioService{
-		processoRepo:     processoRepo,
-		docRepo:          docRepo,
-		ocorrenciaRepo:   ocorrenciaRepo,
-		empenhoRepo:      empenhoRepo,
-		movimentacaoRepo: movimentacaoRepo,
+		processoRepo:        processoRepo,
+		docRepo:             docRepo,
+		ocorrenciaRepo:      ocorrenciaRepo,
+		empenhoRepo:         empenhoRepo,
+		movimentacaoRepo:    movimentacaoRepo,
+		modeloDocumentoRepo: modeloDocumentoRepo,
 	}, nil
 }
 
@@ -112,22 +117,27 @@ func calcularSaldoEmpenho(movimentacoes []models.MovimentacaoEmpenho) int64 {
 	return saldo
 }
 
-// Gerar renderiza o Relatório de Pagamento (PDF, A4) do processo
-// informado.
-func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]byte, error) {
+// Gerar renderiza o Relatório de Pagamento do processo informado — .docx
+// (modelo preenchido) quando existe um modelo ativo pro gatilho
+// RELATORIO_PAGAMENTO, ou o fallback fpdf (PDF) original. Diferente dos
+// 3 geradores de GeradorDocumentosService, esta rota não recebe usuário
+// no path hoje (GET /processos/:id/relatorio) — o merge field
+// "servidor_gerador_nome" fica de fora de propósito, ver o plano desta
+// feature.
+func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]byte, models.TipoFormatoDocumento, error) {
 	processo, err := s.processoRepo.FindByID(ctx, processoID)
 	if err != nil {
-		return nil, fmt.Errorf("service: carregar processo para relatório: %w", err)
+		return nil, "", fmt.Errorf("service: carregar processo para relatório: %w", err)
 	}
 
 	documentos, err := s.docRepo.ListByProcesso(ctx, processoID)
 	if err != nil {
-		return nil, fmt.Errorf("service: carregar documentos para relatório: %w", err)
+		return nil, "", fmt.Errorf("service: carregar documentos para relatório: %w", err)
 	}
 
 	ocorrencias, err := s.ocorrenciaRepo.ListByProcesso(ctx, processoID)
 	if err != nil {
-		return nil, fmt.Errorf("service: carregar ocorrências para relatório: %w", err)
+		return nil, "", fmt.Errorf("service: carregar ocorrências para relatório: %w", err)
 	}
 
 	var empenho *models.Empenho
@@ -135,11 +145,11 @@ func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]b
 	if processo.EmpenhoID != nil {
 		empenho, err = s.empenhoRepo.FindByID(ctx, *processo.EmpenhoID)
 		if err != nil {
-			return nil, fmt.Errorf("service: carregar empenho para relatório: %w", err)
+			return nil, "", fmt.Errorf("service: carregar empenho para relatório: %w", err)
 		}
 		movimentacoes, err := s.movimentacaoRepo.ListByEmpenho(ctx, empenho.ID)
 		if err != nil {
-			return nil, fmt.Errorf("service: carregar movimentações de empenho para relatório: %w", err)
+			return nil, "", fmt.Errorf("service: carregar movimentações de empenho para relatório: %w", err)
 		}
 		saldoEmpenho = calcularSaldoEmpenho(movimentacoes)
 	}
@@ -147,6 +157,59 @@ func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]b
 	fiscalNome := ""
 	if processo.Contrato.Fiscal != nil {
 		fiscalNome = processo.Contrato.Fiscal.Nome
+	}
+
+	documentosTexto := "Nenhum documento anexado ainda."
+	if len(documentos) > 0 {
+		linhas := make([]string, 0, len(documentos))
+		for _, doc := range documentos {
+			nomeTipo := ""
+			if doc.TipoDocumento != nil {
+				nomeTipo = doc.TipoDocumento.Nome
+			}
+			linhas = append(linhas, fmt.Sprintf("%s: %s", nomeTipo, doc.NomeArquivo))
+		}
+		documentosTexto = strings.Join(linhas, "; ")
+	}
+
+	ocorrenciasTexto := ""
+	if len(ocorrencias) > 0 {
+		linhas := make([]string, 0, len(ocorrencias))
+		for _, ocorrencia := range ocorrencias {
+			estado := estadoOcorrenciaLabel[ocorrencia.Estado]
+			if estado == "" {
+				estado = string(ocorrencia.Estado)
+			}
+			linhas = append(linhas, fmt.Sprintf("[%s] %s", estado, ocorrencia.Descricao))
+		}
+		ocorrenciasTexto = strings.Join(linhas, "; ")
+	}
+
+	empenhoNumero, empenhoSaldo := "", ""
+	if empenho != nil {
+		empenhoNumero = empenho.NumeroEmpenho
+		empenhoSaldo = formatarCentavos(saldoEmpenho)
+	}
+
+	conteudoModelo, usado, err := renderizarComModelo(ctx, s.modeloDocumentoRepo, models.GatilhoRelatorioPagamento, CamposMerge{
+		"numero_contrato":           processo.Contrato.NumeroContrato,
+		"portaria_nomeacao":         processo.Contrato.PortariaNomeacao,
+		"fiscal_nome":               fiscalNome,
+		"contratada_nome":           processo.Contrato.ContratadaNome,
+		"contratada_cnpj":           processo.Contrato.ContratadaCNPJ,
+		"tipo_objeto":               string(processo.Contrato.TipoObjeto),
+		"mes_referencia":            processo.MesReferencia,
+		"data_emissao":              time.Now().Format("02/01/2006"),
+		"documentos_anexados_lista": documentosTexto,
+		"ocorrencias_lista":         ocorrenciasTexto,
+		"empenho_numero":            empenhoNumero,
+		"empenho_saldo":             empenhoSaldo,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if usado {
+		return conteudoModelo, models.FormatoDOCX, nil
 	}
 
 	pdf := fpdf.New("P", "mm", "A4", "")
@@ -243,8 +306,8 @@ func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]b
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
-		return nil, fmt.Errorf("service: renderizar relatório de pagamento em PDF: %w", err)
+		return nil, "", fmt.Errorf("service: renderizar relatório de pagamento em PDF: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	return buf.Bytes(), models.FormatoPDF, nil
 }

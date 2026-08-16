@@ -140,6 +140,16 @@ var ErrEmailInvalido = errors.New("service: e-mail da contratada inválido")
 // "dias restantes" do Radar de Alertas (RadarService).
 var ErrVigenciaAntesDaAssinatura = errors.New("service: data de vigência final precisa ser posterior à data de assinatura")
 
+// ErrCategoriaObrigatoria é retornado ao criar/renomear uma categoria de
+// modelo de documento com nome vazio (só espaços em branco também conta).
+var ErrCategoriaObrigatoria = errors.New("service: categoria é obrigatória")
+
+// ErrArquivoNaoEDocx é retornado quando o arquivo enviado como modelo de
+// documento não é um .docx válido (assinatura ZIP ausente, ou a
+// biblioteca de merge não conseguiu abri-lo como Office Open XML) —
+// mensagem amigável em vez de vazar o erro cru de parsing XML pro admin.
+var ErrArquivoNaoEDocx = errors.New("service: arquivo enviado não é um .docx válido")
+
 // ErrOcorrenciaAbertaBloqueiaAvanco é retornado por
 // FiscalizacaoService.VerificarAvancoPermitido quando existe uma
 // Ocorrencia vinculada ao processo cujo Estado ainda não é REGULARIZADA —

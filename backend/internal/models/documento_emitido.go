@@ -18,6 +18,22 @@ const (
 	TipoDocumentoEmitidoAditivo     TipoDocumentoEmitido = "MINUTA_ADITIVO"
 )
 
+// TipoFormatoDocumento identifica se um DocumentoEmitido saiu do
+// fallback fpdf (PDF, comportamento original) ou de um ModeloDocumento
+// .docx preenchido via merge fields (ver
+// internal/service/modelo_documento_render.go) — sem isso não dá pra
+// saber depois qual caminho gerou cada documento já emitido. Relatório
+// de Pagamento (o 4º gatilho de ModeloDocumento) não persiste
+// DocumentoEmitido nenhum hoje (ver RelatorioService.Gerar), então este
+// campo não se aplica a ele — o formato ali é só refletido no
+// Content-Type da resposta HTTP, não guardado.
+type TipoFormatoDocumento string
+
+const (
+	FormatoPDF  TipoFormatoDocumento = "PDF"
+	FormatoDOCX TipoFormatoDocumento = "DOCX"
+)
+
 // DocumentoEmitido registra cada PDF oficial gerado pelo Selene a partir de
 // um contrato/processo — não é um upload do fiscal (isso é DocumentoAnexo),
 // é um documento que o PRÓPRIO sistema produziu. Serve dois propósitos:
@@ -62,6 +78,11 @@ type DocumentoEmitido struct {
 	// pública, sem autenticação: quem escaneia o QR de um papel impresso
 	// não tem login no Selene) sem expor o UUID interno do registro.
 	CodigoVerificacao string `gorm:"type:varchar(40);not null;uniqueIndex"`
+
+	// Formato tem default 'PDF' na coluna (migration 000009) — todo
+	// registro criado antes de ModeloDocumento existir permanece PDF,
+	// que é exatamente o que era gerado.
+	Formato TipoFormatoDocumento `gorm:"type:varchar(10);not null;default:'PDF';check:formato IN ('PDF','DOCX')"`
 
 	CreatedAt time.Time
 }

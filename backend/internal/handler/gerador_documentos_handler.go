@@ -1,14 +1,29 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"projeto-selene/internal/middleware"
+	"projeto-selene/internal/models"
 	"projeto-selene/internal/service"
 )
+
+// respondDocumentoGerado devolve o conteúdo gerado (PDF fallback ou
+// .docx de um modelo, ver GeradorDocumentosService) com o Content-Type e
+// a extensão certos — nomeBase sem extensão, ex: "notificacao-descumprimento".
+func respondDocumentoGerado(c *gin.Context, conteudo []byte, formato models.TipoFormatoDocumento, nomeBase string) {
+	if formato == models.FormatoDOCX {
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.docx"`, nomeBase))
+		c.Data(http.StatusOK, docxContentType, conteudo)
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="%s.pdf"`, nomeBase))
+	c.Data(http.StatusOK, "application/pdf", conteudo)
+}
 
 // GeradorDocumentosHandler expõe as rotas HTTP do Módulo 2 do roadmap
 // ("Gerador Inteligente de Documentos Legais"): geração dos 3 PDFs
@@ -46,14 +61,13 @@ func (h *GeradorDocumentosHandler) GerarNotificacao(c *gin.Context) {
 		return
 	}
 
-	pdf, _, err := h.geradorService.GerarNotificacao(c.Request.Context(), contratoID, req.Motivo, usuario.ID)
+	conteudo, formato, _, err := h.geradorService.GerarNotificacao(c.Request.Context(), contratoID, req.Motivo, usuario.ID, usuario.Nome)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
 
-	c.Header("Content-Disposition", `inline; filename="notificacao-descumprimento.pdf"`)
-	c.Data(http.StatusOK, "application/pdf", pdf)
+	respondDocumentoGerado(c, conteudo, formato, "notificacao-descumprimento")
 }
 
 // GerarAtesto trata POST /api/v1/processos/:id/atesto.
@@ -70,14 +84,13 @@ func (h *GeradorDocumentosHandler) GerarAtesto(c *gin.Context) {
 		return
 	}
 
-	pdf, _, err := h.geradorService.GerarAtesto(c.Request.Context(), processoID, usuario.ID)
+	conteudo, formato, _, err := h.geradorService.GerarAtesto(c.Request.Context(), processoID, usuario.ID, usuario.Nome)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
 
-	c.Header("Content-Disposition", `inline; filename="atesto.pdf"`)
-	c.Data(http.StatusOK, "application/pdf", pdf)
+	respondDocumentoGerado(c, conteudo, formato, "atesto")
 }
 
 type gerarMinutaAditivoRequest struct {
@@ -107,19 +120,18 @@ func (h *GeradorDocumentosHandler) GerarMinutaAditivo(c *gin.Context) {
 		return
 	}
 
-	pdf, _, err := h.geradorService.GerarMinutaAditivo(c.Request.Context(), contratoID, service.MinutaAditivoInput{
+	conteudo, formato, _, err := h.geradorService.GerarMinutaAditivo(c.Request.Context(), contratoID, service.MinutaAditivoInput{
 		TipoAditivo:   req.TipoAditivo,
 		Justificativa: req.Justificativa,
 		NovoValor:     req.NovoValor,
 		NovoPrazo:     req.NovoPrazo,
-	}, usuario.ID)
+	}, usuario.ID, usuario.Nome)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
 
-	c.Header("Content-Disposition", `inline; filename="minuta-aditivo.pdf"`)
-	c.Data(http.StatusOK, "application/pdf", pdf)
+	respondDocumentoGerado(c, conteudo, formato, "minuta-aditivo")
 }
 
 type verificarDocumentoResponse struct {

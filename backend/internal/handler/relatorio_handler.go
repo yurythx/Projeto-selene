@@ -28,12 +28,11 @@ func (h *RelatorioHandler) Gerar(c *gin.Context) {
 		return
 	}
 
-	pdf, err := h.relatorioService.Gerar(c.Request.Context(), processoID)
+	conteudo, formato, err := h.relatorioService.Gerar(c.Request.Context(), processoID)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
 
-	c.Header("Content-Disposition", `inline; filename="relatorio-pagamento.pdf"`)
-	c.Data(http.StatusOK, "application/pdf", pdf)
+	respondDocumentoGerado(c, conteudo, formato, "relatorio-pagamento")
 }

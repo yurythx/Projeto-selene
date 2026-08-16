@@ -19,7 +19,7 @@ func novoRelatorioServiceDeTeste(processo *models.ProcessoPagamento) (*service.R
 	empenhoRepo := testutil.NewFakeEmpenhoRepository()
 	movimentacaoRepo := &testutil.FakeMovimentacaoEmpenhoRepository{}
 
-	svc, err := service.NewRelatorioService(processoRepo, docRepo, ocorrenciaRepo, empenhoRepo, movimentacaoRepo)
+	svc, err := service.NewRelatorioService(processoRepo, docRepo, ocorrenciaRepo, empenhoRepo, movimentacaoRepo, testutil.NewFakeModeloDocumentoRepository())
 	if err != nil {
 		panic(err)
 	}
@@ -51,7 +51,7 @@ func TestRelatorioService_Gerar(t *testing.T) {
 		processo := novoProcessoParaRelatorio()
 		svc, _, _, _ := novoRelatorioServiceDeTeste(processo)
 
-		pdf, err := svc.Gerar(ctx, processo.ID)
+		pdf, _, err := svc.Gerar(ctx, processo.ID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -70,7 +70,7 @@ func TestRelatorioService_Gerar(t *testing.T) {
 			Estado:              models.OcorrenciaNotificada,
 		}
 
-		pdf, err := svc.Gerar(ctx, processo.ID)
+		pdf, _, err := svc.Gerar(ctx, processo.ID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -99,7 +99,7 @@ func TestRelatorioService_Gerar(t *testing.T) {
 		})
 		processo.EmpenhoID = &empenho.ID
 
-		pdf, err := svc.Gerar(ctx, processo.ID)
+		pdf, _, err := svc.Gerar(ctx, processo.ID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -114,7 +114,7 @@ func TestRelatorioService_Gerar(t *testing.T) {
 		idInexistente := uuid.New()
 		processo.EmpenhoID = &idInexistente
 
-		if _, err := svc.Gerar(ctx, processo.ID); err == nil {
+		if _, _, err := svc.Gerar(ctx, processo.ID); err == nil {
 			t.Fatal("esperava erro para empenho inexistente")
 		}
 	})

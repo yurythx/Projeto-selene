@@ -7,6 +7,7 @@ package testutil
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -672,3 +673,106 @@ func (f *FakeOcorrenciaRepository) ListAbertasPorProcesso(ctx context.Context, p
 }
 
 var _ repository.OcorrenciaRepository = (*FakeOcorrenciaRepository)(nil)
+
+// --- ModeloDocumentoRepository / ModeloDocumentoVersaoRepository ---
+
+type FakeModeloDocumentoRepository struct {
+	Modelos map[uuid.UUID]*models.ModeloDocumento
+}
+
+func NewFakeModeloDocumentoRepository(modelos ...*models.ModeloDocumento) *FakeModeloDocumentoRepository {
+	byID := make(map[uuid.UUID]*models.ModeloDocumento, len(modelos))
+	for _, m := range modelos {
+		byID[m.ID] = m
+	}
+	return &FakeModeloDocumentoRepository{Modelos: byID}
+}
+
+func (f *FakeModeloDocumentoRepository) Create(ctx context.Context, modelo *models.ModeloDocumento) error {
+	if modelo.ID == uuid.Nil {
+		modelo.ID = uuid.New()
+	}
+	for _, m := range f.Modelos {
+		if strings.EqualFold(m.Categoria, modelo.Categoria) {
+			return repository.ErrCategoriaModeloDuplicada
+		}
+	}
+	f.Modelos[modelo.ID] = modelo
+	return nil
+}
+
+func (f *FakeModeloDocumentoRepository) Update(ctx context.Context, modelo *models.ModeloDocumento) error {
+	if modelo.Gatilho != nil {
+		for id, m := range f.Modelos {
+			if id != modelo.ID && m.Gatilho != nil && *m.Gatilho == *modelo.Gatilho {
+				return repository.ErrGatilhoModeloJaAssociado
+			}
+		}
+	}
+	f.Modelos[modelo.ID] = modelo
+	return nil
+}
+
+func (f *FakeModeloDocumentoRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.ModeloDocumento, error) {
+	if m, ok := f.Modelos[id]; ok {
+		return m, nil
+	}
+	return nil, repository.ErrModeloDocumentoNotFound
+}
+
+func (f *FakeModeloDocumentoRepository) FindByCategoria(ctx context.Context, categoria string) (*models.ModeloDocumento, error) {
+	for _, m := range f.Modelos {
+		if strings.EqualFold(m.Categoria, categoria) {
+			return m, nil
+		}
+	}
+	return nil, repository.ErrModeloDocumentoNotFound
+}
+
+func (f *FakeModeloDocumentoRepository) List(ctx context.Context) ([]models.ModeloDocumento, error) {
+	out := []models.ModeloDocumento{}
+	for _, m := range f.Modelos {
+		out = append(out, *m)
+	}
+	return out, nil
+}
+
+func (f *FakeModeloDocumentoRepository) FindAtivoByGatilho(ctx context.Context, gatilho models.TipoGatilhoModelo) (*models.ModeloDocumento, error) {
+	for _, m := range f.Modelos {
+		if m.Gatilho != nil && *m.Gatilho == gatilho {
+			return m, nil
+		}
+	}
+	return nil, repository.ErrModeloDocumentoNotFound
+}
+
+var _ repository.ModeloDocumentoRepository = (*FakeModeloDocumentoRepository)(nil)
+
+type FakeModeloDocumentoVersaoRepository struct {
+	Versoes map[uuid.UUID]*models.ModeloDocumentoVersao
+}
+
+func NewFakeModeloDocumentoVersaoRepository(versoes ...*models.ModeloDocumentoVersao) *FakeModeloDocumentoVersaoRepository {
+	byID := make(map[uuid.UUID]*models.ModeloDocumentoVersao, len(versoes))
+	for _, v := range versoes {
+		byID[v.ID] = v
+	}
+	return &FakeModeloDocumentoVersaoRepository{Versoes: byID}
+}
+
+func (f *FakeModeloDocumentoVersaoRepository) Create(ctx context.Context, versao *models.ModeloDocumentoVersao) error {
+	if versao.ID == uuid.Nil {
+		versao.ID = uuid.New()
+	}
+	f.Versoes[versao.ID] = versao
+	return nil
+}
+
+func (f *FakeModeloDocumentoVersaoRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.ModeloDocumentoVersao, error) {
+	if v, ok := f.Versoes[id]; ok {
+		return v, nil
+	}
+	return nil, repository.ErrModeloDocumentoVersaoNotFound
+}
+
+var _ repository.ModeloDocumentoVersaoRepository = (*FakeModeloDocumentoVersaoRepository)(nil)

@@ -40,7 +40,9 @@ func respondError(c *gin.Context, err error) {
 	}
 
 	switch {
-	case errors.Is(err, repository.ErrNumeroContratoDuplicado):
+	case errors.Is(err, repository.ErrNumeroContratoDuplicado),
+		errors.Is(err, repository.ErrCategoriaModeloDuplicada),
+		errors.Is(err, repository.ErrGatilhoModeloJaAssociado):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 
 	case errors.Is(err, repository.ErrUserNotFound),
@@ -55,6 +57,8 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrPortariaDesignacaoNotFound),
 		errors.Is(err, repository.ErrEmpenhoNotFound),
 		errors.Is(err, repository.ErrOcorrenciaNotFound),
+		errors.Is(err, repository.ErrModeloDocumentoNotFound),
+		errors.Is(err, repository.ErrModeloDocumentoVersaoNotFound),
 		errors.Is(err, service.ErrFornecedorNaoEncontrado):
 		c.JSON(http.StatusNotFound, gin.H{"error": "recurso não encontrado"})
 
@@ -75,7 +79,9 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrDataInvalida),
 		errors.Is(err, service.ErrCNPJInvalido),
 		errors.Is(err, service.ErrEmailInvalido),
-		errors.Is(err, service.ErrVigenciaAntesDaAssinatura):
+		errors.Is(err, service.ErrVigenciaAntesDaAssinatura),
+		errors.Is(err, service.ErrCategoriaObrigatoria),
+		errors.Is(err, service.ErrArquivoNaoEDocx):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 	case errors.Is(err, service.ErrCredenciaisInvalidas):

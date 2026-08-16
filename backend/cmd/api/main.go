@@ -104,6 +104,8 @@ func main() {
 	empenhoRepo := repository.NewEmpenhoRepository(db)
 	movimentacaoEmpenhoRepo := repository.NewMovimentacaoEmpenhoRepository(db)
 	ocorrenciaRepo := repository.NewOcorrenciaRepository(db)
+	modeloDocumentoRepo := repository.NewModeloDocumentoRepository(db)
+	modeloDocumentoVersaoRepo := repository.NewModeloDocumentoVersaoRepository(db)
 
 	// Chave RSA do login local (usuário/senha) — gerada uma vez por
 	// processo, ver a "LIMITAÇÃO CONHECIDA" documentada em
@@ -129,14 +131,16 @@ func main() {
 	})
 	kanbanService := service.NewKanbanService(db, processoRepo, contratoRepo, docRepo, notifier)
 
-	relatorioService, err := service.NewRelatorioService(processoRepo, docRepo, ocorrenciaRepo, empenhoRepo, movimentacaoEmpenhoRepo)
+	modeloDocumentoService := service.NewModeloDocumentoService(db, modeloDocumentoRepo, modeloDocumentoVersaoRepo, cfg.StorageDir)
+
+	relatorioService, err := service.NewRelatorioService(processoRepo, docRepo, ocorrenciaRepo, empenhoRepo, movimentacaoEmpenhoRepo, modeloDocumentoRepo)
 	if err != nil {
 		fatal("falha ao inicializar serviço de relatório", err)
 	}
 
 	radarService := service.NewRadarService(contratoRepo, processoRepo, docRepo, logRepo)
 
-	geradorDocumentosService := service.NewGeradorDocumentosService(contratoRepo, processoRepo, docEmitidoRepo, cfg.PublicURL)
+	geradorDocumentosService := service.NewGeradorDocumentosService(contratoRepo, processoRepo, docEmitidoRepo, modeloDocumentoRepo, cfg.PublicURL)
 
 	vistoriaService := service.NewVistoriaService(vistoriaRepo, fotoVistoriaRepo, processoRepo, cfg.StorageDir)
 
@@ -193,6 +197,7 @@ func main() {
 	designacaoHandler := handler.NewDesignacaoHandler(designacaoService)
 	empenhoHandler := handler.NewEmpenhoHandler(empenhoService)
 	ocorrenciaHandler := handler.NewOcorrenciaHandler(ocorrenciaService)
+	modeloDocumentoHandler := handler.NewModeloDocumentoHandler(modeloDocumentoService)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -340,6 +345,17 @@ func main() {
 			// Login tradicional: só um admin cria contas locais (sem
 			// autocadastro público) — ver AuthService.CriarLocal.
 			admin.POST("/users/local", userHandler.CriarLocal)
+
+			// Configurações — Modelos de Documentos (ver
+			// internal/service/modelo_documento_render.go pra como os 4
+			// gatilhos consomem o modelo ativo na geração real).
+			admin.GET("/modelos-documento", modeloDocumentoHandler.Listar)
+			admin.POST("/modelos-documento", modeloDocumentoHandler.Criar)
+			admin.GET("/modelos-documento/:id", modeloDocumentoHandler.Buscar)
+			admin.PATCH("/modelos-documento/:id", modeloDocumentoHandler.Atualizar)
+			admin.POST("/modelos-documento/:id/versoes", modeloDocumentoHandler.NovaVersao)
+			admin.GET("/modelos-documento/:id/download", modeloDocumentoHandler.Baixar)
+			admin.GET("/modelos-documento/:id/versoes/:versaoId/download", modeloDocumentoHandler.BaixarVersao)
 		}
 	}
 

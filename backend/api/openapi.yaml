@@ -71,6 +71,16 @@ tags:
       rota/campo anterior muda de comportamento.
   - name: Administração
     description: Gestão de contas de usuário — restrito a administradores.
+  - name: Configurações
+    description: >
+      Modelos de Documentos: categorias de arquivo .docx (texto livre,
+      cadastrado pelo admin) com histórico de versões. Quando uma
+      categoria tem um gatilho associado a um dos 4 fluxos de geração já
+      existentes (Notificação de Descumprimento, Minuta de Aditivo,
+      Atesto, Relatório de Pagamento), esse fluxo passa a preencher o
+      .docx de verdade (merge fields) em vez do PDF fixo — sem modelo
+      cadastrado, o fallback original continua funcionando sem mudança.
+      Restrito a administradores.
 
 security:
   - bearerAuth: []
@@ -352,8 +362,13 @@ paths:
       - $ref: "#/components/parameters/ContratoId"
     post:
       tags: [Gerador de Documentos]
-      summary: Gera a Notificação de Descumprimento (PDF)
-      description: Registra o histórico em DocumentoEmitido (Fase 2 do roadmap).
+      summary: Gera a Notificação de Descumprimento (.docx de um modelo, ou PDF)
+      description: >
+        Registra o histórico em DocumentoEmitido (Fase 2 do roadmap).
+        Content-Type da resposta varia: se existir um modelo .docx ativo
+        cadastrado em Configurações pro gatilho NOTIFICACAO_DESCUMPRIMENTO,
+        devolve o modelo preenchido (merge fields); sem modelo cadastrado,
+        devolve o PDF fixo original (fallback, comportamento inalterado).
       requestBody:
         required: true
         content:
@@ -365,9 +380,11 @@ paths:
                 motivo: { type: string, description: "Motivo da notificação (texto livre)." }
       responses:
         "200":
-          description: PDF gerado.
+          description: Documento gerado — .docx (modelo) ou PDF (fallback), ver a description acima.
           content:
             application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
               schema: { type: string, format: binary }
         "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
@@ -380,11 +397,13 @@ paths:
       - $ref: "#/components/parameters/ContratoId"
     post:
       tags: [Gerador de Documentos]
-      summary: Gera a Minuta de Aditivo (PDF)
+      summary: Gera a Minuta de Aditivo (.docx de um modelo, ou PDF)
       description: >
         Justificativa técnica preliminar a partir de um questionário curto
         — não substitui a formalização jurídica definitiva do termo
-        aditivo. Registra o histórico em DocumentoEmitido.
+        aditivo. Registra o histórico em DocumentoEmitido. Content-Type da
+        resposta varia igual à Notificação (ver a description lá): modelo
+        .docx cadastrado pro gatilho MINUTA_ADITIVO, ou PDF fallback.
       requestBody:
         required: true
         content:
@@ -392,9 +411,11 @@ paths:
             schema: { $ref: "#/components/schemas/MinutaAditivoRequest" }
       responses:
         "200":
-          description: PDF gerado.
+          description: Documento gerado — .docx (modelo) ou PDF (fallback).
           content:
             application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
               schema: { type: string, format: binary }
         "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
@@ -598,19 +619,23 @@ paths:
       - $ref: "#/components/parameters/ProcessoId"
     get:
       tags: [Relatório]
-      summary: Gera o Relatório de Pagamento (PDF)
+      summary: Gera o Relatório de Pagamento (.docx de um modelo, ou PDF)
       description: >
-        PDF pronto para impressão/assinatura física. Layout funcional
-        próprio do Selene, não o modelo oficial da prefeitura (nenhum
-        template real foi fornecido — ver README, seção "Limitações").
-        SGF-Rondonópolis: inclui as seções de Ocorrências e Empenho
+        Pronto para impressão/assinatura física. Content-Type da resposta
+        varia: modelo .docx ativo cadastrado em Configurações pro gatilho
+        RELATORIO_PAGAMENTO devolve o modelo preenchido; sem modelo, PDF
+        de layout funcional próprio do Selene (fallback — nenhum template
+        oficial da prefeitura foi fornecido, ver README, seção
+        "Limitações"). SGF-Rondonópolis: inclui Ocorrências e Empenho
         (acompanhamento paralelo/informativo) quando o processo tiver
-        alguma vinculada — omitidas quando não há dado.
+        algum vinculado — omitidos quando não há dado, nos dois formatos.
       responses:
         "200":
-          description: PDF gerado.
+          description: Documento gerado — .docx (modelo) ou PDF (fallback).
           content:
             application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
               schema: { type: string, format: binary }
         "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
@@ -621,17 +646,23 @@ paths:
       - $ref: "#/components/parameters/ProcessoId"
     post:
       tags: [Gerador de Documentos]
-      summary: Gera o Atesto do processo (PDF, com QR code de verificação)
+      summary: Gera o Atesto do processo (.docx de um modelo, ou PDF com QR code)
       description: >
-        Folha de Rosto + Termo de Recebimento com QR code embutido, que
-        aponta pra `PUBLIC_URL/verificar/{codigo}` (ou só o código em texto
-        puro se `PUBLIC_URL` não estiver configurado). Registra o histórico
-        em DocumentoEmitido.
+        Folha de Rosto + Termo de Recebimento. Sem modelo cadastrado pro
+        gatilho ATESTO, PDF fallback com QR code embutido, que aponta pra
+        `PUBLIC_URL/verificar/{codigo}` (ou só o código em texto puro se
+        `PUBLIC_URL` não estiver configurado). Com modelo cadastrado,
+        devolve o .docx preenchido — SEM QR code embutido (a biblioteca
+        de merge só substitui texto; o código de verificação continua
+        presente em texto, verificável em GET /verificar/{codigo}).
+        Registra o histórico em DocumentoEmitido.
       responses:
         "200":
-          description: PDF gerado.
+          description: Documento gerado — .docx (modelo, sem QR) ou PDF (fallback, com QR).
           content:
             application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
               schema: { type: string, format: binary }
         "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
@@ -1118,6 +1149,179 @@ paths:
         "403": { $ref: "#/components/responses/Proibido" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
 
+  /api/v1/admin/modelos-documento:
+    get:
+      tags: [Configurações]
+      summary: Lista todas as categorias de modelo de documento
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ModeloDocumento" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+    post:
+      tags: [Configurações]
+      summary: Cadastra uma categoria nova com sua primeira versão
+      description: >
+        multipart/form-data. `categoria` é texto livre (não pode duplicar,
+        ignorando maiúscula/minúscula). `gatilho`, se informado, associa a
+        categoria a um dos 4 fluxos de geração existentes — só um gatilho
+        distinto por categoria (ver ModeloDocumento). Limite de 20MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [categoria, arquivo]
+              properties:
+                categoria: { type: string, example: "Ofício de Notificação" }
+                gatilho: { type: string, enum: [NOTIFICACAO_DESCUMPRIMENTO, MINUTA_ADITIVO, ATESTO, RELATORIO_PAGAMENTO], description: "Opcional — sem gatilho, a categoria é só biblioteca de referência." }
+                arquivo: { type: string, format: binary, description: "Precisa ser um .docx válido." }
+      responses:
+        "201":
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeloDocumento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "409": { $ref: "#/components/responses/Conflito" }
+        "413":
+          description: Arquivo excede 20MB.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+
+  /api/v1/admin/modelos-documento/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Configurações]
+      summary: Busca uma categoria por ID
+      description: Inclui a versão ativa e o histórico completo de versões (mais recente primeiro).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeloDocumento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+    patch:
+      tags: [Configurações]
+      summary: Renomeia a categoria e/ou troca o gatilho associado
+      description: >
+        Não mexe no arquivo (ver POST .../versoes pra isso). Só os campos
+        presentes no corpo são alterados. Em `gatilho`, "" ou "NENHUM"
+        remove a associação atual; um dos 4 valores associa a categoria a
+        um fluxo de geração.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                categoria: { type: string }
+                gatilho: { type: string, enum: ["", "NENHUM", NOTIFICACAO_DESCUMPRIMENTO, MINUTA_ADITIVO, ATESTO, RELATORIO_PAGAMENTO] }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeloDocumento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflito" }
+
+  /api/v1/admin/modelos-documento/{id}/versoes:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Configurações]
+      summary: Publica uma nova versão do arquivo, substituindo a ativa
+      description: A versão anterior permanece no histórico (nunca é apagada). Limite de 20MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [arquivo]
+              properties:
+                arquivo: { type: string, format: binary, description: "Precisa ser um .docx válido." }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeloDocumento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "413":
+          description: Arquivo excede 20MB.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+
+  /api/v1/admin/modelos-documento/{id}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Configurações]
+      summary: Baixa o arquivo da versão ATIVA da categoria
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/admin/modelos-documento/{id}/versoes/{versaoId}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: versaoId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Configurações]
+      summary: Baixa o arquivo de uma versão específica do histórico
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1161,6 +1365,10 @@ components:
         application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
     RequisicaoInvalida:
       description: "Corpo/parâmetros inválidos, ou regra de negócio violada (ex: contrato encerrado)."
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+    Conflito:
+      description: "Viola uma restrição de unicidade (ex: número de contrato duplicado, categoria de modelo já existente, gatilho já associado a outra categoria)."
       content:
         application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
     MuitasRequisicoes:
@@ -1543,3 +1751,37 @@ components:
       required: [descricao]
       properties:
         descricao: { type: string }
+
+    ModeloDocumento:
+      type: object
+      description: >
+        Categoria de arquivo-modelo (.docx) cadastrada em Configurações —
+        ex: "Ofício", "Relatório Quadrimestral". Gatilho associa a
+        categoria a um dos 4 fluxos de geração já existentes; sem
+        gatilho, é só biblioteca de referência (upload/consulta/
+        substituição, sem geração automática).
+      properties:
+        ID: { type: string, format: uuid }
+        Categoria: { type: string }
+        Gatilho: { type: string, enum: [NOTIFICACAO_DESCUMPRIMENTO, MINUTA_ADITIVO, ATESTO, RELATORIO_PAGAMENTO], nullable: true }
+        VersaoAtivaID: { type: string, format: uuid, nullable: true }
+        VersaoAtiva: { $ref: "#/components/schemas/ModeloDocumentoVersao" }
+        Versoes:
+          type: array
+          description: "Histórico completo, mais recente primeiro — só preenchido em GET .../{id}, omitido em listagens."
+          items: { $ref: "#/components/schemas/ModeloDocumentoVersao" }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+
+    ModeloDocumentoVersao:
+      type: object
+      description: Uma versão publicada do arquivo de uma categoria — nunca apagada quando substituída, ver ModeloDocumento.
+      properties:
+        ID: { type: string, format: uuid }
+        ModeloDocumentoID: { type: string, format: uuid }
+        NomeArquivo: { type: string }
+        HashArquivo: { type: string, description: "SHA-256 do conteúdo, hexadecimal." }
+        TamanhoBytes: { type: integer, format: int64 }
+        EnviadoPorID: { type: string, format: uuid }
+        EnviadoPor: { $ref: "#/components/schemas/Usuario" }
+        CreatedAt: { type: string, format: date-time }

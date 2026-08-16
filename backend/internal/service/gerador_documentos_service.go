@@ -19,20 +19,24 @@ import (
 )
 
 // GeradorDocumentosService implementa o Módulo 2 do roadmap ("Gerador
-// Inteligente de Documentos Legais"): 3 geradores de PDF oficiais
+// Inteligente de Documentos Legais"): 3 geradores de documento oficiais
 // pré-preenchidos a partir dos dados já cadastrados no Selene —
 // Notificação de Descumprimento, Atesto (com QR code de verificação) e
 // Minuta de Aditivo. Cada geração cria um registro em DocumentoEmitido,
 // que alimenta o Dossiê do Fornecedor (Fase 4) e permite auditoria
 // (quem gerou o quê, quando, com qual motivo).
 //
-// Reaproveita o mesmo padrão de PDF de RelatorioService (fpdf +
-// UnicodeTranslatorFromDescriptor + helper campo()) em vez de introduzir
-// uma abordagem nova.
+// Desde Configurações — Modelos de Documentos, cada gerador tenta
+// primeiro preencher o modelo .docx ativo associado ao seu gatilho (ver
+// renderizarComModelo em modelo_documento_render.go); sem modelo
+// cadastrado, cai no fallback original: PDF desenhado em fpdf
+// (UnicodeTranslatorFromDescriptor + helper campoPDF), reaproveitando o
+// mesmo padrão visual de RelatorioService.
 type GeradorDocumentosService struct {
-	contratoRepo   repository.ContratoRepository
-	processoRepo   repository.ProcessoPagamentoRepository
-	docEmitidoRepo repository.DocumentoEmitidoRepository
+	contratoRepo        repository.ContratoRepository
+	processoRepo        repository.ProcessoPagamentoRepository
+	docEmitidoRepo      repository.DocumentoEmitidoRepository
+	modeloDocumentoRepo repository.ModeloDocumentoRepository
 
 	// publicURL é a URL pública do FRONTEND (config.PublicURL) usada pra
 	// montar o link embutido no QR code do Atesto. Vazio = o QR embute só
@@ -45,13 +49,15 @@ func NewGeradorDocumentosService(
 	contratoRepo repository.ContratoRepository,
 	processoRepo repository.ProcessoPagamentoRepository,
 	docEmitidoRepo repository.DocumentoEmitidoRepository,
+	modeloDocumentoRepo repository.ModeloDocumentoRepository,
 	publicURL string,
 ) *GeradorDocumentosService {
 	return &GeradorDocumentosService{
-		contratoRepo:   contratoRepo,
-		processoRepo:   processoRepo,
-		docEmitidoRepo: docEmitidoRepo,
-		publicURL:      strings.TrimRight(publicURL, "/"),
+		contratoRepo:        contratoRepo,
+		processoRepo:        processoRepo,
+		docEmitidoRepo:      docEmitidoRepo,
+		modeloDocumentoRepo: modeloDocumentoRepo,
+		publicURL:           strings.TrimRight(publicURL, "/"),
 	}
 }
 
@@ -105,22 +111,62 @@ func campoPDF(pdf *fpdf.Fpdf, tr func(string) string, rotulo, valor string) {
 }
 
 // GerarNotificacao emite a Notificação de Descumprimento do contrato
-// informado, registra o histórico em DocumentoEmitido e retorna o PDF
-// pronto pra download.
-func (s *GeradorDocumentosService) GerarNotificacao(ctx context.Context, contratoID uuid.UUID, motivo string, geradoPorID uuid.UUID) ([]byte, *models.DocumentoEmitido, error) {
+// informado, registra o histórico em DocumentoEmitido e retorna o
+// documento pronto pra download — .docx (modelo preenchido) ou PDF
+// (fallback fpdf), ver o comentário no struct sobre qual prevalece.
+// geradoPorNome alimenta o merge field "servidor_gerador_nome" quando um
+// modelo está em uso; vem de middleware.UserFromContext no handler, não
+// há UserRepository injetado aqui só pra isso.
+func (s *GeradorDocumentosService) GerarNotificacao(ctx context.Context, contratoID uuid.UUID, motivo string, geradoPorID uuid.UUID, geradoPorNome string) ([]byte, models.TipoFormatoDocumento, *models.DocumentoEmitido, error) {
 	motivo = strings.TrimSpace(motivo)
 	if motivo == "" {
-		return nil, nil, ErrMotivoObrigatorio
+		return nil, "", nil, ErrMotivoObrigatorio
 	}
 
 	contrato, err := s.contratoRepo.FindByID(ctx, contratoID)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
 
 	codigo, err := gerarCodigoVerificacao()
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
+	}
+
+	dataVigenciaFim := ""
+	if contrato.DataVigenciaFim != nil {
+		dataVigenciaFim = contrato.DataVigenciaFim.Format("02/01/2006")
+	}
+	fiscalNome, fiscalEmail, fiscalMatricula := "", "", ""
+	if contrato.Fiscal != nil {
+		fiscalNome = contrato.Fiscal.Nome
+		fiscalEmail = contrato.Fiscal.Email
+		fiscalMatricula = contrato.Fiscal.Matricula
+	}
+	conteudoModelo, usado, err := renderizarComModelo(ctx, s.modeloDocumentoRepo, models.GatilhoNotificacaoDescumprimento, CamposMerge{
+		"numero_contrato":          contrato.NumeroContrato,
+		"contratada_nome":          contrato.ContratadaNome,
+		"contratada_cnpj":          contrato.ContratadaCNPJ,
+		"contratada_email":         contrato.ContratadaEmail,
+		"fiscal_nome":              fiscalNome,
+		"fiscal_email":             fiscalEmail,
+		"fiscal_matricula":         fiscalMatricula,
+		"tipo_objeto":              string(contrato.TipoObjeto),
+		"portaria_nomeacao":        contrato.PortariaNomeacao,
+		"data_assinatura_contrato": contrato.DataAssinatura.Format("02/01/2006"),
+		"data_vigencia_fim":        dataVigenciaFim,
+		"motivo":                   motivo,
+		"codigo_verificacao":       codigo,
+		"data_emissao":             time.Now().Format("02/01/2006"),
+		"servidor_gerador_nome":    geradoPorNome,
+	})
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	formato := models.FormatoPDF
+	if usado {
+		formato = models.FormatoDOCX
 	}
 
 	registro := &models.DocumentoEmitido{
@@ -129,9 +175,14 @@ func (s *GeradorDocumentosService) GerarNotificacao(ctx context.Context, contrat
 		Motivo:            motivo,
 		GeradoPorID:       geradoPorID,
 		CodigoVerificacao: codigo,
+		Formato:           formato,
 	}
 	if err := s.docEmitidoRepo.Create(ctx, registro); err != nil {
-		return nil, nil, fmt.Errorf("service: registrar notificação emitida: %w", err)
+		return nil, "", nil, fmt.Errorf("service: registrar notificação emitida: %w", err)
+	}
+
+	if usado {
+		return conteudoModelo, formato, registro, nil
 	}
 
 	pdf, tr := novoPDF(fmt.Sprintf("Notificacao de Descumprimento - %s", contrato.NumeroContrato))
@@ -167,38 +218,26 @@ func (s *GeradorDocumentosService) GerarNotificacao(ctx context.Context, contrat
 
 	corpo, err := renderizarPDF(pdf)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
-	return corpo, registro, nil
+	return corpo, formato, registro, nil
 }
 
 // GerarAtesto emite o Atesto (Folha de Rosto + Termo de Recebimento) do
-// processo informado, com QR code de verificação de autenticidade.
-func (s *GeradorDocumentosService) GerarAtesto(ctx context.Context, processoID uuid.UUID, geradoPorID uuid.UUID) ([]byte, *models.DocumentoEmitido, error) {
+// processo informado. Quando um modelo .docx está em uso pro gatilho
+// ATESTO, o QR code de verificação NÃO é embutido (a biblioteca de merge
+// só substitui texto, não sabe inserir imagem num placeholder) — o
+// código de verificação continua presente em texto, verificável em
+// GET /verificar/:codigo. Limitação aceita, ver o plano desta feature.
+func (s *GeradorDocumentosService) GerarAtesto(ctx context.Context, processoID uuid.UUID, geradoPorID uuid.UUID, geradoPorNome string) ([]byte, models.TipoFormatoDocumento, *models.DocumentoEmitido, error) {
 	processo, err := s.processoRepo.FindByID(ctx, processoID)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
 
 	codigo, err := gerarCodigoVerificacao()
 	if err != nil {
-		return nil, nil, err
-	}
-
-	registro := &models.DocumentoEmitido{
-		ContratoID:          processo.ContratoID,
-		ProcessoPagamentoID: &processo.ID,
-		Tipo:                models.TipoDocumentoEmitidoAtesto,
-		GeradoPorID:         geradoPorID,
-		CodigoVerificacao:   codigo,
-	}
-	if err := s.docEmitidoRepo.Create(ctx, registro); err != nil {
-		return nil, nil, fmt.Errorf("service: registrar atesto emitido: %w", err)
-	}
-
-	qrPNG, err := qrcode.Encode(s.conteudoQR(codigo), qrcode.Medium, 256)
-	if err != nil {
-		return nil, nil, fmt.Errorf("service: gerar QR code do atesto: %w", err)
+		return nil, "", nil, err
 	}
 
 	fiscalNome := ""
@@ -210,6 +249,46 @@ func (s *GeradorDocumentosService) GerarAtesto(ctx context.Context, processoID u
 		numeroContrato = processo.Contrato.NumeroContrato
 		contratadaNome = processo.Contrato.ContratadaNome
 		contratadaCNPJ = processo.Contrato.ContratadaCNPJ
+	}
+
+	conteudoModelo, usado, err := renderizarComModelo(ctx, s.modeloDocumentoRepo, models.GatilhoAtesto, CamposMerge{
+		"numero_contrato":       numeroContrato,
+		"contratada_nome":       contratadaNome,
+		"contratada_cnpj":       contratadaCNPJ,
+		"fiscal_nome":           fiscalNome,
+		"mes_referencia":        processo.MesReferencia,
+		"codigo_verificacao":    codigo,
+		"data_emissao":          time.Now().Format("02/01/2006"),
+		"servidor_gerador_nome": geradoPorNome,
+	})
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	formato := models.FormatoPDF
+	if usado {
+		formato = models.FormatoDOCX
+	}
+
+	registro := &models.DocumentoEmitido{
+		ContratoID:          processo.ContratoID,
+		ProcessoPagamentoID: &processo.ID,
+		Tipo:                models.TipoDocumentoEmitidoAtesto,
+		GeradoPorID:         geradoPorID,
+		CodigoVerificacao:   codigo,
+		Formato:             formato,
+	}
+	if err := s.docEmitidoRepo.Create(ctx, registro); err != nil {
+		return nil, "", nil, fmt.Errorf("service: registrar atesto emitido: %w", err)
+	}
+
+	if usado {
+		return conteudoModelo, formato, registro, nil
+	}
+
+	qrPNG, err := qrcode.Encode(s.conteudoQR(codigo), qrcode.Medium, 256)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("service: gerar QR code do atesto: %w", err)
 	}
 
 	pdf, tr := novoPDF(fmt.Sprintf("Atesto - %s - %s", numeroContrato, processo.MesReferencia))
@@ -250,32 +329,58 @@ func (s *GeradorDocumentosService) GerarAtesto(ctx context.Context, processoID u
 
 	corpo, err := renderizarPDF(pdf)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
-	return corpo, registro, nil
+	return corpo, formato, registro, nil
 }
 
 // GerarMinutaAditivo emite a Minuta de Aditivo de Valor/Prazo do contrato
 // informado a partir do questionário curto (input).
-func (s *GeradorDocumentosService) GerarMinutaAditivo(ctx context.Context, contratoID uuid.UUID, input MinutaAditivoInput, geradoPorID uuid.UUID) ([]byte, *models.DocumentoEmitido, error) {
+func (s *GeradorDocumentosService) GerarMinutaAditivo(ctx context.Context, contratoID uuid.UUID, input MinutaAditivoInput, geradoPorID uuid.UUID, geradoPorNome string) ([]byte, models.TipoFormatoDocumento, *models.DocumentoEmitido, error) {
 	justificativa := strings.TrimSpace(input.Justificativa)
 	if justificativa == "" {
-		return nil, nil, ErrMotivoObrigatorio
+		return nil, "", nil, ErrMotivoObrigatorio
 	}
 
 	contrato, err := s.contratoRepo.FindByID(ctx, contratoID)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
 
 	codigo, err := gerarCodigoVerificacao()
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
 
 	dadosExtras, err := json.Marshal(input)
 	if err != nil {
-		return nil, nil, fmt.Errorf("service: serializar dados da minuta de aditivo: %w", err)
+		return nil, "", nil, fmt.Errorf("service: serializar dados da minuta de aditivo: %w", err)
+	}
+
+	fiscalNome := ""
+	if contrato.Fiscal != nil {
+		fiscalNome = contrato.Fiscal.Nome
+	}
+	conteudoModelo, usado, err := renderizarComModelo(ctx, s.modeloDocumentoRepo, models.GatilhoMinutaAditivo, CamposMerge{
+		"numero_contrato":       contrato.NumeroContrato,
+		"contratada_nome":       contrato.ContratadaNome,
+		"contratada_cnpj":       contrato.ContratadaCNPJ,
+		"fiscal_nome":           fiscalNome,
+		"tipo_aditivo":          rotuloTipoAditivo(input.TipoAditivo),
+		"novo_valor":            input.NovoValor,
+		"novo_prazo":            input.NovoPrazo,
+		"justificativa":         justificativa,
+		"codigo_verificacao":    codigo,
+		"data_emissao":          time.Now().Format("02/01/2006"),
+		"servidor_gerador_nome": geradoPorNome,
+	})
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	formato := models.FormatoPDF
+	if usado {
+		formato = models.FormatoDOCX
 	}
 
 	registro := &models.DocumentoEmitido{
@@ -285,9 +390,14 @@ func (s *GeradorDocumentosService) GerarMinutaAditivo(ctx context.Context, contr
 		DadosExtras:       string(dadosExtras),
 		GeradoPorID:       geradoPorID,
 		CodigoVerificacao: codigo,
+		Formato:           formato,
 	}
 	if err := s.docEmitidoRepo.Create(ctx, registro); err != nil {
-		return nil, nil, fmt.Errorf("service: registrar minuta de aditivo emitida: %w", err)
+		return nil, "", nil, fmt.Errorf("service: registrar minuta de aditivo emitida: %w", err)
+	}
+
+	if usado {
+		return conteudoModelo, formato, registro, nil
 	}
 
 	pdf, tr := novoPDF(fmt.Sprintf("Minuta de Aditivo - %s", contrato.NumeroContrato))
@@ -328,9 +438,9 @@ func (s *GeradorDocumentosService) GerarMinutaAditivo(ctx context.Context, contr
 
 	corpo, err := renderizarPDF(pdf)
 	if err != nil {
-		return nil, nil, err
+		return nil, "", nil, err
 	}
-	return corpo, registro, nil
+	return corpo, formato, registro, nil
 }
 
 // Verificar confirma a autenticidade de um documento emitido a partir do
