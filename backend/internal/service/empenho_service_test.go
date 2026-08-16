@@ -102,6 +102,61 @@ func TestEmpenhoService_CalcularSaldo(t *testing.T) {
 	}
 }
 
+func TestEmpenhoService_RegistrarMovimentacao_RejeitaSaldoInsuficiente(t *testing.T) {
+	ctx := context.Background()
+	contrato := novoContratoDeTeste(uuid.New())
+	svc, _, _ := novoEmpenhoServiceDeTeste(contrato)
+
+	empenho, err := svc.CriarEmpenho(ctx, service.CriarEmpenhoInput{
+		ContratoID:   contrato.ID,
+		DataEmissao:  "2026-01-05",
+		ValorInicial: 100_00, // R$ 100,00
+	})
+	if err != nil {
+		t.Fatalf("erro ao criar empenho: %v", err)
+	}
+
+	t.Run("anulação maior que o saldo é rejeitada", func(t *testing.T) {
+		_, err := svc.RegistrarMovimentacao(ctx, service.RegistrarMovimentacaoInput{
+			EmpenhoID: empenho.ID,
+			Tipo:      models.MovimentacaoAnulacao,
+			Valor:     200_00, // maior que os R$ 100,00 disponíveis
+		})
+		if !errors.Is(err, service.ErrSaldoInsuficiente) {
+			t.Fatalf("esperava ErrSaldoInsuficiente, veio %v", err)
+		}
+	})
+
+	t.Run("fatura apropriada maior que o saldo é rejeitada", func(t *testing.T) {
+		_, err := svc.RegistrarMovimentacao(ctx, service.RegistrarMovimentacaoInput{
+			EmpenhoID: empenho.ID,
+			Tipo:      models.MovimentacaoFaturaApropriada,
+			Valor:     200_00,
+		})
+		if !errors.Is(err, service.ErrSaldoInsuficiente) {
+			t.Fatalf("esperava ErrSaldoInsuficiente, veio %v", err)
+		}
+	})
+
+	t.Run("anulação igual ao saldo disponível é aceita (zera o saldo)", func(t *testing.T) {
+		_, err := svc.RegistrarMovimentacao(ctx, service.RegistrarMovimentacaoInput{
+			EmpenhoID: empenho.ID,
+			Tipo:      models.MovimentacaoAnulacao,
+			Valor:     100_00,
+		})
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		saldo, err := svc.CalcularSaldo(ctx, empenho.ID)
+		if err != nil {
+			t.Fatalf("erro ao calcular saldo: %v", err)
+		}
+		if saldo != 0 {
+			t.Fatalf("esperava saldo 0, veio %d", saldo)
+		}
+	})
+}
+
 func TestEmpenhoService_RegistrarMovimentacao_RejeitaTipoInicial(t *testing.T) {
 	ctx := context.Background()
 	contrato := novoContratoDeTeste(uuid.New())

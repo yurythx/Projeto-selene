@@ -28,8 +28,19 @@ var ErrEtapaFinal = errors.New("service: processo já está na etapa final do ka
 var ErrProcessoNaoElegivelParaConclusao = errors.New("service: processo só pode ser concluído a partir da etapa final do kanban")
 
 // ErrFiscalInvalido é retornado ao tentar criar um contrato cujo FiscalID
-// não corresponde a um usuário com IsFiscal=true.
+// não corresponde a um usuário com IsFiscal=true — também usado por
+// DesignacaoService.Designar para os papéis FISCAL/FISCAL_SUPLENTE, mesma
+// regra (ver ErrServidorInvalido para os demais papéis).
 var ErrFiscalInvalido = errors.New("service: usuário informado não é um fiscal habilitado")
+
+// ErrServidorInvalido é retornado por DesignacaoService.Designar quando
+// ServidorID não corresponde a nenhum usuário cadastrado. ACHADO DE
+// REVISÃO: antes desta checagem, Designar não validava o servidor de
+// jeito nenhum (ao contrário de ContratoService.Criar, que sempre validou
+// o fiscal) — dava pra registrar uma Portaria de designação apontando pra
+// um ID inexistente, corrompendo silenciosamente o histórico auditável
+// que a norma exige (IN01 Art.6º / IN04 Art.10).
+var ErrServidorInvalido = errors.New("service: servidor designado não encontrado")
 
 // ErrTipoObjetoInvalido é retornado quando o TipoObjeto informado não é um
 // dos três valores válidos do domínio (CONSUMO, PERMANENTE, SERVICO).
@@ -76,6 +87,16 @@ var ErrValorInvalido = errors.New("service: valor precisa ser maior que zero")
 // automaticamente por EmpenhoService.CriarEmpenho, nunca via
 // RegistrarMovimentacao.
 var ErrTipoMovimentacaoInvalido = errors.New("service: tipo de movimentação inválido para este lançamento")
+
+// ErrSaldoInsuficiente é retornado por EmpenhoService.RegistrarMovimentacao
+// ao tentar lançar uma ANULACAO ou FATURA_APROPRIADA maior que o saldo
+// atual do empenho — sem esta checagem, o saldo reconstruído por
+// CalcularSaldo podia virar negativo, o que não tem significado
+// orçamentário (não dá pra anular ou apropriar mais do que o empenho tem
+// disponível). ACHADO DE REVISÃO: nenhuma validação de saldo existia antes
+// desta constante, único ponto do domínio financeiro do SGF sem trava
+// equivalente ao que já protegia Contrato/Ocorrência/Designação.
+var ErrSaldoInsuficiente = errors.New("service: valor da movimentação excede o saldo disponível do empenho")
 
 // ErrTransicaoOcorrenciaInvalida é retornado ao tentar mover uma
 // Ocorrencia para um estado que não é o próximo passo válido do fluxo

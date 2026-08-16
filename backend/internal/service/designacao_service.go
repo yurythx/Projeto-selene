@@ -19,11 +19,22 @@ import (
 type DesignacaoService struct {
 	portariaRepo repository.PortariaDesignacaoRepository
 	contratoRepo repository.ContratoRepository
+	userRepo     repository.UserRepository
 }
 
 // NewDesignacaoService constrói um DesignacaoService.
-func NewDesignacaoService(portariaRepo repository.PortariaDesignacaoRepository, contratoRepo repository.ContratoRepository) *DesignacaoService {
-	return &DesignacaoService{portariaRepo: portariaRepo, contratoRepo: contratoRepo}
+func NewDesignacaoService(portariaRepo repository.PortariaDesignacaoRepository, contratoRepo repository.ContratoRepository, userRepo repository.UserRepository) *DesignacaoService {
+	return &DesignacaoService{portariaRepo: portariaRepo, contratoRepo: contratoRepo, userRepo: userRepo}
+}
+
+// papeisQueExigemFiscal são os papéis de designação cujo servidor precisa
+// ter IsFiscal=true — mesma regra já aplicada a Contrato.FiscalID em
+// ContratoService.Criar. GESTOR e FISCAL_SETORIAL não têm campo de papel
+// equivalente em models.User (só IsFiscal/IsAdmin existem hoje), então só
+// a existência do servidor é validada para eles.
+var papeisQueExigemFiscal = map[models.PapelDesignacao]bool{
+	models.PapelFiscal:         true,
+	models.PapelFiscalSuplente: true,
 }
 
 // DesignarInput agrupa os dados de uma nova designação. DataDesignacao é
@@ -54,6 +65,17 @@ type DesignarInput struct {
 func (s *DesignacaoService) Designar(ctx context.Context, input DesignarInput) (*models.PortariaDesignacao, error) {
 	if _, err := s.contratoRepo.FindByID(ctx, input.ContratoID); err != nil {
 		return nil, err
+	}
+
+	servidor, err := s.userRepo.FindByID(ctx, input.ServidorID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, ErrServidorInvalido
+		}
+		return nil, fmt.Errorf("service: buscar servidor da designação: %w", err)
+	}
+	if papeisQueExigemFiscal[input.Papel] && !servidor.IsFiscal {
+		return nil, ErrFiscalInvalido
 	}
 
 	ativa, err := s.portariaRepo.FindAtivaPorContratoEPapel(ctx, input.ContratoID, input.Papel)

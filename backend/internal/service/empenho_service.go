@@ -107,6 +107,19 @@ func (s *EmpenhoService) RegistrarMovimentacao(ctx context.Context, input Regist
 		return nil, err
 	}
 
+	// ANULACAO e FATURA_APROPRIADA debitam o saldo (ver CalcularSaldo) —
+	// não podem exceder o que está disponível. REFORCO só credita, não
+	// precisa dessa checagem.
+	if input.Tipo == models.MovimentacaoAnulacao || input.Tipo == models.MovimentacaoFaturaApropriada {
+		saldoAtual, err := s.CalcularSaldo(ctx, input.EmpenhoID)
+		if err != nil {
+			return nil, fmt.Errorf("service: conferir saldo antes de registrar movimentação: %w", err)
+		}
+		if input.Valor > saldoAtual {
+			return nil, ErrSaldoInsuficiente
+		}
+	}
+
 	movimentacao := &models.MovimentacaoEmpenho{
 		EmpenhoID:           input.EmpenhoID,
 		Tipo:                input.Tipo,

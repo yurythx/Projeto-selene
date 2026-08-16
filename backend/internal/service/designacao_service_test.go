@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -30,18 +31,28 @@ func TestDesignacaoService_Designar(t *testing.T) {
 	fiscalOriginal := uuid.New()
 	contrato := novoContratoDeTeste(fiscalOriginal)
 
+	// Servidores usados pelos subtestes abaixo — precisam existir no
+	// userRepo agora que Designar valida ServidorID (ver ErrServidorInvalido).
+	// novoFiscal, primeiro e segundo são designados pra papéis que existem
+	// de verdade no fluxo (FISCAL, GESTOR); só novoFiscal precisa
+	// IsFiscal=true (papeisQueExigemFiscal).
+	novoFiscal := &models.User{ID: uuid.New(), Nome: "Novo Fiscal", IsFiscal: true}
+	naoFiscal := &models.User{ID: uuid.New(), Nome: "Servidor Sem IsFiscal", IsFiscal: false}
+	primeiroGestor := &models.User{ID: uuid.New(), Nome: "Primeiro Gestor"}
+	segundoGestor := &models.User{ID: uuid.New(), Nome: "Segundo Gestor"}
+	fiscalSetorial := &models.User{ID: uuid.New(), Nome: "Fiscal Setorial"}
+
 	contratoRepo := testutil.NewFakeContratoRepository(contrato)
 	portariaRepo := testutil.NewFakePortariaDesignacaoRepository()
-	svc := service.NewDesignacaoService(portariaRepo, contratoRepo)
+	userRepo := testutil.NewFakeUserRepository(novoFiscal, naoFiscal, primeiroGestor, segundoGestor, fiscalSetorial)
+	svc := service.NewDesignacaoService(portariaRepo, contratoRepo, userRepo)
 
 	criadoPor := uuid.New()
 
 	t.Run("primeira designação de FISCAL sincroniza Contrato.FiscalID", func(t *testing.T) {
-		novoFiscal := uuid.New()
-
 		designacao, err := svc.Designar(ctx, service.DesignarInput{
 			ContratoID:     contrato.ID,
-			ServidorID:     novoFiscal,
+			ServidorID:     novoFiscal.ID,
 			Papel:          models.PapelFiscal,
 			NumeroPortaria: "123/2026",
 			CriadoPorID:    criadoPor,
@@ -57,18 +68,15 @@ func TestDesignacaoService_Designar(t *testing.T) {
 		if err != nil {
 			t.Fatalf("erro ao buscar contrato: %v", err)
 		}
-		if contratoAtualizado.FiscalID != novoFiscal {
-			t.Fatalf("esperava Contrato.FiscalID sincronizado com %s, veio %s", novoFiscal, contratoAtualizado.FiscalID)
+		if contratoAtualizado.FiscalID != novoFiscal.ID {
+			t.Fatalf("esperava Contrato.FiscalID sincronizado com %s, veio %s", novoFiscal.ID, contratoAtualizado.FiscalID)
 		}
 	})
 
 	t.Run("segunda designação do mesmo papel revoga a anterior", func(t *testing.T) {
-		primeiro := uuid.New()
-		segundo := uuid.New()
-
 		primeira, err := svc.Designar(ctx, service.DesignarInput{
 			ContratoID:  contrato.ID,
-			ServidorID:  primeiro,
+			ServidorID:  primeiroGestor.ID,
 			Papel:       models.PapelGestor,
 			CriadoPorID: criadoPor,
 		})
@@ -78,7 +86,7 @@ func TestDesignacaoService_Designar(t *testing.T) {
 
 		if _, err := svc.Designar(ctx, service.DesignarInput{
 			ContratoID:  contrato.ID,
-			ServidorID:  segundo,
+			ServidorID:  segundoGestor.ID,
 			Papel:       models.PapelGestor,
 			CriadoPorID: criadoPor,
 		}); err != nil {
@@ -89,7 +97,7 @@ func TestDesignacaoService_Designar(t *testing.T) {
 		if err != nil {
 			t.Fatalf("erro ao buscar designação ativa: %v", err)
 		}
-		if ativa.ServidorID != segundo {
+		if ativa.ServidorID != segundoGestor.ID {
 			t.Fatalf("esperava que a designação ativa fosse do segundo servidor, veio %s", ativa.ServidorID)
 		}
 
@@ -108,7 +116,7 @@ func TestDesignacaoService_Designar(t *testing.T) {
 
 		if _, err := svc.Designar(ctx, service.DesignarInput{
 			ContratoID:  contrato.ID,
-			ServidorID:  uuid.New(),
+			ServidorID:  fiscalSetorial.ID,
 			Papel:       models.PapelFiscalSetorial,
 			CriadoPorID: criadoPor,
 		}); err != nil {
@@ -127,12 +135,59 @@ func TestDesignacaoService_Designar(t *testing.T) {
 	t.Run("contrato inexistente retorna erro", func(t *testing.T) {
 		_, err := svc.Designar(ctx, service.DesignarInput{
 			ContratoID:  uuid.New(),
-			ServidorID:  uuid.New(),
+			ServidorID:  novoFiscal.ID,
 			Papel:       models.PapelFiscal,
 			CriadoPorID: criadoPor,
 		})
 		if err == nil {
 			t.Fatal("esperava erro para contrato inexistente")
+		}
+	})
+
+	t.Run("servidor inexistente é rejeitado", func(t *testing.T) {
+		_, err := svc.Designar(ctx, service.DesignarInput{
+			ContratoID:  contrato.ID,
+			ServidorID:  uuid.New(), // não cadastrado no userRepo
+			Papel:       models.PapelGestor,
+			CriadoPorID: criadoPor,
+		})
+		if !errors.Is(err, service.ErrServidorInvalido) {
+			t.Fatalf("esperava ErrServidorInvalido, veio %v", err)
+		}
+	})
+
+	t.Run("designar FISCAL com servidor sem IsFiscal é rejeitado", func(t *testing.T) {
+		_, err := svc.Designar(ctx, service.DesignarInput{
+			ContratoID:  contrato.ID,
+			ServidorID:  naoFiscal.ID,
+			Papel:       models.PapelFiscal,
+			CriadoPorID: criadoPor,
+		})
+		if !errors.Is(err, service.ErrFiscalInvalido) {
+			t.Fatalf("esperava ErrFiscalInvalido, veio %v", err)
+		}
+	})
+
+	t.Run("designar FISCAL_SUPLENTE com servidor sem IsFiscal é rejeitado", func(t *testing.T) {
+		_, err := svc.Designar(ctx, service.DesignarInput{
+			ContratoID:  contrato.ID,
+			ServidorID:  naoFiscal.ID,
+			Papel:       models.PapelFiscalSuplente,
+			CriadoPorID: criadoPor,
+		})
+		if !errors.Is(err, service.ErrFiscalInvalido) {
+			t.Fatalf("esperava ErrFiscalInvalido, veio %v", err)
+		}
+	})
+
+	t.Run("designar GESTOR com servidor sem IsFiscal é aceito (papel não exige)", func(t *testing.T) {
+		if _, err := svc.Designar(ctx, service.DesignarInput{
+			ContratoID:  contrato.ID,
+			ServidorID:  naoFiscal.ID,
+			Papel:       models.PapelGestor,
+			CriadoPorID: criadoPor,
+		}); err != nil {
+			t.Fatalf("erro inesperado: %v", err)
 		}
 	})
 }

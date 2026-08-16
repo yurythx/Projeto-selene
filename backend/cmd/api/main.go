@@ -143,7 +143,7 @@ func main() {
 	fornecedorService := service.NewFornecedorService(contratoRepo, processoRepo, logRepo, docEmitidoRepo)
 
 	// SGF-Rondonópolis (Fase 2 do plano).
-	designacaoService := service.NewDesignacaoService(portariaDesignacaoRepo, contratoRepo)
+	designacaoService := service.NewDesignacaoService(portariaDesignacaoRepo, contratoRepo, userRepo)
 	empenhoService := service.NewEmpenhoService(empenhoRepo, movimentacaoEmpenhoRepo, contratoRepo)
 	ocorrenciaService := service.NewOcorrenciaService(ocorrenciaRepo, processoRepo)
 	fiscalizacaoService := service.NewFiscalizacaoService(docRepo, ocorrenciaRepo)

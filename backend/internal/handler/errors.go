@@ -68,6 +68,8 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrContaSemSenhaLocal),
 		errors.Is(err, service.ErrValorInvalido),
 		errors.Is(err, service.ErrTipoMovimentacaoInvalido),
+		errors.Is(err, service.ErrSaldoInsuficiente),
+		errors.Is(err, service.ErrServidorInvalido),
 		errors.Is(err, service.ErrTransicaoOcorrenciaInvalida),
 		errors.Is(err, service.ErrOcorrenciaAbertaBloqueiaAvanco),
 		errors.Is(err, service.ErrDataInvalida),
