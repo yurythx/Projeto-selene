@@ -592,8 +592,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Gera a Notificação de Descumprimento (PDF)
-         * @description Registra o histórico em DocumentoEmitido (Fase 2 do roadmap).
+         * Gera a Notificação de Descumprimento (.docx de um modelo, ou PDF)
+         * @description Registra o histórico em DocumentoEmitido (Fase 2 do roadmap). Content-Type da resposta varia: se existir um modelo .docx ativo cadastrado em Configurações pro gatilho NOTIFICACAO_DESCUMPRIMENTO, devolve o modelo preenchido (merge fields); sem modelo cadastrado, devolve o PDF fixo original (fallback, comportamento inalterado).
          */
         post: {
             parameters: {
@@ -613,13 +613,14 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description PDF gerado. */
+                /** @description Documento gerado — .docx (modelo) ou PDF (fallback), ver a description acima. */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/pdf": string;
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
                     };
                 };
                 400: components["responses"]["RequisicaoInvalida"];
@@ -647,8 +648,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Gera a Minuta de Aditivo (PDF)
-         * @description Justificativa técnica preliminar a partir de um questionário curto — não substitui a formalização jurídica definitiva do termo aditivo. Registra o histórico em DocumentoEmitido.
+         * Gera a Minuta de Aditivo (.docx de um modelo, ou PDF)
+         * @description Justificativa técnica preliminar a partir de um questionário curto — não substitui a formalização jurídica definitiva do termo aditivo. Registra o histórico em DocumentoEmitido. Content-Type da resposta varia igual à Notificação (ver a description lá): modelo .docx cadastrado pro gatilho MINUTA_ADITIVO, ou PDF fallback.
          */
         post: {
             parameters: {
@@ -665,13 +666,14 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description PDF gerado. */
+                /** @description Documento gerado — .docx (modelo) ou PDF (fallback). */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/pdf": string;
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
                     };
                 };
                 400: components["responses"]["RequisicaoInvalida"];
@@ -1065,8 +1067,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Gera o Relatório de Pagamento (PDF)
-         * @description PDF pronto para impressão/assinatura física. Layout funcional próprio do Selene, não o modelo oficial da prefeitura (nenhum template real foi fornecido — ver README, seção "Limitações"). SGF-Rondonópolis: inclui as seções de Ocorrências e Empenho (acompanhamento paralelo/informativo) quando o processo tiver alguma vinculada — omitidas quando não há dado.
+         * Gera o Relatório de Pagamento (.docx de um modelo, ou PDF)
+         * @description Pronto para impressão/assinatura física. Content-Type da resposta varia: modelo .docx ativo cadastrado em Configurações pro gatilho RELATORIO_PAGAMENTO devolve o modelo preenchido; sem modelo, PDF de layout funcional próprio do Selene (fallback — nenhum template oficial da prefeitura foi fornecido, ver README, seção "Limitações"). SGF-Rondonópolis: inclui Ocorrências e Empenho (acompanhamento paralelo/informativo) quando o processo tiver algum vinculado — omitidos quando não há dado, nos dois formatos.
          */
         get: {
             parameters: {
@@ -1079,13 +1081,14 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description PDF gerado. */
+                /** @description Documento gerado — .docx (modelo) ou PDF (fallback). */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/pdf": string;
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
                     };
                 };
                 400: components["responses"]["RequisicaoInvalida"];
@@ -1113,8 +1116,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Gera o Atesto do processo (PDF, com QR code de verificação)
-         * @description Folha de Rosto + Termo de Recebimento com QR code embutido, que aponta pra `PUBLIC_URL/verificar/{codigo}` (ou só o código em texto puro se `PUBLIC_URL` não estiver configurado). Registra o histórico em DocumentoEmitido.
+         * Gera o Atesto do processo (.docx de um modelo, ou PDF com QR code)
+         * @description Folha de Rosto + Termo de Recebimento. Sem modelo cadastrado pro gatilho ATESTO, PDF fallback com QR code embutido, que aponta pra `PUBLIC_URL/verificar/{codigo}` (ou só o código em texto puro se `PUBLIC_URL` não estiver configurado). Com modelo cadastrado, devolve o .docx preenchido — SEM QR code embutido (a biblioteca de merge só substitui texto; o código de verificação continua presente em texto, verificável em GET /verificar/{codigo}). Registra o histórico em DocumentoEmitido.
          */
         post: {
             parameters: {
@@ -1127,13 +1130,14 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description PDF gerado. */
+                /** @description Documento gerado — .docx (modelo, sem QR) ou PDF (fallback, com QR). */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/pdf": string;
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
                     };
                 };
                 400: components["responses"]["RequisicaoInvalida"];
@@ -2107,6 +2111,336 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/admin/modelos-documento": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista todas as categorias de modelo de documento */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        put?: never;
+        /**
+         * Cadastra uma categoria nova com sua primeira versão
+         * @description multipart/form-data. `categoria` é texto livre (não pode duplicar, ignorando maiúscula/minúscula). `gatilho`, se informado, associa a categoria a um dos 4 fluxos de geração existentes — só um gatilho distinto por categoria (ver ModeloDocumento). Limite de 20MB.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /** @example Ofício de Notificação */
+                        categoria: string;
+                        /**
+                         * @description Opcional — sem gatilho, a categoria é só biblioteca de referência.
+                         * @enum {string}
+                         */
+                        gatilho?: "NOTIFICACAO_DESCUMPRIMENTO" | "MINUTA_ADITIVO" | "ATESTO" | "RELATORIO_PAGAMENTO";
+                        /**
+                         * Format: binary
+                         * @description Precisa ser um .docx válido.
+                         */
+                        arquivo: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Criado. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                409: components["responses"]["Conflito"];
+                /** @description Arquivo excede 20MB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modelos-documento/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Busca uma categoria por ID
+         * @description Inclui a versão ativa e o histórico completo de versões (mais recente primeiro).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Renomeia a categoria e/ou troca o gatilho associado
+         * @description Não mexe no arquivo (ver POST .../versoes pra isso). Só os campos presentes no corpo são alterados. Em `gatilho`, "" ou "NENHUM" remove a associação atual; um dos 4 valores associa a categoria a um fluxo de geração.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        categoria?: string;
+                        /** @enum {string} */
+                        gatilho?: "" | "NENHUM" | "NOTIFICACAO_DESCUMPRIMENTO" | "MINUTA_ADITIVO" | "ATESTO" | "RELATORIO_PAGAMENTO";
+                    };
+                };
+            };
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                409: components["responses"]["Conflito"];
+            };
+        };
+        trace?: never;
+    };
+    "/api/v1/admin/modelos-documento/{id}/versoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publica uma nova versão do arquivo, substituindo a ativa
+         * @description A versão anterior permanece no histórico (nunca é apagada). Limite de 20MB.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /**
+                         * Format: binary
+                         * @description Precisa ser um .docx válido.
+                         */
+                        arquivo: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                /** @description Arquivo excede 20MB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modelos-documento/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Baixa o arquivo da versão ATIVA da categoria */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modelos-documento/{id}/versoes/{versaoId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versaoId: string;
+            };
+            cookie?: never;
+        };
+        /** Baixa o arquivo de uma versão específica do histórico */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    versaoId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2575,6 +2909,40 @@ export interface components {
         RegistrarOcorrenciaRequest: {
             descricao: string;
         };
+        /** @description Categoria de arquivo-modelo (.docx) cadastrada em Configurações — ex: "Ofício", "Relatório Quadrimestral". Gatilho associa a categoria a um dos 4 fluxos de geração já existentes; sem gatilho, é só biblioteca de referência (upload/consulta/ substituição, sem geração automática). */
+        ModeloDocumento: {
+            /** Format: uuid */
+            ID?: string;
+            Categoria?: string;
+            /** @enum {string|null} */
+            Gatilho?: "NOTIFICACAO_DESCUMPRIMENTO" | "MINUTA_ADITIVO" | "ATESTO" | "RELATORIO_PAGAMENTO" | null;
+            /** Format: uuid */
+            VersaoAtivaID?: string | null;
+            VersaoAtiva?: components["schemas"]["ModeloDocumentoVersao"];
+            /** @description Histórico completo, mais recente primeiro — só preenchido em GET .../{id}, omitido em listagens. */
+            Versoes?: components["schemas"]["ModeloDocumentoVersao"][];
+            /** Format: date-time */
+            CreatedAt?: string;
+            /** Format: date-time */
+            UpdatedAt?: string;
+        };
+        /** @description Uma versão publicada do arquivo de uma categoria — nunca apagada quando substituída, ver ModeloDocumento. */
+        ModeloDocumentoVersao: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ModeloDocumentoID?: string;
+            NomeArquivo?: string;
+            /** @description SHA-256 do conteúdo, hexadecimal. */
+            HashArquivo?: string;
+            /** Format: int64 */
+            TamanhoBytes?: number;
+            /** Format: uuid */
+            EnviadoPorID?: string;
+            EnviadoPor?: components["schemas"]["Usuario"];
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
     };
     responses: {
         /** @description Token ausente, inválido, expirado, ou issuer/audience não batem. */
@@ -2606,6 +2974,15 @@ export interface components {
         };
         /** @description Corpo/parâmetros inválidos, ou regra de negócio violada (ex: contrato encerrado). */
         RequisicaoInvalida: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErroSimples"];
+            };
+        };
+        /** @description Viola uma restrição de unicidade (ex: número de contrato duplicado, categoria de modelo já existente, gatilho já associado a outra categoria). */
+        Conflito: {
             headers: {
                 [name: string]: unknown;
             };

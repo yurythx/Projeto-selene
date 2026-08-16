@@ -224,7 +224,7 @@ export function EmpenhosCard({ contratoId, isFiscal }: { contratoId: string; isF
   });
 
   return (
-    <Card>
+    <Card className="shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">Empenho (acompanhamento SGF)</CardTitle>
         {isFiscal && <NovoEmpenhoDialog contratoId={contratoId} />}

@@ -197,7 +197,7 @@ export function DesignacoesCard({ contratoId, isFiscal }: { contratoId: string; 
   });
 
   return (
-    <Card>
+    <Card className="shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">Histórico de designação (SGF)</CardTitle>
         {isFiscal && <NovaDesignacaoDialog contratoId={contratoId} />}

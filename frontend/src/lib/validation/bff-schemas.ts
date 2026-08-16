@@ -166,3 +166,19 @@ export const registrarMovimentacaoSchema = z.object({
 export const registrarOcorrenciaSchema = z.object({
   descricao: z.string().trim().min(1, "obrigatório").max(4000),
 });
+
+// Configurações: Modelos de Documentos. Upload/substituição de versão
+// chegam como multipart/form-data (não JSON) nos Route Handlers — os
+// campos de texto são validados individualmente (mesmo padrão de
+// tipoDocumentoIdSchema/dataValidadeSchema acima), não como objeto único.
+const GATILHOS_MODELO = ["NOTIFICACAO_DESCUMPRIMENTO", "MINUTA_ADITIVO", "ATESTO", "RELATORIO_PAGAMENTO"] as const;
+
+export const categoriaModeloSchema = z.string().trim().min(1, "obrigatório").max(150);
+export const gatilhoModeloSchema = z.enum(GATILHOS_MODELO).optional();
+
+export const atualizarModeloDocumentoSchema = z.object({
+  categoria: z.string().trim().min(1, "obrigatório").max(150).optional(),
+  // "" ou "NENHUM" remove a associação atual — ver o comentário em
+  // ModeloDocumentoHandler.Atualizar (backend).
+  gatilho: z.enum([...GATILHOS_MODELO, "", "NENHUM"]).optional(),
+});

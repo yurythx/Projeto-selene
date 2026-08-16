@@ -4,6 +4,7 @@ import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
 import { gerarNotificacaoSchema } from "@/lib/validation/bff-schemas";
 import { gerarNotificacao, ApiError } from "@/lib/api/client";
+import { respostaDocumentoGerado } from "@/lib/documento-response";
 
 /**
  * Proxy do PDF da Notificação de Descumprimento (Módulo 2 do roadmap) —
@@ -36,13 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const res = await gerarNotificacao(accessToken, id, resultado.data.motivo);
-    return new NextResponse(res.body, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="notificacao-${id}.pdf"`,
-      },
-    });
+    return respostaDocumentoGerado(res, `notificacao-${id}`);
   } catch (erro) {
     if (erro instanceof ApiError) {
       return NextResponse.json(erro.body ?? { error: "erro na API" }, { status: erro.status });

@@ -33,6 +33,15 @@ export type RegistrarMovimentacaoRequest = components["schemas"]["RegistrarMovim
 export type Ocorrencia = components["schemas"]["Ocorrencia"];
 export type RegistrarOcorrenciaRequest = components["schemas"]["RegistrarOcorrenciaRequest"];
 
+// --- Configurações: Modelos de Documentos ---
+export type ModeloDocumento = components["schemas"]["ModeloDocumento"];
+export type ModeloDocumentoVersao = components["schemas"]["ModeloDocumentoVersao"];
+export type GatilhoModeloDocumento =
+  | "NOTIFICACAO_DESCUMPRIMENTO"
+  | "MINUTA_ADITIVO"
+  | "ATESTO"
+  | "RELATORIO_PAGAMENTO";
+
 /** Corpo de POST /processos/{id}/vistorias. */
 export interface NovaVistoriaRequest {
   latitude?: number | null;
@@ -392,6 +401,88 @@ export function regularizarOcorrencia(accessToken: string, ocorrenciaId: string)
   return apiFetch<Ocorrencia>(`/api/v1/ocorrencias/${ocorrenciaId}/regularizar`, accessToken, { method: "POST" });
 }
 
+// --- Configurações: Modelos de Documentos ---
+
+export function listarModelosDocumento(accessToken: string) {
+  return apiFetch<ModeloDocumento[]>("/api/v1/admin/modelos-documento", accessToken);
+}
+
+export function buscarModeloDocumento(accessToken: string, id: string) {
+  return apiFetch<ModeloDocumento>(`/api/v1/admin/modelos-documento/${id}`, accessToken);
+}
+
+export function criarModeloDocumento(
+  accessToken: string,
+  categoria: string,
+  gatilho: GatilhoModeloDocumento | undefined,
+  arquivo: File
+) {
+  const formData = new FormData();
+  formData.append("categoria", categoria);
+  if (gatilho) formData.append("gatilho", gatilho);
+  formData.append("arquivo", arquivo);
+  return apiFetch<ModeloDocumento>("/api/v1/admin/modelos-documento", accessToken, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export interface AtualizarModeloDocumentoRequest {
+  categoria?: string;
+  // "" ou "NENHUM" remove a associação atual — ver o comentário no
+  // handler Go (ModeloDocumentoHandler.Atualizar).
+  gatilho?: GatilhoModeloDocumento | "" | "NENHUM";
+}
+
+export function atualizarModeloDocumento(accessToken: string, id: string, dados: AtualizarModeloDocumentoRequest) {
+  return apiFetch<ModeloDocumento>(`/api/v1/admin/modelos-documento/${id}`, accessToken, {
+    method: "PATCH",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function novaVersaoModeloDocumento(accessToken: string, id: string, arquivo: File) {
+  const formData = new FormData();
+  formData.append("arquivo", arquivo);
+  return apiFetch<ModeloDocumento>(`/api/v1/admin/modelos-documento/${id}/versoes`, accessToken, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+/**
+ * Baixa o .docx da versão ATIVA da categoria. Não passa por apiFetch — a
+ * resposta é binária, mesmo padrão de baixarRelatorio.
+ */
+export async function baixarModeloDocumento(accessToken: string, id: string): Promise<Response> {
+  const res = await fetch(`${API_URL}/api/v1/admin/modelos-documento/${id}/download`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => undefined);
+    throw new ApiError(res.status, body);
+  }
+
+  return res;
+}
+
+/** Baixa o .docx de uma versão específica do histórico. */
+export async function baixarVersaoModeloDocumento(accessToken: string, id: string, versaoId: string): Promise<Response> {
+  const res = await fetch(`${API_URL}/api/v1/admin/modelos-documento/${id}/versoes/${versaoId}/download`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => undefined);
+    throw new ApiError(res.status, body);
+  }
+
+  return res;
+}
+
 /**
  * Baixa o Relatório de Campo (PDF) de uma vistoria. Não passa por
  * apiFetch — resposta binária, mesmo padrão de baixarRelatorio.
@@ -411,8 +502,11 @@ export async function baixarRelatorioCampo(accessToken: string, vistoriaId: stri
 }
 
 /**
- * Baixa o PDF do Relatório de Pagamento. Não passa por apiFetch — a
- * resposta é binária (application/pdf), não JSON.
+ * Baixa o Relatório de Pagamento — .docx (modelo preenchido, se houver um
+ * cadastrado em Configurações pro gatilho RELATORIO_PAGAMENTO) ou PDF
+ * (fallback). Não passa por apiFetch — resposta binária, não JSON; quem
+ * chama decide o que fazer a partir do Content-Type real da resposta
+ * (ver abrir-documento.ts).
  */
 export async function baixarRelatorio(accessToken: string, processoId: string): Promise<Response> {
   const res = await fetch(`${API_URL}/api/v1/processos/${processoId}/relatorio`, {
@@ -429,8 +523,11 @@ export async function baixarRelatorio(accessToken: string, processoId: string): 
 }
 
 /**
- * POST binário genérico (Módulo 2 do roadmap: os 3 geradores de PDF) —
- * mesma lógica de baixarRelatorio, mas com corpo JSON opcional.
+ * POST binário genérico (Módulo 2 do roadmap: os 3 geradores de
+ * documento) — mesma lógica de baixarRelatorio, mas com corpo JSON
+ * opcional. A resposta é .docx (modelo) ou PDF (fallback) conforme haja
+ * ou não um modelo cadastrado pro gatilho — nome mantido "postPDF" por
+ * histórico, mas o Content-Type real da resposta é quem manda.
  */
 async function postPDF(path: string, accessToken: string, body?: unknown): Promise<Response> {
   const res = await fetch(`${API_URL}${path}`, {

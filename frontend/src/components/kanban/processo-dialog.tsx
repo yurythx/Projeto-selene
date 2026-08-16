@@ -31,7 +31,7 @@ import type {
   AllowedAction,
 } from "@/lib/api/client";
 import { RadarNivelBadge } from "@/components/radar/radar-badge";
-import { abrirPDFDeResposta } from "@/lib/abrir-pdf";
+import { abrirOuBaixarDocumento } from "@/lib/abrir-documento";
 import { VistoriasDialog } from "./vistorias-dialog";
 import { OcorrenciasDialog } from "./ocorrencias-dialog";
 import { TriangleAlertIcon } from "lucide-react";
@@ -157,7 +157,7 @@ export function ProcessoDialog({
       return res;
     },
     onSuccess: async (res) => {
-      await abrirPDFDeResposta(res);
+      await abrirOuBaixarDocumento(res);
       toast.success("Atesto gerado.");
     },
     onError: (erro: Error) => toast.error(erro.message),

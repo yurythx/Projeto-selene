@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
 import { gerarAtesto, ApiError } from "@/lib/api/client";
+import { respostaDocumentoGerado } from "@/lib/documento-response";
 
 /** Proxy do PDF do Atesto — com QR code de verificação (Módulo 2 do roadmap). */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,13 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const res = await gerarAtesto(accessToken, id);
-    return new NextResponse(res.body, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="atesto-${id}.pdf"`,
-      },
-    });
+    return respostaDocumentoGerado(res, `atesto-${id}`);
   } catch (erro) {
     if (erro instanceof ApiError) {
       return NextResponse.json(erro.body ?? { error: "erro na API" }, { status: erro.status });

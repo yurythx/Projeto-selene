@@ -76,7 +76,7 @@ export default async function ContratoDetalhePage({
         </div>
       </div>
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Dados do contrato</CardTitle>
         </CardHeader>

@@ -85,13 +85,13 @@ export default async function FornecedorDetalhePage({
         </div>
       </div>
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">
             Contratos ({dossie.contratos?.length ?? 0})
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="overflow-x-auto p-0">
           <Table>
             <TableHeader>
               <TableRow>
@@ -121,7 +121,7 @@ export default async function FornecedorDetalhePage({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">
             Histórico de Notificações ({dossie.notificacoes?.length ?? 0})
@@ -134,7 +134,10 @@ export default async function FornecedorDetalhePage({
             </p>
           )}
           {(dossie.notificacoes ?? []).map((notificacao) => (
-            <div key={notificacao.ID} className="space-y-1 rounded-md border p-3 text-sm">
+            <div
+              key={notificacao.ID}
+              className="space-y-1 rounded-md border-l-4 border-l-rose-500 bg-muted/30 p-3 text-sm"
+            >
               <div className="flex items-center justify-between">
                 <span className="font-medium">
                   {notificacao.Tipo ? TIPO_NOTIFICACAO_LABEL[notificacao.Tipo] ?? notificacao.Tipo : "—"}

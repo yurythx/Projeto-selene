@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { abrirPDFDeResposta } from "@/lib/abrir-pdf";
+import { abrirOuBaixarDocumento } from "@/lib/abrir-documento";
 
 const schema = z.object({
   tipo_aditivo: z.enum(["VALOR", "PRAZO", "VALOR_E_PRAZO"]),
@@ -74,7 +74,7 @@ export function GerarMinutaAditivoDialog({ contratoId }: { contratoId: string })
       return res;
     },
     onSuccess: async (res) => {
-      await abrirPDFDeResposta(res);
+      await abrirOuBaixarDocumento(res);
       toast.success("Minuta de aditivo gerada.");
       setOpen(false);
       form.reset();

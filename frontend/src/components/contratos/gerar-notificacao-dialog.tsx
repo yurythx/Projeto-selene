@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { abrirPDFDeResposta } from "@/lib/abrir-pdf";
+import { abrirOuBaixarDocumento } from "@/lib/abrir-documento";
 
 // Motivos comuns pré-preenchidos ("motivo selecionado de uma lista", como
 // pedido no roadmap) — "OUTRO" revela um campo de texto livre. Não vem do
@@ -57,7 +57,7 @@ export function GerarNotificacaoDialog({ contratoId }: { contratoId: string }) {
       return res;
     },
     onSuccess: async (res) => {
-      await abrirPDFDeResposta(res);
+      await abrirOuBaixarDocumento(res);
       toast.success("Notificação gerada.");
       setOpen(false);
       setMotivoSelecionado("");
