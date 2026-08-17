@@ -106,6 +106,7 @@ func main() {
 	ocorrenciaRepo := repository.NewOcorrenciaRepository(db)
 	modeloDocumentoRepo := repository.NewModeloDocumentoRepository(db)
 	modeloDocumentoVersaoRepo := repository.NewModeloDocumentoVersaoRepository(db)
+	keycloakConfigRepo := repository.NewKeycloakConfigRepository(db)
 
 	// Chave RSA do login local (usuário/senha) — gerada uma vez por
 	// processo, ver a "LIMITAÇÃO CONHECIDA" documentada em
@@ -153,17 +154,44 @@ func main() {
 	fiscalizacaoService := service.NewFiscalizacaoService(docRepo, ocorrenciaRepo)
 
 	// --- Middleware de autenticação ---
-	// O contexto de fundo é usado apenas para o fetch inicial do JWKS na
-	// construção do middleware — não está atrelado ao ciclo de vida de
-	// nenhuma requisição.
-	authMiddleware, err := middleware.NewAuthMiddleware(context.Background(), middleware.AuthConfig{
+	// fallbackAuthConfig são as variáveis de ambiente de boot — servem de
+	// configuração INICIAL (e continuam sendo o retrato mostrado em
+	// Configurações → Keycloak/SSO enquanto nenhum admin salvar nada por
+	// lá, ver KeycloakConfigService.Buscar) até serem substituídas por
+	// uma linha salva no banco, se existir.
+	fallbackAuthConfig := middleware.AuthConfig{
 		JWKSURL:  cfg.KeycloakJWKSURL,
 		Issuer:   cfg.KeycloakIssuer,
 		Audience: cfg.KeycloakAudience,
-	}, userService, localKeys)
+	}
+
+	authConfigInicial := fallbackAuthConfig
+	if configSalva, err := keycloakConfigRepo.Buscar(context.Background()); err == nil {
+		audience := ""
+		if configSalva.Audience != nil {
+			audience = *configSalva.Audience
+		}
+		authConfigInicial = middleware.AuthConfig{
+			JWKSURL:  service.DeriveJWKSURL(configSalva.IssuerURL),
+			Issuer:   configSalva.IssuerURL,
+			Audience: audience,
+		}
+		logger.Info("usando configuração de Keycloak salva no banco (Configurações → Keycloak/SSO), não as variáveis de ambiente")
+	} else if !errors.Is(err, repository.ErrKeycloakConfigNotFound) {
+		fatal("falha ao carregar configuração de keycloak salva", err)
+	}
+
+	// O contexto de fundo é usado apenas para o fetch inicial do JWKS na
+	// construção do middleware — não está atrelado ao ciclo de vida de
+	// nenhuma requisição. authState permite trocar essa configuração em
+	// runtime depois (ver KeycloakConfigService.Salvar), sem reiniciar o
+	// processo.
+	authMiddleware, authState, err := middleware.NewAuthMiddleware(context.Background(), authConfigInicial, userService, localKeys)
 	if err != nil {
 		fatal("falha ao inicializar middleware de autenticação", err)
 	}
+
+	keycloakConfigService := service.NewKeycloakConfigService(keycloakConfigRepo, authState, fallbackAuthConfig)
 
 	// Rate limiter: Redis compartilhado se REDIS_ADDR estiver configurado
 	// (vale entre réplicas), senão cai para o limiter em memória (mesmo
@@ -198,6 +226,7 @@ func main() {
 	empenhoHandler := handler.NewEmpenhoHandler(empenhoService)
 	ocorrenciaHandler := handler.NewOcorrenciaHandler(ocorrenciaService)
 	modeloDocumentoHandler := handler.NewModeloDocumentoHandler(modeloDocumentoService)
+	keycloakConfigHandler := handler.NewKeycloakConfigHandler(keycloakConfigService, cfg.InternalAPISecret)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -240,6 +269,13 @@ func main() {
 	// DEPLOY.md), então isso não abre a API real ao público — só essa
 	// única rota de consulta, sempre chamada server-side pelo BFF.
 	router.GET("/api/v1/verificar/:codigo", geradorDocumentosHandler.Verificar)
+
+	// Consultado pelo frontend Next.js pra montar o provider Keycloak do
+	// NextAuth em runtime — de propósito FORA do grupo /api/v1
+	// autenticado abaixo (não há usuário logado ainda nesse momento) e
+	// gated por um segredo compartilhado em vez de JWT, ver o comentário
+	// em KeycloakConfigHandler.BuscarInterno.
+	router.GET("/internal/keycloak-config", keycloakConfigHandler.BuscarInterno)
 
 	// Login tradicional (usuário/senha) — também PÚBLICO de propósito
 	// (ainda não há sessão/token pra exigir), mas sujeito a rate limit por
@@ -358,6 +394,12 @@ func main() {
 			admin.POST("/modelos-documento/:id/versoes", modeloDocumentoHandler.NovaVersao)
 			admin.GET("/modelos-documento/:id/download", modeloDocumentoHandler.Baixar)
 			admin.GET("/modelos-documento/:id/versoes/:versaoId/download", modeloDocumentoHandler.BaixarVersao)
+
+			// Configurações — Keycloak/SSO: pedido explícito do usuário
+			// pra poder ver/mudar a configuração ativa sem depender de
+			// editar variáveis de ambiente e reiniciar os containers.
+			admin.GET("/config/keycloak", keycloakConfigHandler.Buscar)
+			admin.PUT("/config/keycloak", keycloakConfigHandler.Atualizar)
 		}
 	}
 

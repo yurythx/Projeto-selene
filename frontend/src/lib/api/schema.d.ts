@@ -2532,6 +2532,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/config/keycloak": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuração de Keycloak/SSO atualmente ativa
+         * @description Nunca inclui o Client Secret (só `tem_segredo_configurado`). `origem` indica se veio de uma configuração salva por um admin (`banco_de_dados`) ou ainda são as variáveis de ambiente de boot (`variaveis_de_ambiente`) — nesse segundo caso `client_id` vem vazio, porque o backend não tem acesso a AUTH_KEYCLOAK_ID (só o frontend, via variável de ambiente própria).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfiguracaoKeycloak"];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        /**
+         * Atualiza a configuração de Keycloak/SSO
+         * @description Aplica IMEDIATAMENTE (sem reiniciar o backend) à validação de token deste serviço — a nova configuração é testada (fetch do JWKS do novo issuer) ANTES de ser persistida; se o Keycloak informado não responder, nada é salvo e a configuração anterior continua ativa (fail-closed, 400). `client_secret` vazio numa atualização mantém o segredo já salvo (não exige reenviar toda vez). Efeito colateral: sessões via SSO Keycloak já abertas podem precisar logar de novo se o Client ID/Secret mudar; login local não é afetado.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AtualizarConfiguracaoKeycloakRequest"];
+                };
+            };
+            responses: {
+                /** @description Salvo e aplicado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfiguracaoKeycloak"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3042,6 +3113,27 @@ export interface components {
             EnviadoPor?: components["schemas"]["Usuario"];
             /** Format: date-time */
             CreatedAt?: string;
+        };
+        /** @description Configuração de Keycloak/SSO atualmente ativa — nunca inclui o Client Secret em texto puro. */
+        ConfiguracaoKeycloak: {
+            /** @description Vazio quando Origem=variaveis_de_ambiente (ver a descrição do endpoint). */
+            ClientID?: string;
+            IssuerURL?: string;
+            Audience?: string;
+            TemSegredoConfigurado?: boolean;
+            /** @enum {string} */
+            Origem?: "banco_de_dados" | "variaveis_de_ambiente";
+            /** Format: date-time */
+            AtualizadoEm?: string | null;
+            AtualizadoPorNome?: string;
+        };
+        AtualizarConfiguracaoKeycloakRequest: {
+            client_id: string;
+            /** @description Vazio numa atualização mantém o segredo já salvo. */
+            client_secret?: string;
+            /** @description Ex: "https://keycloak.prefeitura.gov.br/realms/selene" — o JWKS é derivado automaticamente (sufixo fixo do Keycloak). */
+            issuer_url: string;
+            audience?: string;
         };
     };
     responses: {

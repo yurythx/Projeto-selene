@@ -64,7 +64,23 @@ const PUBLIC_ROUTES = ["/verificar"];
 // volta pra ela mesma (loop).
 const TROCA_SENHA_ROUTE = "/trocar-senha";
 
-export default auth((req) => {
+// `await` aqui (top-level, suportado nativamente por módulos ES) é
+// necessário desde que src/auth.ts passou a usar a forma "preguiçosa" do
+// NextAuth (`NextAuth(async () => ({...}))`, ver o comentário lá — é o
+// que permite trocar Client ID/Secret/Issuer do Keycloak em runtime).
+// Achado real ao migrar: com config preguiçosa, next-auth/lib/index.js
+// (initAuth) devolve `auth` como uma função ASYNC — chamar
+// `auth((req) => {...})` (o padrão de wrapper de middleware) passa a
+// devolver uma Promise que RESOLVE pro handler de verdade, em vez do
+// handler em si de forma síncrona (que é o que a forma "eager"/objeto
+// antiga devolvia). Sem o await, `export default` vira uma Promise, e o
+// Next.js rejeita o arquivo com "must export a function". O await aqui
+// só resolve isso UMA VEZ no carregamento do módulo — o handler
+// resultante (a função abaixo) continua rodando por requisição
+// normalmente, e a config do Keycloak dentro dele continua sendo
+// buscada fresca a cada requisição (com cache curto, ver
+// lib/keycloak-config.ts), não fica presa ao valor deste boot.
+export default await auth((req) => {
   const { pathname } = req.nextUrl;
   const isGuestOnlyRoute = GUEST_ONLY_ROUTES.some((route) => pathname.startsWith(route));
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));

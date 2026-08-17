@@ -350,7 +350,23 @@ export function ProcessoPage({
                       ) : (
                         <XCircleIcon className="text-destructive size-4 shrink-0" />
                       )}
-                      <span className={cn(!item.satisfeito && "text-muted-foreground")}>{item.nome}</span>
+                      {/* Item satisfeito é clicável — abre a mesma
+                          pré-visualização de "Documentos anexados", sem
+                          precisar procurar o mesmo nome na outra lista
+                          (pedido explícito do usuário). Item pendente não
+                          tem documento nenhum ainda, então fica só texto. */}
+                      {item.satisfeito && item.documento ? (
+                        <button
+                          type="button"
+                          onClick={() => setDocumentoPreview(item.documento!)}
+                          aria-label={`Visualizar ${item.nome}`}
+                          className="hover:text-primary text-left underline-offset-2 hover:underline"
+                        >
+                          {item.nome}
+                        </button>
+                      ) : (
+                        <span className={cn(!item.satisfeito && "text-muted-foreground")}>{item.nome}</span>
+                      )}
                     </li>
                   ))}
                 </ul>

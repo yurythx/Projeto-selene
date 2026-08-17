@@ -25,7 +25,7 @@ const defaultTestDSN = "host=localhost port=55432 user=selene password=selene db
 // para garantir estado limpo. As tabelas de referência (kanban_etapas,
 // tipos_documento) NÃO são truncadas — são semeadas uma vez e reutilizadas
 // entre testes, como na aplicação real.
-var tabelasTransacionais = []string{"kanban_logs", "documentos_anexos", "modelo_documento_versoes", "modelos_documento", "processos_pagamento", "contratos", "users"}
+var tabelasTransacionais = []string{"kanban_logs", "documentos_anexos", "modelo_documento_versoes", "modelos_documento", "processos_pagamento", "contratos", "keycloak_config", "users"}
 
 // OpenTestDB conecta a um Postgres real, roda migrations + seed, e
 // devolve um *gorm.DB pronto para uso em testes de integração de

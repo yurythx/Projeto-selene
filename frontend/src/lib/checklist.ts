@@ -1,9 +1,16 @@
 import type { DocumentoAnexo } from "@/lib/api/client";
 
-/** Um item do checklist visual da página do processo — nome do TipoDocumento exigido + se já foi anexado. */
+/**
+ * Um item do checklist visual da página do processo — nome do
+ * TipoDocumento exigido, se já foi anexado, e (quando satisfeito) o
+ * próprio DocumentoAnexo correspondente, pra permitir pré-visualizá-lo
+ * direto do checklist (mesmo dialog usado em "Documentos anexados") sem
+ * precisar procurar o mesmo nome na outra lista.
+ */
 export interface ItemChecklist {
   nome: string;
   satisfeito: boolean;
+  documento?: DocumentoAnexo;
 }
 
 /**
@@ -21,14 +28,19 @@ export function montarChecklist(
   documentosRequeridos: string[],
   documentosAnexados: DocumentoAnexo[]
 ): ItemChecklist[] {
-  const anexadosPorNome = new Set(
-    documentosAnexados
-      .map((doc) => doc.TipoDocumento?.Nome)
-      .filter((nome): nome is string => Boolean(nome))
-  );
+  const anexadosPorNome = new Map<string, DocumentoAnexo>();
+  for (const doc of documentosAnexados) {
+    const nome = doc.TipoDocumento?.Nome;
+    // Regra de unicidade por tipo (ver ErrTipoDocumentoJaAnexado no
+    // backend) garante no máximo um documento por nome — não há
+    // ambiguidade de qual usar aqui.
+    if (nome && !anexadosPorNome.has(nome)) {
+      anexadosPorNome.set(nome, doc);
+    }
+  }
 
-  return documentosRequeridos.map((nome) => ({
-    nome,
-    satisfeito: anexadosPorNome.has(nome),
-  }));
+  return documentosRequeridos.map((nome) => {
+    const documento = anexadosPorNome.get(nome);
+    return { nome, satisfeito: Boolean(documento), documento };
+  });
 }

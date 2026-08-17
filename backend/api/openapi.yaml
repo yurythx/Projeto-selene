@@ -1389,6 +1389,53 @@ paths:
         "403": { $ref: "#/components/responses/Proibido" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
 
+  /api/v1/admin/config/keycloak:
+    get:
+      tags: [Configurações]
+      summary: Configuração de Keycloak/SSO atualmente ativa
+      description: >
+        Nunca inclui o Client Secret (só `tem_segredo_configurado`).
+        `origem` indica se veio de uma configuração salva por um admin
+        (`banco_de_dados`) ou ainda são as variáveis de ambiente de boot
+        (`variaveis_de_ambiente`) — nesse segundo caso `client_id` vem
+        vazio, porque o backend não tem acesso a AUTH_KEYCLOAK_ID (só o
+        frontend, via variável de ambiente própria).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracaoKeycloak" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+    put:
+      tags: [Configurações]
+      summary: Atualiza a configuração de Keycloak/SSO
+      description: >
+        Aplica IMEDIATAMENTE (sem reiniciar o backend) à validação de
+        token deste serviço — a nova configuração é testada (fetch do
+        JWKS do novo issuer) ANTES de ser persistida; se o Keycloak
+        informado não responder, nada é salvo e a configuração anterior
+        continua ativa (fail-closed, 400). `client_secret` vazio numa
+        atualização mantém o segredo já salvo (não exige reenviar toda
+        vez). Efeito colateral: sessões via SSO Keycloak já abertas podem
+        precisar logar de novo se o Client ID/Secret mudar; login local
+        não é afetado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AtualizarConfiguracaoKeycloakRequest" }
+      responses:
+        "200":
+          description: Salvo e aplicado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracaoKeycloak" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1862,3 +1909,24 @@ components:
         EnviadoPorID: { type: string, format: uuid }
         EnviadoPor: { $ref: "#/components/schemas/Usuario" }
         CreatedAt: { type: string, format: date-time }
+
+    ConfiguracaoKeycloak:
+      type: object
+      description: Configuração de Keycloak/SSO atualmente ativa — nunca inclui o Client Secret em texto puro.
+      properties:
+        ClientID: { type: string, description: "Vazio quando Origem=variaveis_de_ambiente (ver a descrição do endpoint)." }
+        IssuerURL: { type: string }
+        Audience: { type: string }
+        TemSegredoConfigurado: { type: boolean }
+        Origem: { type: string, enum: [banco_de_dados, variaveis_de_ambiente] }
+        AtualizadoEm: { type: string, format: date-time, nullable: true }
+        AtualizadoPorNome: { type: string }
+
+    AtualizarConfiguracaoKeycloakRequest:
+      type: object
+      required: [client_id, issuer_url]
+      properties:
+        client_id: { type: string }
+        client_secret: { type: string, description: "Vazio numa atualização mantém o segredo já salvo." }
+        issuer_url: { type: string, description: 'Ex: "https://keycloak.prefeitura.gov.br/realms/selene" — o JWKS é derivado automaticamente (sufixo fixo do Keycloak).' }
+        audience: { type: string }

@@ -198,7 +198,7 @@ export function Sidebar() {
                 {mostrarRotulos && "Administração"}
               </Link>
               <Link
-                href="/configuracoes/modelos-documentos"
+                href="/configuracoes"
                 aria-label="Configurações"
                 title={!mostrarRotulos ? "Configurações" : undefined}
                 onClick={() => setMobileOpen(false)}

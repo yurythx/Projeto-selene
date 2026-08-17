@@ -179,3 +179,19 @@ var ErrTipoDocumentoJaAnexado = errors.New("service: já existe um documento des
 // na Etapa 1. Pedido explícito do usuário: só oferecer/aceitar os
 // documentos que "realmente podem ser inseridos na etapa".
 var ErrTipoDocumentoNaoExigidoAinda = errors.New("service: este tipo de documento não faz parte do checklist até a etapa atual deste processo")
+
+// ErrKeycloakClientIDObrigatorio é retornado por
+// KeycloakConfigService.Salvar quando client_id vem vazio.
+var ErrKeycloakClientIDObrigatorio = errors.New("service: client_id é obrigatório")
+
+// ErrKeycloakSegredoObrigatorio é retornado quando client_secret vem
+// vazio na PRIMEIRA configuração salva (não há um segredo anterior pra
+// manter) — em atualizações seguintes, vazio é interpretado como "manter
+// o atual", ver o comentário em KeycloakConfigService.Salvar.
+var ErrKeycloakSegredoObrigatorio = errors.New("service: client_secret é obrigatório (não há uma configuração anterior pra manter o segredo atual)")
+
+// ErrKeycloakIssuerInvalido é retornado quando issuer_url não é uma URL
+// http(s) bem formada, ou quando o Keycloak nesse endereço não responde
+// ao buscar o JWKS (ver KeycloakConfigService.Salvar — a validação de
+// rede acontece ANTES de persistir, fail-closed).
+var ErrKeycloakIssuerInvalido = errors.New("service: issuer_url inválido")

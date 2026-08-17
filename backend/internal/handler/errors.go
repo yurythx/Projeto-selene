@@ -84,7 +84,10 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrCategoriaObrigatoria),
 		errors.Is(err, service.ErrArquivoNaoEDocx),
 		errors.Is(err, service.ErrTipoDocumentoNaoAplicavel),
-		errors.Is(err, service.ErrTipoDocumentoNaoExigidoAinda):
+		errors.Is(err, service.ErrTipoDocumentoNaoExigidoAinda),
+		errors.Is(err, service.ErrKeycloakClientIDObrigatorio),
+		errors.Is(err, service.ErrKeycloakSegredoObrigatorio),
+		errors.Is(err, service.ErrKeycloakIssuerInvalido):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 
 	case errors.Is(err, service.ErrCredenciaisInvalidas):

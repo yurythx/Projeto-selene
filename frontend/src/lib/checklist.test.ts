@@ -7,15 +7,16 @@ function doc(nome: string): DocumentoAnexo {
 }
 
 describe("montarChecklist", () => {
-  it("marca como satisfeito só o que está anexado", () => {
+  it("marca como satisfeito só o que está anexado, e carrega o documento correspondente", () => {
+    const documentoOF = doc("Ordem de Fornecimento (OF)");
     const resultado = montarChecklist(
       ["Ordem de Fornecimento (OF)", "Pré-Empenho", "Ofício de Solicitação"],
-      [doc("Ordem de Fornecimento (OF)")]
+      [documentoOF]
     );
     expect(resultado).toEqual([
-      { nome: "Ordem de Fornecimento (OF)", satisfeito: true },
-      { nome: "Pré-Empenho", satisfeito: false },
-      { nome: "Ofício de Solicitação", satisfeito: false },
+      { nome: "Ordem de Fornecimento (OF)", satisfeito: true, documento: documentoOF },
+      { nome: "Pré-Empenho", satisfeito: false, documento: undefined },
+      { nome: "Ofício de Solicitação", satisfeito: false, documento: undefined },
     ]);
   });
 
@@ -23,14 +24,17 @@ describe("montarChecklist", () => {
     expect(montarChecklist([], [doc("Nota Fiscal / Fatura")])).toEqual([]);
   });
 
-  it("documento anexado sem TipoDocumento carregado não quebra", () => {
+  it("documento anexado sem TipoDocumento carregado não quebra, e fica sem documento pra pré-visualizar", () => {
     const semTipo = { ID: "x", TipoDocumento: undefined } as DocumentoAnexo;
     const resultado = montarChecklist(["Pré-Empenho"], [semTipo]);
-    expect(resultado).toEqual([{ nome: "Pré-Empenho", satisfeito: false }]);
+    expect(resultado).toEqual([{ nome: "Pré-Empenho", satisfeito: false, documento: undefined }]);
   });
 
-  it("todos satisfeitos", () => {
-    const resultado = montarChecklist(["A", "B"], [doc("A"), doc("B")]);
+  it("todos satisfeitos, cada um com seu documento", () => {
+    const documentoA = doc("A");
+    const documentoB = doc("B");
+    const resultado = montarChecklist(["A", "B"], [documentoA, documentoB]);
     expect(resultado.every((item) => item.satisfeito)).toBe(true);
+    expect(resultado.map((item) => item.documento)).toEqual([documentoA, documentoB]);
   });
 });

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,17 +14,6 @@ import (
 	"projeto-selene/internal/middleware"
 	"projeto-selene/internal/service"
 )
-
-// documentoContentType detecta o Content-Type real do conteúdo — os
-// uploads deste app só aceitam PDF/imagem no cliente (accept=
-// "application/pdf,image/*" em processo-page.tsx), mas nada valida isso
-// no servidor hoje (diferente do .docx de Modelos de Documento, que
-// checa a assinatura ZIP), então sniffar de verdade em vez de confiar só
-// na extensão do nome do arquivo é mais robusto — usado pra decidir
-// "inline" (visualizável no navegador) no header de resposta.
-func documentoContentType(conteudo []byte) string {
-	return http.DetectContentType(conteudo)
-}
 
 // DocumentoHandler expõe as rotas HTTP de upload/consulta de documentos
 // anexos (PDFs) de um processo de pagamento.
@@ -161,20 +151,66 @@ func documentoIDsFromParams(c *gin.Context) (processoID, documentoID uuid.UUID, 
 // de propósito: alimenta a pré-visualização embutida na página do
 // processo (iframe/img), não força um download direto — o navegador
 // ainda pode salvar via "Salvar como" se quiser.
+//
+// Otimização pedida pelo usuário ("a visualização de documento é tão
+// lenta pra aparecer"): usa http.ServeContent sobre o *os.File aberto
+// por DocumentoService.Baixar (streaming direto do disco pro socket, sem
+// bufferizar o arquivo inteiro em memória antes de começar a responder)
+// e cache HTTP agressivo. Um documento anexado é imutável pelo próprio
+// ID — pra trocar o conteúdo, a Regra 1 (ver ErrTipoDocumentoJaAnexado)
+// obriga excluir e reenviar, o que sempre gera um documento com ID novo
+// — então o hash SHA-256 já calculado no upload serve de ETag perfeito
+// (mesmo conteúdo ⇒ mesmo ETag, sempre) e "immutable" evita até a
+// revalidação condicional em recarregamentos dentro da mesma sessão do
+// navegador: antes, reabrir a pré-visualização do MESMO documento
+// relia o arquivo inteiro do disco e retransmitia tudo de novo, sem
+// nenhum reaproveitamento.
 func (h *DocumentoHandler) Baixar(c *gin.Context) {
 	processoID, documentoID, ok := documentoIDsFromParams(c)
 	if !ok {
 		return
 	}
 
-	conteudo, documento, err := h.documentoService.Baixar(c.Request.Context(), processoID, documentoID)
+	arquivo, documento, err := h.documentoService.Baixar(c.Request.Context(), processoID, documentoID)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
+	defer func() {
+		if err := arquivo.Close(); err != nil {
+			slog.WarnContext(c.Request.Context(), "falha ao fechar arquivo do documento anexo", "caminho", documento.CaminhoStorage, "erro", err)
+		}
+	}()
 
 	c.Header("Content-Disposition", `inline; filename="`+documento.NomeArquivo+`"`)
-	c.Data(http.StatusOK, documentoContentType(conteudo), conteudo)
+	c.Header("ETag", `"`+documento.HashArquivo+`"`)
+	c.Header("Cache-Control", "private, max-age=31536000, immutable")
+
+	// Sniff dos primeiros bytes pra um Content-Type confiável — os
+	// uploads deste app só aceitam PDF/imagem no cliente (accept=
+	// "application/pdf,image/*" em processo-page.tsx), mas nada valida
+	// isso no servidor hoje (diferente do .docx de Modelos de Documento,
+	// que checa a assinatura ZIP), então sniffar de verdade em vez de
+	// confiar só na extensão do nome do arquivo é mais robusto. Sem isso,
+	// http.ServeContent tentaria adivinhar pela extensão de NomeArquivo
+	// antes de sniffar sozinho.
+	var buf [512]byte
+	n, err := arquivo.Read(buf[:])
+	if err != nil && err != io.EOF {
+		respondError(c, fmt.Errorf("service: ler cabeçalho do arquivo pra detectar content-type: %w", err))
+		return
+	}
+	c.Header("Content-Type", http.DetectContentType(buf[:n]))
+	if _, err := arquivo.Seek(0, io.SeekStart); err != nil {
+		respondError(c, fmt.Errorf("service: rebobinar arquivo do documento anexo: %w", err))
+		return
+	}
+
+	// http.ServeContent cuida do resto: escreve o Content-Length correto
+	// (via Seek), responde 304 sozinho quando o If-None-Match do cliente
+	// bate com o ETag acima (nem chega a transmitir o corpo), e suporta
+	// Range requests.
+	http.ServeContent(c.Writer, c.Request, documento.NomeArquivo, documento.DataUpload, arquivo)
 }
 
 // Excluir trata DELETE /api/v1/processos/:id/documentos/:docId —

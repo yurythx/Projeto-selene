@@ -83,6 +83,9 @@ services:
       KEYCLOAK_JWKS_URL: ${KEYCLOAK_JWKS_URL}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
+      # Precisa ser IDÊNTICO ao do serviço frontend abaixo — ver o
+      # comentário em backend/.env.example sobre GET /internal/keycloak-config.
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
       STORAGE_DIR: /app/storage
       # URL pública do FRONTEND (não deste serviço — ele não é exposto
       # publicamente, ver comentário acima) — usada só pra montar o link
@@ -130,6 +133,11 @@ services:
       AUTH_KEYCLOAK_ID: ${AUTH_KEYCLOAK_ID}
       AUTH_KEYCLOAK_SECRET: ${AUTH_KEYCLOAK_SECRET}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER}
+      # Precisa ser IDÊNTICO ao do serviço backend acima — autentica
+      # GET /internal/keycloak-config (consultado em runtime, sem
+      # reiniciar o container, quando um admin salva uma configuração de
+      # Keycloak nova em Configurações → Keycloak/SSO).
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
       # Rede interna do compose — nunca o host/porta publicado pro browser.
       API_URL: http://backend:8080
 

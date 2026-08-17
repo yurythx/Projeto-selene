@@ -209,6 +209,13 @@ test.describe("/kanban", () => {
     // documento criado (não faz parsing real do multipart) — o checklist
     // precisa refletir esse anexo sem precisar recarregar a página.
     await expect(itemChecklist).toHaveAttribute("data-satisfeito", "true");
+
+    // Pedido explícito do usuário: item satisfeito do checklist também
+    // abre a pré-visualização, igual "Documentos anexados" — não precisa
+    // procurar o mesmo nome na outra lista.
+    await itemChecklist.getByRole("button", { name: "Visualizar Ordem de Fornecimento (OF)" }).click();
+    const dialogPreview = page.getByRole("dialog", { name: "Ordem de Fornecimento (OF)" });
+    await expect(dialogPreview.locator("iframe")).toHaveAttribute("src", /\/documentos\/.+/);
   });
 
   test("tentar anexar um segundo documento do mesmo tipo é rejeitado (409)", async ({ page }) => {

@@ -182,3 +182,14 @@ export const atualizarModeloDocumentoSchema = z.object({
   // ModeloDocumentoHandler.Atualizar (backend).
   gatilho: z.enum([...GATILHOS_MODELO, "", "NENHUM"]).optional(),
 });
+
+// Configurações: Keycloak/SSO. client_secret vazio numa atualização
+// mantém o segredo já salvo (ver o comentário em
+// KeycloakConfigService.Salvar, backend) — só client_id/issuer_url são
+// sempre obrigatórios.
+export const atualizarKeycloakConfigSchema = z.object({
+  client_id: z.string().trim().min(1, "obrigatório").max(255),
+  client_secret: z.string().trim().max(500).optional(),
+  issuer_url: z.string().trim().url("precisa ser uma URL válida (ex: https://keycloak.exemplo.gov.br/realms/selene)"),
+  audience: z.string().trim().max(255).optional(),
+});

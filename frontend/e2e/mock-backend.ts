@@ -253,7 +253,20 @@ function resetState() {
     "fiscal.local@example.com": "senha12345",
     "novo.local@example.com": "temporaria123",
   };
+  keycloakConfig = null;
 }
+
+// Configurações → Keycloak/SSO — null = nenhum admin salvou nada ainda
+// (o mock responde no formato "variaveis_de_ambiente", igual ao backend
+// real quando keycloak_config está vazia).
+interface KeycloakConfigMock {
+  ClientID: string;
+  IssuerURL: string;
+  Audience: string;
+  AtualizadoEm: string;
+  AtualizadoPorNome: string;
+}
+let keycloakConfig: KeycloakConfigMock | null = null;
 
 // Mesma tabela De/Para do backend (ver
 // internal/service/fiscalizacao_service.go) — reimplementada aqui em
@@ -885,6 +898,51 @@ const server = createServer((req, res) => {
         Matricula: corpo.matricula ?? usuario.Matricula,
       });
       return json(res, 200, usuario);
+    }
+
+    if (pathname === "/api/v1/admin/config/keycloak" && req.method === "GET") {
+      if (!keycloakConfig) {
+        return json(res, 200, {
+          ClientID: "",
+          IssuerURL: "https://sso.exemplo.gov.br/realms/selene-dev",
+          Audience: "",
+          TemSegredoConfigurado: false,
+          Origem: "variaveis_de_ambiente",
+          AtualizadoEm: null,
+          AtualizadoPorNome: "",
+        });
+      }
+      return json(res, 200, {
+        ClientID: keycloakConfig.ClientID,
+        IssuerURL: keycloakConfig.IssuerURL,
+        Audience: keycloakConfig.Audience,
+        TemSegredoConfigurado: true,
+        Origem: "banco_de_dados",
+        AtualizadoEm: keycloakConfig.AtualizadoEm,
+        AtualizadoPorNome: keycloakConfig.AtualizadoPorNome,
+      });
+    }
+    if (pathname === "/api/v1/admin/config/keycloak" && req.method === "PUT") {
+      const corpo = bodyAsJSON();
+      if (!corpo.issuer_url || !corpo.issuer_url.startsWith("http")) {
+        return json(res, 400, { error: "issuer_url inválido" });
+      }
+      keycloakConfig = {
+        ClientID: corpo.client_id,
+        IssuerURL: corpo.issuer_url,
+        Audience: corpo.audience ?? "",
+        AtualizadoEm: new Date().toISOString(),
+        AtualizadoPorNome: "Admin Teste",
+      };
+      return json(res, 200, {
+        ClientID: keycloakConfig.ClientID,
+        IssuerURL: keycloakConfig.IssuerURL,
+        Audience: keycloakConfig.Audience,
+        TemSegredoConfigurado: true,
+        Origem: "banco_de_dados",
+        AtualizadoEm: keycloakConfig.AtualizadoEm,
+        AtualizadoPorNome: keycloakConfig.AtualizadoPorNome,
+      });
     }
 
     json(res, 404, { error: `rota não mockada: ${req.method} ${pathname}` });

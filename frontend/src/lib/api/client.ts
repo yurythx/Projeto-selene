@@ -42,6 +42,9 @@ export type GatilhoModeloDocumento =
   | "ATESTO"
   | "RELATORIO_PAGAMENTO";
 
+export type ConfiguracaoKeycloak = components["schemas"]["ConfiguracaoKeycloak"];
+export type AtualizarConfiguracaoKeycloakRequest = components["schemas"]["AtualizarConfiguracaoKeycloakRequest"];
+
 /** Corpo de POST /processos/{id}/vistorias. */
 export interface NovaVistoriaRequest {
   latitude?: number | null;
@@ -331,18 +334,31 @@ export function excluirDocumento(accessToken: string, processoId: string, docume
  * Disposition "inline" (ver o comentário no handler Go), pensado pra
  * pré-visualização embutida na página do processo. Não passa por
  * apiFetch — resposta binária, mesmo padrão de baixarRelatorio.
+ *
+ * ifNoneMatch repassa o header condicional do navegador (ver a rota BFF)
+ * pro backend — é o que permite o Go responder 304 sem reler/retransmitir
+ * o arquivo quando o cliente já tem o mesmo ETag em cache (otimização
+ * pedida pelo usuário: "a visualização de documento é tão lenta").
  */
 export async function baixarDocumentoAnexo(
   accessToken: string,
   processoId: string,
-  documentoId: string
+  documentoId: string,
+  ifNoneMatch?: string | null
 ): Promise<Response> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${accessToken}` };
+  if (ifNoneMatch) {
+    headers["If-None-Match"] = ifNoneMatch;
+  }
+
   const res = await fetch(`${API_URL}/api/v1/processos/${processoId}/documentos/${documentoId}/download`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers,
     cache: "no-store",
   });
 
-  if (!res.ok) {
+  // 304 não entra no critério de "ok" do fetch (só 200-299), mas é uma
+  // resposta válida do fluxo de cache condicional — não é um erro.
+  if (!res.ok && res.status !== 304) {
     const body = await res.json().catch(() => undefined);
     throw new ApiError(res.status, body);
   }
@@ -491,6 +507,19 @@ export function novaVersaoModeloDocumento(accessToken: string, id: string, arqui
   return apiFetch<ModeloDocumento>(`/api/v1/admin/modelos-documento/${id}/versoes`, accessToken, {
     method: "POST",
     body: formData,
+  });
+}
+
+// --- Configurações: Keycloak/SSO ---
+
+export function buscarConfiguracaoKeycloak(accessToken: string) {
+  return apiFetch<ConfiguracaoKeycloak>("/api/v1/admin/config/keycloak", accessToken);
+}
+
+export function atualizarConfiguracaoKeycloak(accessToken: string, dados: AtualizarConfiguracaoKeycloakRequest) {
+  return apiFetch<ConfiguracaoKeycloak>("/api/v1/admin/config/keycloak", accessToken, {
+    method: "PUT",
+    body: JSON.stringify(dados),
   });
 }
 

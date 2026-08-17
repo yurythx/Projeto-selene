@@ -58,6 +58,17 @@ type Config struct {
 	// Keycloak popula "aud" da mesma forma, então essa checagem é opt-in.
 	KeycloakAudience string
 
+	// InternalAPISecret autentica chamadas server-to-server que não têm
+	// (e não podem ter) um JWT de usuário — hoje só GET
+	// /internal/keycloak-config, consultado pelo frontend Next.js antes
+	// de qualquer login existir, pra montar o provider Keycloak do
+	// NextAuth em runtime (ver KeycloakConfigHandler.BuscarInterno).
+	// Precisa ser o MESMO valor configurado no frontend
+	// (INTERNAL_API_SECRET lá também). Obrigatório: como esse endpoint
+	// devolve um Client Secret em texto puro, um valor vazio/ausente
+	// seria uma porta aberta, não uma degradação aceitável.
+	InternalAPISecret string
+
 	// LogLevel: "debug", "info" (default), "warn" ou "error".
 	LogLevel string
 	// LogFormat: "json" ou "text". Default depende de AppEnv — "json" em
@@ -157,6 +168,11 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	internalAPISecret, err := requireEnv("INTERNAL_API_SECRET")
+	if err != nil {
+		return nil, err
+	}
+
 	appEnv := getEnvOrDefault("APP_ENV", "development")
 
 	defaultLogFormat := "text"
@@ -190,6 +206,8 @@ func Load() (*Config, error) {
 		KeycloakJWKSURL:  keycloakJWKSURL,
 		KeycloakIssuer:   keycloakIssuer,
 		KeycloakAudience: os.Getenv("KEYCLOAK_AUDIENCE"),
+
+		InternalAPISecret: internalAPISecret,
 
 		LogLevel:  getEnvOrDefault("LOG_LEVEL", "info"),
 		LogFormat: getEnvOrDefault("LOG_FORMAT", defaultLogFormat),

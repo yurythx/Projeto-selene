@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -362,10 +363,16 @@ func TestDocumentoServiceBaixar(t *testing.T) {
 		t.Fatalf("falha ao preparar documento de teste: %v", err)
 	}
 
-	t.Run("caminho feliz devolve o conteúdo do arquivo", func(t *testing.T) {
-		conteudo, doc, err := svc.Baixar(context.Background(), processoID, documento.ID)
+	t.Run("caminho feliz devolve o arquivo aberto", func(t *testing.T) {
+		arquivo, doc, err := svc.Baixar(context.Background(), processoID, documento.ID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
+		}
+		defer func() { _ = arquivo.Close() }()
+
+		conteudo, err := io.ReadAll(arquivo)
+		if err != nil {
+			t.Fatalf("falha ao ler arquivo devolvido: %v", err)
 		}
 		if string(conteudo) != "conteúdo de teste" {
 			t.Fatalf("conteúdo inesperado: %q", conteudo)

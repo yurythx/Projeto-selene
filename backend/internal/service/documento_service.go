@@ -170,15 +170,27 @@ func (s *DocumentoService) Listar(ctx context.Context, processoID uuid.UUID) ([]
 	return documentos, nil
 }
 
-// Baixar carrega o conteúdo (do disco) de um documento anexo específico —
-// usado tanto pra download quanto pra pré-visualização inline na página
-// do processo (ver GeradorDocumentosHandler... não, ver DocumentoHandler.
-// Baixar). Confere que o documento realmente pertence a processoID
-// (defesa em profundidade: os dois IDs vêm de segmentos distintos da
-// rota, GET /processos/:id/documentos/:docId/download — sem essa
-// checagem, adivinhar o UUID de um documento de outro processo bastaria
-// pra baixá-lo por uma URL de processo errada).
-func (s *DocumentoService) Baixar(ctx context.Context, processoID, documentoID uuid.UUID) ([]byte, *models.DocumentoAnexo, error) {
+// Baixar abre (sem ler inteiro pra memória) o arquivo em disco de um
+// documento anexo específico — usado tanto pra download quanto pra
+// pré-visualização inline na página do processo (ver
+// DocumentoHandler.Baixar, que usa http.ServeContent sobre o
+// io.ReadSeeker devolvido aqui pra transmitir direto do disco pro socket,
+// com suporte a range/condicional-GET). Otimização pedida pelo usuário
+// ("a visualização de documento é tão lenta"): antes, esta função lia o
+// arquivo inteiro pra um []byte antes de sequer começar a responder —
+// pra um PDF grande, isso significa alocar toda a memória do arquivo E
+// só começar a mandar o primeiro byte pro cliente depois da leitura
+// completa terminar (time-to-first-byte alto). Abrir e devolver o
+// *os.File deixa o handler transmitir em streaming.
+//
+// Confere que o documento realmente pertence a processoID (defesa em
+// profundidade: os dois IDs vêm de segmentos distintos da rota, GET
+// /processos/:id/documentos/:docId/download — sem essa checagem,
+// adivinhar o UUID de um documento de outro processo bastaria pra
+// baixá-lo por uma URL de processo errada).
+//
+// Quem chama é responsável por fechar o *os.File devolvido.
+func (s *DocumentoService) Baixar(ctx context.Context, processoID, documentoID uuid.UUID) (*os.File, *models.DocumentoAnexo, error) {
 	documento, err := s.docRepo.FindByID(ctx, documentoID)
 	if err != nil {
 		return nil, nil, err
@@ -187,12 +199,12 @@ func (s *DocumentoService) Baixar(ctx context.Context, processoID, documentoID u
 		return nil, nil, repository.ErrDocumentoNotFound
 	}
 
-	conteudo, err := os.ReadFile(documento.CaminhoStorage)
+	arquivo, err := os.Open(documento.CaminhoStorage)
 	if err != nil {
-		return nil, nil, fmt.Errorf("service: ler arquivo do documento anexo: %w", err)
+		return nil, nil, fmt.Errorf("service: abrir arquivo do documento anexo: %w", err)
 	}
 
-	return conteudo, documento, nil
+	return arquivo, documento, nil
 }
 
 // Excluir remove um documento anexo — o registro e o arquivo físico.

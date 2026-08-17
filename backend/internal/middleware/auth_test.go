@@ -122,7 +122,7 @@ func TestNewAuthMiddleware(t *testing.T) {
 	usuarioEsperado := &models.User{ID: uuid.New(), Nome: "Fiscal Teste", Email: "fiscal@teste.local"}
 
 	novoMiddleware := func(provisioner *spyProvisioner) gin.HandlerFunc {
-		mw, err := middleware.NewAuthMiddleware(context.Background(), middleware.AuthConfig{
+		mw, _, err := middleware.NewAuthMiddleware(context.Background(), middleware.AuthConfig{
 			JWKSURL: jwksServer.URL,
 			Issuer:  issuer,
 		}, provisioner, localKeys)
@@ -207,6 +207,77 @@ func TestNewAuthMiddleware(t *testing.T) {
 
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("status = %d, esperado 401", rec.Code)
+		}
+	})
+
+	t.Run("Reload troca a validação em runtime sem recriar o middleware", func(t *testing.T) {
+		spy := &spyProvisioner{usuarioParaRetornar: usuarioEsperado}
+		mw, state, err := middleware.NewAuthMiddleware(context.Background(), middleware.AuthConfig{
+			JWKSURL: jwksServer.URL,
+			Issuer:  issuer,
+		}, spy, localKeys)
+		if err != nil {
+			t.Fatalf("falha ao construir middleware: %v", err)
+		}
+
+		tokenAntigoIssuer := assinarTokenKeycloak(t, keycloakPriv, kid, issuer, "sub-1")
+		if rec := rodar(mw, tokenAntigoIssuer); rec.Code != http.StatusOK {
+			t.Fatalf("antes do reload: status = %d, esperado 200", rec.Code)
+		}
+
+		// Segundo "realm" — outra chave, outro issuer, outro servidor JWKS.
+		outraChave, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatalf("falha ao gerar segunda chave de teste: %v", err)
+		}
+		const kid2 = "test-kid-2"
+		const issuer2 = "http://outro-keycloak-de-teste/realms/selene"
+		jwksServer2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(jwksJSON(t, &outraChave.PublicKey, kid2))
+		}))
+		defer jwksServer2.Close()
+
+		if err := state.Reload(context.Background(), middleware.AuthConfig{JWKSURL: jwksServer2.URL, Issuer: issuer2}); err != nil {
+			t.Fatalf("Reload falhou: %v", err)
+		}
+
+		// Token do issuer ANTIGO agora é rejeitado — a validação trocou de
+		// verdade, não ficou como um segundo caminho aceito em paralelo.
+		if rec := rodar(mw, tokenAntigoIssuer); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("depois do reload, token do issuer antigo: status = %d, esperado 401", rec.Code)
+		}
+
+		// Token do issuer NOVO é aceito.
+		tokenNovoIssuer := assinarTokenKeycloak(t, outraChave, kid2, issuer2, "sub-2")
+		if rec := rodar(mw, tokenNovoIssuer); rec.Code != http.StatusOK {
+			t.Fatalf("depois do reload, token do issuer novo: status = %d, esperado 200 (corpo: %s)", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("Reload com JWKS inalcançável falha e mantém a configuração anterior funcionando", func(t *testing.T) {
+		spy := &spyProvisioner{usuarioParaRetornar: usuarioEsperado}
+		mw, state, err := middleware.NewAuthMiddleware(context.Background(), middleware.AuthConfig{
+			JWKSURL: jwksServer.URL,
+			Issuer:  issuer,
+		}, spy, localKeys)
+		if err != nil {
+			t.Fatalf("falha ao construir middleware: %v", err)
+		}
+
+		err = state.Reload(context.Background(), middleware.AuthConfig{
+			JWKSURL: "http://endereco-que-nao-existe.invalid/certs",
+			Issuer:  "http://endereco-que-nao-existe.invalid",
+		})
+		if err == nil {
+			t.Fatal("esperava erro ao tentar recarregar com um JWKS inalcançável, veio nil")
+		}
+
+		// A configuração ORIGINAL continua funcionando — um admin não
+		// consegue travar a autenticação de todo mundo com uma URL errada.
+		token := assinarTokenKeycloak(t, keycloakPriv, kid, issuer, "sub-1")
+		if rec := rodar(mw, token); rec.Code != http.StatusOK {
+			t.Fatalf("depois do Reload falhar: status = %d, esperado 200 (configuração anterior deveria continuar ativa)", rec.Code)
 		}
 	})
 
