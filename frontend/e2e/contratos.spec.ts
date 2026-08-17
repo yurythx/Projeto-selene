@@ -19,6 +19,17 @@ test.describe("/contratos", () => {
     await page.getByLabel("Data de assinatura").fill("2026-02-01");
     await page.getByLabel("Empresa contratada").fill("Nova Fornecedora Ltda");
     await page.getByLabel("CNPJ").fill("11.111.111/0001-11");
+
+    const comboTipo = page.getByRole("combobox", { name: "Tipo de objeto" });
+    await comboTipo.click();
+    await page.getByRole("option", { name: "Serviço" }).click();
+    // Regressão: sem a prop `items` no Select (ver components/ui/select e
+    // o comentário em contratos-filtro.tsx), o base-ui perde o rótulo
+    // registrado assim que o popup fecha e o trigger passa a mostrar
+    // "SERVICO" (o value cru) em vez de "Serviço" — bug real reportado em
+    // produção, mesma causa do bug no select de tipo de documento.
+    await expect(comboTipo).toContainText("Serviço");
+
     await page.getByRole("button", { name: "Salvar" }).click();
 
     await expect(page.getByRole("link", { name: "2/2026" })).toBeVisible();

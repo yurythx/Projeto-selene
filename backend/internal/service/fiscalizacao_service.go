@@ -95,6 +95,16 @@ type ProcessoComFiscalizacao struct {
 	EstadoFiscalizacao EstadoFiscalizacao `json:"estado_fiscalizacao"`
 	AcaoOuEspera       AcaoOuEspera       `json:"acao_ou_espera"`
 	AllowedActions     []string           `json:"allowed_actions"`
+	// DocumentosRequeridos é a lista COMPLETA de nomes de TipoDocumento
+	// exigidos pra sair da etapa atual (RequisitosEtapa) — diferente do
+	// 422 de POST .../avancar, que só devolve os que faltam. O frontend
+	// cruza esta lista com os documentos já anexados (GET
+	// .../documentos, por TipoDocumento.Nome) pra desenhar o checklist
+	// visual (✓ anexado / x pendente) na página do processo — sem isso, a
+	// única forma de saber o checklist completo era tentar avançar e ler
+	// o erro. Vazio nas etapas sem checklist (2 e 6) ou quando o
+	// processo não tem Contrato carregado.
+	DocumentosRequeridos []string `json:"documentos_requeridos"`
 }
 
 // Decorar computa a leitura enriquecida de um processo já carregado.
@@ -116,13 +126,26 @@ func (s *FiscalizacaoService) Decorar(ctx context.Context, processo *models.Proc
 		}
 	}
 
+	// Lista completa (não só os pendentes) e CUMULATIVA — todas as etapas
+	// já percorridas até a atual, não só a atual isolada (ver o
+	// comentário de RequisitosAcumulados) — computada independente do
+	// Status/etapa final, pra a página do processo poder mostrar o
+	// checklist já satisfeito mesmo depois de concluído.
+	documentosRequeridos := []string{}
+	if processo.Contrato != nil {
+		if req := RequisitosAcumulados(processo.EtapaAtualID, processo.Contrato.TipoObjeto, processo.Contrato.ExigeFiscalizacaoTerceirizacao); req != nil {
+			documentosRequeridos = req
+		}
+	}
+
 	_, acoes, _ := CanTransition(processo, ocorrenciasAbertas, checklistPendente, isFiscal)
 
 	return &ProcessoComFiscalizacao{
-		ProcessoPagamento:  processo,
-		EstadoFiscalizacao: estadoFiscalizacao(processo, ocorrenciasAbertas),
-		AcaoOuEspera:       mapaEtapaAcao[processo.EtapaAtualID],
-		AllowedActions:     acoes,
+		ProcessoPagamento:    processo,
+		EstadoFiscalizacao:   estadoFiscalizacao(processo, ocorrenciasAbertas),
+		AcaoOuEspera:         mapaEtapaAcao[processo.EtapaAtualID],
+		AllowedActions:       acoes,
+		DocumentosRequeridos: documentosRequeridos,
 	}, nil
 }
 

@@ -41,6 +41,34 @@ func (f *fakeDocumentoAnexoRepository) FindByProcessoAndHash(ctx context.Context
 	return nil, repository.ErrDocumentoNotFound
 }
 
+func (f *fakeDocumentoAnexoRepository) FindByProcessoAndTipo(ctx context.Context, processoID uuid.UUID, tipoDocumentoID int) (*models.DocumentoAnexo, error) {
+	for _, d := range f.documentos {
+		if d.ProcessoPagamentoID == processoID && d.TipoDocumentoID == tipoDocumentoID {
+			return &d, nil
+		}
+	}
+	return nil, repository.ErrDocumentoNotFound
+}
+
+func (f *fakeDocumentoAnexoRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.DocumentoAnexo, error) {
+	for _, d := range f.documentos {
+		if d.ID == id {
+			return &d, nil
+		}
+	}
+	return nil, repository.ErrDocumentoNotFound
+}
+
+func (f *fakeDocumentoAnexoRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	for i, d := range f.documentos {
+		if d.ID == id {
+			f.documentos = append(f.documentos[:i], f.documentos[i+1:]...)
+			return nil
+		}
+	}
+	return repository.ErrDocumentoNotFound
+}
+
 var _ repository.DocumentoAnexoRepository = (*fakeDocumentoAnexoRepository)(nil)
 
 func comDocumento(processoID uuid.UUID, tipoNome string) models.DocumentoAnexo {
@@ -145,10 +173,13 @@ func TestChecklistPendente(t *testing.T) {
 	})
 
 	t.Run("SERVICO com certidões mas sem os condicionais ainda fica pendente", func(t *testing.T) {
-		docs := []models.DocumentoAnexo{}
-		for _, nome := range checklistBase[5] {
-			docs = append(docs, comDocumento(processoID, nome))
-		}
+		// Cumulativo agora (RequisitosAcumulados): pra isolar só a
+		// pendência dos condicionais de SERVICO, os documentos base das
+		// etapas 1/3/4 (percorridas antes de chegar na 5) também
+		// precisam estar anexados — senão eles apareceriam como
+		// pendentes também, o que é o comportamento novo correto, mas
+		// não o que este teste quer isolar.
+		docs := documentosBaseAteEtapa(processoID, 5)
 		repo := &fakeDocumentoAnexoRepository{documentos: docs}
 		pendentes, err := ChecklistPendente(ctx, repo, processoID, 5, models.TipoObjetoServico, false)
 		if err != nil {
@@ -158,10 +189,7 @@ func TestChecklistPendente(t *testing.T) {
 	})
 
 	t.Run("exigeFiscalizacaoTerceirizacao acrescenta os documentos do Art.9º-XXXII à pendência", func(t *testing.T) {
-		docs := []models.DocumentoAnexo{}
-		for _, nome := range checklistBase[5] {
-			docs = append(docs, comDocumento(processoID, nome))
-		}
+		docs := documentosBaseAteEtapa(processoID, 5)
 		for _, nome := range checklistCondicionalServico {
 			docs = append(docs, comDocumento(processoID, nome))
 		}
@@ -172,6 +200,41 @@ func TestChecklistPendente(t *testing.T) {
 		}
 		assertSameElements(t, pendentes, checklistCondicionalTerceirizacao)
 	})
+
+	t.Run("cumulativo: documento obrigatório de uma etapa anterior excluído bloqueia o avanço da etapa atual", func(t *testing.T) {
+		// Pedido explícito do usuário: um documento apagado depois de ter
+		// satisfeito o checklist de uma etapa já concluída precisa voltar
+		// a bloquear o avanço, mesmo que o processo já esteja numa etapa
+		// mais adiante — não só a etapa atual isolada.
+		docs := documentosBaseAteEtapa(processoID, 4)
+		// Remove "Pré-Empenho" (obrigatório na etapa 1) da lista, simulando exclusão.
+		filtrados := docs[:0]
+		for _, d := range docs {
+			if d.TipoDocumento.Nome != "Pré-Empenho" {
+				filtrados = append(filtrados, d)
+			}
+		}
+		repo := &fakeDocumentoAnexoRepository{documentos: filtrados}
+		pendentes, err := ChecklistPendente(ctx, repo, processoID, 4, models.TipoObjetoConsumo, false)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		assertSameElements(t, pendentes, []string{"Pré-Empenho"})
+	})
+}
+
+// documentosBaseAteEtapa monta a lista de DocumentoAnexo já anexados,
+// cobrindo os requisitos base (sem condicionais) de todas as etapas de 1
+// até ateEtapaID (inclusive) — usado nos testes cumulativos pra isolar
+// só o que cada teste quer exercitar.
+func documentosBaseAteEtapa(processoID uuid.UUID, ateEtapaID int) []models.DocumentoAnexo {
+	var docs []models.DocumentoAnexo
+	for etapa := 1; etapa <= ateEtapaID; etapa++ {
+		for _, nome := range checklistBase[etapa] {
+			docs = append(docs, comDocumento(processoID, nome))
+		}
+	}
+	return docs
 }
 
 func TestTipoDocumentoAplicavel(t *testing.T) {

@@ -24,7 +24,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type {
   KanbanEtapa,
-  TipoDocumento,
   Contrato,
   ProcessoPagamento,
   ItemRadar,
@@ -34,7 +33,6 @@ import { RadarNivelBadge } from "@/components/radar/radar-badge";
 import { corDaEtapa } from "@/lib/kanban-colors";
 import { filtrarProcessos, FILTRO_KANBAN_VAZIO, type FiltroKanban } from "@/lib/kanban-filtro";
 import { useMontado } from "@/lib/use-montado";
-import { ProcessoDialog } from "./processo-dialog";
 import { NovoProcessoDialog } from "./novo-processo-dialog";
 import { KanbanToolbar } from "./kanban-toolbar";
 import { ProcessosLista } from "./processos-lista";
@@ -78,8 +76,8 @@ function iniciaisDoFiscal(nome?: string): string {
 /**
  * Card individual, arrastável via dnd-kit. `arrastavel` controla se o
  * card participa do drag-and-drop (fiscal + processo ainda não pago/na
- * etapa final) — um card não-arrastável ainda abre o drawer ao clicar,
- * só não entra no fluxo de drag.
+ * etapa final) — um card não-arrastável ainda navega pra página do
+ * processo ao clicar, só não entra no fluxo de drag.
  */
 function ProcessoCard({
   processo,
@@ -158,20 +156,17 @@ function ProcessoCard({
 export function KanbanBoard({
   etapas,
   colunasIniciais,
-  tiposDocumento,
   contratosAtivos,
   radarItens,
   isFiscal,
 }: {
   etapas: KanbanEtapa[];
   colunasIniciais: ProcessoPagamento[][];
-  tiposDocumento: TipoDocumento[];
   contratosAtivos: Contrato[];
   radarItens: ItemRadar[];
   isFiscal: boolean;
 }) {
   const router = useRouter();
-  const [selecionado, setSelecionado] = useState<ProcessoPagamento | null>(null);
   const [novoOpen, setNovoOpen] = useState(false);
   const [activeProcesso, setActiveProcesso] = useState<ProcessoPagamento | null>(null);
   const [filtro, setFiltro] = useState<FiltroKanban>(FILTRO_KANBAN_VAZIO);
@@ -280,7 +275,7 @@ export function KanbanBoard({
           processos={todosProcessosFiltrados}
           etapas={etapas}
           radarItens={radarItens}
-          onOpen={setSelecionado}
+          onOpen={(processo) => router.push(`/kanban/${processo.ID}`)}
         />
       ) : (
       <DndContext
@@ -327,7 +322,7 @@ export function KanbanBoard({
                         cor={cor}
                         nivel={nivel}
                         arrastavel={podeArrastar}
-                        onOpen={() => setSelecionado(processo)}
+                        onOpen={() => router.push(`/kanban/${processo.ID}`)}
                       />
                     );
                   })}
@@ -356,17 +351,6 @@ export function KanbanBoard({
           )}
         </DragOverlay>
       </DndContext>
-      )}
-
-      {selecionado && (
-        <ProcessoDialog
-          processo={selecionado}
-          tiposDocumento={tiposDocumento}
-          alertasRadar={itensDoProcesso(radarItens, selecionado)}
-          isFiscal={isFiscal}
-          open={Boolean(selecionado)}
-          onOpenChange={(open) => !open && setSelecionado(null)}
-        />
       )}
 
       {isFiscal && (

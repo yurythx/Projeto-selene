@@ -120,6 +120,61 @@ func TestDocumentoServiceUpload_TipoNaoAplicavel(t *testing.T) {
 	})
 }
 
+// TestDocumentoServiceUpload_UmPorTipo cobre a regra pedida pelo usuário:
+// no máximo um documento anexado de cada TipoDocumento por processo (ex:
+// não pode ter dois "Pré-Empenho"). Também confirma que essa regra é
+// DISTINTA da deduplicação por hash já existente: reenviar o MESMO
+// arquivo (mesmo conteúdo, logo mesmo hash) continua reaproveitando o
+// registro existente via FindByProcessoAndHash, sem cair no erro de
+// uniqueness — só um arquivo DIFERENTE do mesmo tipo é rejeitado.
+func TestDocumentoServiceUpload_UmPorTipo(t *testing.T) {
+	storageDir := t.TempDir()
+	docRepo := &fakeDocumentoAnexoRepository{}
+	svc := NewDocumentoService(docRepo, &fakeTipoDocumentoRepositoryOK{}, &fakeProcessoPagamentoRepositoryOK{}, storageDir)
+
+	processoID := uuid.New()
+
+	primeiro, err := svc.Upload(context.Background(), processoID, 1, "pre-empenho.pdf", []byte("conteúdo do primeiro pré-empenho"), uuid.New(), nil)
+	if err != nil {
+		t.Fatalf("falha ao preparar documento de teste: %v", err)
+	}
+
+	t.Run("reenviar o mesmo arquivo (mesmo hash) reaproveita o registro existente", func(t *testing.T) {
+		doc, err := svc.Upload(context.Background(), processoID, 1, "pre-empenho.pdf", []byte("conteúdo do primeiro pré-empenho"), uuid.New(), nil)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if doc.ID != primeiro.ID {
+			t.Fatalf("esperava reaproveitar o registro existente (dedup por hash), veio um ID diferente: %v != %v", doc.ID, primeiro.ID)
+		}
+	})
+
+	t.Run("enviar um arquivo diferente do mesmo tipo é rejeitado", func(t *testing.T) {
+		_, err := svc.Upload(context.Background(), processoID, 1, "pre-empenho-v2.pdf", []byte("conteúdo diferente, mesmo tipo"), uuid.New(), nil)
+		if !errors.Is(err, ErrTipoDocumentoJaAnexado) {
+			t.Fatalf("esperava ErrTipoDocumentoJaAnexado, veio %v", err)
+		}
+	})
+
+	t.Run("mesmo tipo em outro processo não é bloqueado", func(t *testing.T) {
+		outroProcessoID := uuid.New()
+		_, err := svc.Upload(context.Background(), outroProcessoID, 1, "pre-empenho.pdf", []byte("conteúdo em outro processo"), uuid.New(), nil)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+	})
+
+	t.Run("depois de excluído, um novo documento do mesmo tipo pode ser enviado", func(t *testing.T) {
+		if err := svc.Excluir(context.Background(), processoID, primeiro.ID); err != nil {
+			t.Fatalf("falha ao excluir documento de teste: %v", err)
+		}
+		_, err := svc.Upload(context.Background(), processoID, 1, "pre-empenho-v2.pdf", []byte("conteúdo diferente, mesmo tipo"), uuid.New(), nil)
+		if err != nil {
+			t.Fatalf("erro inesperado depois de excluir o anterior: %v", err)
+		}
+	})
+}
+
 func TestSanitizarNomeArquivo(t *testing.T) {
 	casos := []struct {
 		nome   string
@@ -214,4 +269,92 @@ func TestDocumentoServiceUpload_PathTraversal(t *testing.T) {
 			t.Fatalf("regressão de path traversal: entrada inesperada em storageDir: %q", e.Name())
 		}
 	}
+}
+
+// TestDocumentoServiceBaixar cobre o caminho feliz e as duas rejeições de
+// DocumentoService.Baixar: documento inexistente e documento que existe
+// mas pertence a outro processo (a defesa em profundidade documentada no
+// comentário do método).
+func TestDocumentoServiceBaixar(t *testing.T) {
+	storageDir := t.TempDir()
+	docRepo := &fakeDocumentoAnexoRepository{}
+	svc := NewDocumentoService(docRepo, &fakeTipoDocumentoRepositoryOK{}, &fakeProcessoPagamentoRepositoryOK{}, storageDir)
+
+	processoID := uuid.New()
+	documento, err := svc.Upload(context.Background(), processoID, 1, "boleto.pdf", []byte("conteúdo de teste"), uuid.New(), nil)
+	if err != nil {
+		t.Fatalf("falha ao preparar documento de teste: %v", err)
+	}
+
+	t.Run("caminho feliz devolve o conteúdo do arquivo", func(t *testing.T) {
+		conteudo, doc, err := svc.Baixar(context.Background(), processoID, documento.ID)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if string(conteudo) != "conteúdo de teste" {
+			t.Fatalf("conteúdo inesperado: %q", conteudo)
+		}
+		if doc.NomeArquivo != "boleto.pdf" {
+			t.Fatalf("nome de arquivo inesperado: %q", doc.NomeArquivo)
+		}
+	})
+
+	t.Run("processoID que não é o dono real é rejeitado", func(t *testing.T) {
+		_, _, err := svc.Baixar(context.Background(), uuid.New(), documento.ID)
+		if !errors.Is(err, repository.ErrDocumentoNotFound) {
+			t.Fatalf("esperava ErrDocumentoNotFound, veio %v", err)
+		}
+	})
+
+	t.Run("documento inexistente é rejeitado", func(t *testing.T) {
+		_, _, err := svc.Baixar(context.Background(), processoID, uuid.New())
+		if !errors.Is(err, repository.ErrDocumentoNotFound) {
+			t.Fatalf("esperava ErrDocumentoNotFound, veio %v", err)
+		}
+	})
+}
+
+// TestDocumentoServiceExcluir cobre o caminho feliz (registro E arquivo
+// físico removidos) e as rejeições — incluindo o caso em que o
+// processoID informado não é o dono real, onde nem o registro nem o
+// arquivo podem ter sido tocados.
+func TestDocumentoServiceExcluir(t *testing.T) {
+	storageDir := t.TempDir()
+	docRepo := &fakeDocumentoAnexoRepository{}
+	svc := NewDocumentoService(docRepo, &fakeTipoDocumentoRepositoryOK{}, &fakeProcessoPagamentoRepositoryOK{}, storageDir)
+
+	processoID := uuid.New()
+	documento, err := svc.Upload(context.Background(), processoID, 1, "boleto.pdf", []byte("conteúdo de teste"), uuid.New(), nil)
+	if err != nil {
+		t.Fatalf("falha ao preparar documento de teste: %v", err)
+	}
+
+	t.Run("processoID que não é o dono real é rejeitado, nada é removido", func(t *testing.T) {
+		err := svc.Excluir(context.Background(), uuid.New(), documento.ID)
+		if !errors.Is(err, repository.ErrDocumentoNotFound) {
+			t.Fatalf("esperava ErrDocumentoNotFound, veio %v", err)
+		}
+		if _, err := os.Stat(documento.CaminhoStorage); err != nil {
+			t.Fatalf("arquivo não deveria ter sido removido: %v", err)
+		}
+	})
+
+	t.Run("excluir documento inexistente é rejeitado", func(t *testing.T) {
+		err := svc.Excluir(context.Background(), processoID, uuid.New())
+		if !errors.Is(err, repository.ErrDocumentoNotFound) {
+			t.Fatalf("esperava ErrDocumentoNotFound, veio %v", err)
+		}
+	})
+
+	t.Run("caminho feliz remove o registro e o arquivo físico", func(t *testing.T) {
+		if err := svc.Excluir(context.Background(), processoID, documento.ID); err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if _, err := docRepo.FindByID(context.Background(), documento.ID); !errors.Is(err, repository.ErrDocumentoNotFound) {
+			t.Fatalf("esperava documento removido do repositório, veio %v", err)
+		}
+		if _, err := os.Stat(documento.CaminhoStorage); !os.IsNotExist(err) {
+			t.Fatalf("esperava arquivo físico removido, stat err=%v", err)
+		}
+	})
 }

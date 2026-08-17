@@ -164,3 +164,10 @@ var ErrOcorrenciaAbertaBloqueiaAvanco = errors.New("service: existe ocorrência 
 // ExigeFiscalizacaoTerceirizacao=true, e o contrato do processo não
 // atende essa condição — ver service.TipoDocumentoAplicavel.
 var ErrTipoDocumentoNaoAplicavel = errors.New("service: este tipo de documento não se aplica ao tipo de contrato deste processo")
+
+// ErrTipoDocumentoJaAnexado é retornado por DocumentoService.Upload
+// quando o processo já tem um documento anexado do mesmo TipoDocumento —
+// pedido explícito do usuário: no máximo um de cada tipo por processo
+// (ex: não pode ter dois "Pré-Empenho"). Exclua o anterior antes de
+// enviar outro.
+var ErrTipoDocumentoJaAnexado = errors.New("service: já existe um documento deste tipo anexado a este processo — exclua o anterior antes de enviar outro")

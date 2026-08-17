@@ -94,6 +94,26 @@ func RequisitosEtapa(etapaOrigemID int, tipoObjeto models.TipoObjeto, exigeFisca
 	return requisitos
 }
 
+// RequisitosAcumulados retorna a união dos requisitos de TODAS as etapas
+// já percorridas até etapaAtualID (inclusive) — etapas 1..etapaAtualID —
+// não só os da etapa atual isolada (RequisitosEtapa). Existe porque
+// DocumentoService.Excluir permite apagar qualquer documento anexado,
+// inclusive um que satisfazia o checklist de uma etapa JÁ CONCLUÍDA
+// (decisão deliberada — ver o comentário lá: a auditoria em kanban_logs
+// continua íntegra, só o anexo em si some) — sem verificar de forma
+// cumulativa, o processo continuaria avançando com essa lacuna aberta.
+// Pedido explícito do usuário: "os arquivos que foram obrigatórios nas
+// etapas anteriores podem ser apagados, mas precisamos subir outro do
+// mesmo modelo, senão não iremos prosseguir — fazer essa verificação em
+// todas as etapas".
+func RequisitosAcumulados(etapaAtualID int, tipoObjeto models.TipoObjeto, exigeFiscalizacaoTerceirizacao bool) []string {
+	var todos []string
+	for etapa := 1; etapa <= etapaAtualID; etapa++ {
+		todos = append(todos, RequisitosEtapa(etapa, tipoObjeto, exigeFiscalizacaoTerceirizacao)...)
+	}
+	return todos
+}
+
 // TipoDocumentoAplicavel reporta se `tipo` pode ser anexado (e deve
 // aparecer no select de upload) num processo cujo contrato tem o
 // tipoObjeto e a flag de terceirização informados. Usa
@@ -113,10 +133,11 @@ func TipoDocumentoAplicavel(tipo models.TipoDocumento, tipoObjeto models.TipoObj
 	return true
 }
 
-// ChecklistPendente compara os documentos exigidos pela etapaOrigemID
-// (dado o tipoObjeto do contrato) com os documentos já anexados ao
-// processo, e retorna os nomes dos que ainda faltam. Uma lista vazia
-// significa checklist satisfeito — o card pode avançar.
+// ChecklistPendente compara os documentos exigidos ATÉ a etapaOrigemID
+// (cumulativo — RequisitosAcumulados, não só o da etapa atual isolada;
+// ver o comentário lá) com os documentos já anexados ao processo, e
+// retorna os nomes dos que ainda faltam. Uma lista vazia significa
+// checklist satisfeito — o card pode avançar.
 //
 // Documentos anexados em etapas anteriores contam automaticamente aqui
 // (reaproveitamento de arquivos por card, Seção 7.2): a checagem é sobre
@@ -129,7 +150,7 @@ func ChecklistPendente(
 	tipoObjeto models.TipoObjeto,
 	exigeFiscalizacaoTerceirizacao bool,
 ) ([]string, error) {
-	requisitos := RequisitosEtapa(etapaOrigemID, tipoObjeto, exigeFiscalizacaoTerceirizacao)
+	requisitos := RequisitosAcumulados(etapaOrigemID, tipoObjeto, exigeFiscalizacaoTerceirizacao)
 	if len(requisitos) == 0 {
 		return nil, nil
 	}

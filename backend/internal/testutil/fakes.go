@@ -380,6 +380,34 @@ func (f *FakeDocumentoAnexoRepository) FindByProcessoAndHash(ctx context.Context
 	return nil, repository.ErrDocumentoNotFound
 }
 
+func (f *FakeDocumentoAnexoRepository) FindByProcessoAndTipo(ctx context.Context, processoID uuid.UUID, tipoDocumentoID int) (*models.DocumentoAnexo, error) {
+	for _, d := range f.Documentos {
+		if d.ProcessoPagamentoID == processoID && d.TipoDocumentoID == tipoDocumentoID {
+			return &d, nil
+		}
+	}
+	return nil, repository.ErrDocumentoNotFound
+}
+
+func (f *FakeDocumentoAnexoRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.DocumentoAnexo, error) {
+	for _, d := range f.Documentos {
+		if d.ID == id {
+			return &d, nil
+		}
+	}
+	return nil, repository.ErrDocumentoNotFound
+}
+
+func (f *FakeDocumentoAnexoRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	for i, d := range f.Documentos {
+		if d.ID == id {
+			f.Documentos = append(f.Documentos[:i], f.Documentos[i+1:]...)
+			return nil
+		}
+	}
+	return repository.ErrDocumentoNotFound
+}
+
 var _ repository.DocumentoAnexoRepository = (*FakeDocumentoAnexoRepository)(nil)
 
 // --- KanbanLogRepository ---

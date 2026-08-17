@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,6 +102,19 @@ func (s *DocumentoService) Upload(
 		return nil, fmt.Errorf("service: checar duplicidade de documento: %w", err)
 	}
 
+	// Regra pedida pelo usuário: no máximo UM documento de cada tipo por
+	// processo (ex: não pode ter dois "Pré-Empenho") — diferente da
+	// checagem de hash acima (que só reaproveita quando é o MESMO
+	// arquivo). Aqui, mesmo um arquivo diferente do mesmo tipo é
+	// rejeitado: quem quiser substituir precisa excluir o anterior
+	// primeiro (ver DocumentoService.Excluir) e reenviar o correto — sem
+	// isso, o checklist ficaria ambíguo sobre qual dos dois vale.
+	if _, err := s.docRepo.FindByProcessoAndTipo(ctx, processoID, tipoDocumentoID); err == nil {
+		return nil, ErrTipoDocumentoJaAnexado
+	} else if !errors.Is(err, repository.ErrDocumentoNotFound) {
+		return nil, fmt.Errorf("service: checar documento existente do mesmo tipo: %w", err)
+	}
+
 	// 0o750: dono lê/escreve/executa, grupo só lê/executa, nenhum acesso
 	// para "outros" — os documentos aqui incluem CNDs e dados de
 	// contratos, não deveriam ficar world-readable no filesystem.
@@ -137,6 +151,66 @@ func (s *DocumentoService) Listar(ctx context.Context, processoID uuid.UUID) ([]
 		return nil, fmt.Errorf("service: listar documentos do processo: %w", err)
 	}
 	return documentos, nil
+}
+
+// Baixar carrega o conteúdo (do disco) de um documento anexo específico —
+// usado tanto pra download quanto pra pré-visualização inline na página
+// do processo (ver GeradorDocumentosHandler... não, ver DocumentoHandler.
+// Baixar). Confere que o documento realmente pertence a processoID
+// (defesa em profundidade: os dois IDs vêm de segmentos distintos da
+// rota, GET /processos/:id/documentos/:docId/download — sem essa
+// checagem, adivinhar o UUID de um documento de outro processo bastaria
+// pra baixá-lo por uma URL de processo errada).
+func (s *DocumentoService) Baixar(ctx context.Context, processoID, documentoID uuid.UUID) ([]byte, *models.DocumentoAnexo, error) {
+	documento, err := s.docRepo.FindByID(ctx, documentoID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if documento.ProcessoPagamentoID != processoID {
+		return nil, nil, repository.ErrDocumentoNotFound
+	}
+
+	conteudo, err := os.ReadFile(documento.CaminhoStorage)
+	if err != nil {
+		return nil, nil, fmt.Errorf("service: ler arquivo do documento anexo: %w", err)
+	}
+
+	return conteudo, documento, nil
+}
+
+// Excluir remove um documento anexo — o registro e o arquivo físico.
+//
+// Sem trava de "já foi usado pra satisfazer o checklist de uma etapa já
+// concluída": o pedido é justamente poder corrigir um upload errado
+// (arquivo trocado, tipo errado). A auditoria do avanço em si continua
+// íntegra em kanban_logs — apagar o anexo não desfaz uma transição de
+// etapa já ocorrida, só remove o arquivo da lista atual. Decisão
+// deliberada, documentada aqui por não haver uma regra de domínio
+// pedindo o contrário; se um dia precisar bloquear isso, é um `if`
+// checando EtapaAtualID/histórico antes do Delete abaixo.
+func (s *DocumentoService) Excluir(ctx context.Context, processoID, documentoID uuid.UUID) error {
+	documento, err := s.docRepo.FindByID(ctx, documentoID)
+	if err != nil {
+		return err
+	}
+	if documento.ProcessoPagamentoID != processoID {
+		return repository.ErrDocumentoNotFound
+	}
+
+	if err := s.docRepo.Delete(ctx, documentoID); err != nil {
+		return err
+	}
+
+	// Best-effort: a exclusão lógica (a linha no banco, fonte de verdade
+	// da aplicação) já se consolidou nesse ponto — se o arquivo físico
+	// não puder ser removido (permissão, já apagado manualmente antes),
+	// só registra o aviso; não faz sentido devolver erro pro cliente por
+	// uma falha de limpeza de disco depois que o que importa já foi feito.
+	if err := os.Remove(documento.CaminhoStorage); err != nil && !os.IsNotExist(err) {
+		slog.WarnContext(ctx, "falha ao remover arquivo físico do documento excluído", "caminho", documento.CaminhoStorage, "erro", err)
+	}
+
+	return nil
 }
 
 // sanitizarNomeArquivo neutraliza um filename de upload não confiável

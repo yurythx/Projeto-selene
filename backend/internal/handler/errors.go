@@ -42,7 +42,8 @@ func respondError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, repository.ErrNumeroContratoDuplicado),
 		errors.Is(err, repository.ErrCategoriaModeloDuplicada),
-		errors.Is(err, repository.ErrGatilhoModeloJaAssociado):
+		errors.Is(err, repository.ErrGatilhoModeloJaAssociado),
+		errors.Is(err, service.ErrTipoDocumentoJaAnexado):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 
 	case errors.Is(err, repository.ErrUserNotFound),

@@ -27,6 +27,15 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
+// items do Select de tipo de objeto — ver o comentário em
+// contratos-filtro.tsx sobre por quê (sem isso, <SelectValue> mostra o
+// value cru depois de escolher, não o rótulo).
+const ITEMS_TIPO_OBJETO = {
+  CONSUMO: "Consumo",
+  PERMANENTE: "Permanente",
+  SERVICO: "Serviço",
+};
+
 // fiscal_id NÃO é um campo do formulário — o Route Handler
 // (app/api/contratos/route.ts) preenche a partir do usuário logado. Ver o
 // comentário lá para o porquê (não há hoje como um não-admin listar outros
@@ -202,6 +211,7 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
             <div className="space-y-2">
               <Label htmlFor="tipo_objeto">Tipo de objeto</Label>
               <Select
+                items={ITEMS_TIPO_OBJETO}
                 defaultValue={form.getValues("tipo_objeto")}
                 onValueChange={(value) =>
                   form.setValue("tipo_objeto", value as FormValues["tipo_objeto"])

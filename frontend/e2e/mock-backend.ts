@@ -272,6 +272,27 @@ const mapaEtapaAcao: Record<number, string> = {
   6: "ESPERA_EXTERNA",
 };
 
+// Espelha checklistBase de internal/service/checklist.go — só a base por
+// etapa (sem os condicionais de SERVICO/terceirização, que dependem do
+// Contrato e não valem a pena modelar aqui) — o bastante pro e2e
+// exercitar o checklist visual (✓/x) da página do processo de verdade.
+const REQUISITOS_POR_ETAPA: Record<number, string[]> = {
+  1: ["Ordem de Fornecimento (OF)", "Pré-Empenho", "Ofício de Solicitação"],
+  3: ["Nota de Empenho"],
+  4: ["Nota Fiscal / Fatura", "Ordem de Recepção"],
+  5: [
+    "Extrato do Empenho",
+    "Declaração do Simples Nacional",
+    "CND Trabalhista",
+    "CND FGTS",
+    "CND Municipal",
+    "CND Estadual",
+    "CND Federal",
+    "CND INSS",
+    "Relatório de Pagamento Assinado",
+  ],
+};
+
 function decorarProcesso(processo: Processo) {
   const ocorrenciasAbertas = ocorrencias.filter(
     (o) => o.ProcessoPagamentoID === processo.ID && o.Estado !== "REGULARIZADA"
@@ -301,6 +322,7 @@ function decorarProcesso(processo: Processo) {
     estado_fiscalizacao,
     acao_ou_espera: mapaEtapaAcao[processo.EtapaAtualID] ?? "ACAO_FISCAL",
     allowed_actions,
+    documentos_requeridos: REQUISITOS_POR_ETAPA[processo.EtapaAtualID] ?? [],
   };
 }
 
@@ -481,8 +503,19 @@ const server = createServer((req, res) => {
       }
       if (req.method === "POST") {
         // multipart/form-data mínimo o suficiente pro teste: não faz
-        // parsing de verdade, só confirma que a chamada chegou e devolve
-        // um documento fixo.
+        // parsing de verdade do tipo_documento_id, sempre usa TipoDocumentoID
+        // 1 — mas isso é o bastante pra simular a regra real de "no máximo
+        // um documento de cada tipo por processo" (ver ErrTipoDocumentoJaAnexado
+        // no backend): se já existe um documento com esse mesmo
+        // TipoDocumentoID nesta lista, rejeita com 409, igual ao backend real.
+        const lista = documentosPorProcesso.get(id) ?? [];
+        if (lista.some((d) => d.TipoDocumentoID === 1)) {
+          return json(res, 409, {
+            error:
+              "já existe um documento deste tipo anexado a este processo — exclua o anterior antes de enviar outro",
+          });
+        }
+
         const doc: Documento = {
           ID: nextId("doc"),
           ProcessoPagamentoID: id,
@@ -494,10 +527,39 @@ const server = createServer((req, res) => {
           EnviadoPor: usuarios[0],
           DataUpload: new Date().toISOString(),
         };
-        const lista = documentosPorProcesso.get(id) ?? [];
         lista.push(doc);
         documentosPorProcesso.set(id, lista);
         return json(res, 201, doc);
+      }
+    }
+
+    const documentoIndividualMatch = pathname.match(
+      /^\/api\/v1\/processos\/([^/]+)\/documentos\/([^/]+)(\/download)?$/
+    );
+    if (documentoIndividualMatch) {
+      const [, processoId, docId, isDownload] = documentoIndividualMatch;
+      const lista = documentosPorProcesso.get(processoId) ?? [];
+      const indice = lista.findIndex((d) => d.ID === docId);
+
+      if (isDownload && req.method === "GET") {
+        if (indice === -1) return json(res, 404, { error: "não encontrado" });
+        const corpo = Buffer.from("%PDF-1.4 conteúdo fake de teste (mock-backend)");
+        res.writeHead(200, {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="${lista[indice].NomeArquivo}"`,
+          "Content-Length": String(corpo.byteLength),
+        });
+        res.end(corpo);
+        return;
+      }
+
+      if (req.method === "DELETE") {
+        if (indice === -1) return json(res, 404, { error: "não encontrado" });
+        lista.splice(indice, 1);
+        documentosPorProcesso.set(processoId, lista);
+        res.writeHead(204);
+        res.end();
+        return;
       }
     }
 

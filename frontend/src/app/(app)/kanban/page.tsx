@@ -2,7 +2,6 @@ import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import {
   listarEtapas,
-  listarTiposDocumento,
   listarProcessos,
   listarContratos,
   listarRadar,
@@ -18,10 +17,9 @@ export default async function KanbanPage() {
     return null;
   }
 
-  const [etapas, tiposDocumento, contratos, radarItens] = await requireApi(
+  const [etapas, contratos, radarItens] = await requireApi(
     Promise.all([
       listarEtapas(accessToken),
-      listarTiposDocumento(accessToken),
       // tamanho máximo permitido pela API — ver limitação documentada no
       // NovoProcessoDialog sobre contratos além da primeira página.
       listarContratos(accessToken, 1, 100),
@@ -47,7 +45,6 @@ export default async function KanbanPage() {
       <KanbanBoard
         etapas={etapas}
         colunasIniciais={colunas.map((c) => c.dados)}
-        tiposDocumento={tiposDocumento}
         contratosAtivos={contratosAtivos}
         radarItens={radarItens}
         isFiscal={Boolean(session?.user?.isFiscal)}

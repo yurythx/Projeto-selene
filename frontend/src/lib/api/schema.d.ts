@@ -1005,7 +1005,7 @@ export interface paths {
         put?: never;
         /**
          * Anexa um documento ao processo
-         * @description multipart/form-data. Se o SHA-256 do conteúdo já existir para este processo, reaproveita o registro existente em vez de duplicar (não cria um novo). Limite de 20MB por arquivo.
+         * @description multipart/form-data. Se o SHA-256 do conteúdo já existir para este processo, reaproveita o registro existente em vez de duplicar (não cria um novo). Além disso, no máximo um documento de cada tipo_documento_id é permitido por processo (ex: não pode haver dois "Pré-Empenho") — um arquivo diferente do mesmo tipo é rejeitado com 409; para substituir, exclua o anterior (DELETE /processos/{id}/documentos/{docId}) e envie o novo. Limite de 20MB por arquivo.
          */
         post: {
             parameters: {
@@ -1045,6 +1045,15 @@ export interface paths {
                 401: components["responses"]["NaoAutenticado"];
                 403: components["responses"]["Proibido"];
                 404: components["responses"]["NaoEncontrado"];
+                /** @description Já existe um documento deste tipo anexado a este processo — exclua o anterior antes de enviar outro. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
                 /** @description Arquivo excede 20MB. */
                 413: {
                     headers: {
@@ -1058,6 +1067,82 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/processos/{id}/documentos/{docId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+                docId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Baixa/pré-visualiza o conteúdo de um documento anexo
+         * @description Content-Disposition "inline" (não "attachment") — pensado pra pré-visualização embutida (iframe/img) na página do processo, não força download direto. Content-Type detectado do conteúdo real do arquivo (não confia só na extensão do nome).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                    docId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conteúdo do arquivo (PDF ou imagem). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                        "image/*": string;
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Exclui um documento anexo (registro e arquivo físico)
+         * @description Restrito a fiscais. Sem trava de "já usado num avanço de etapa passado" — ver o comentário em DocumentoService.Excluir no backend.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                    docId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Excluído. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -2754,6 +2839,8 @@ export interface components {
             acao_ou_espera?: "ACAO_FISCAL" | "ESPERA_EXTERNA";
             /** @description Vocabulário fechado que o frontend usa pra decidir quais botões mostrar — substitui a checagem client-side de EtapaAtualID/Status que existia antes. */
             allowed_actions?: ("AVANCAR_ETAPA" | "CONCLUIR_PAGAMENTO" | "ANEXAR_DOCUMENTO" | "REGISTRAR_OCORRENCIA" | "REGISTRAR_MOVIMENTACAO_EMPENHO")[];
+            /** @description Lista COMPLETA e ACUMULADA de nomes de TipoDocumento exigidos até a etapa atual (não só os da etapa atual isolada, nem só os pendentes) — união dos requisitos de TODAS as etapas já percorridas (1..etapa_atual_id inclusive). Isso garante que um documento obrigatório de uma etapa anterior que tenha sido excluído volta a aparecer aqui e bloqueia o avanço, mesmo que a etapa atual em si não exija esse tipo (ex: as etapas 2 e 6 não têm checklist próprio, mas continuam mostrando os requisitos acumulados das etapas anteriores). Cruze com GET /processos/{id}/documentos (por TipoDocumento.Nome) pra saber quais já foram anexados. Vazio só quando o processo não tem Contrato carregado. */
+            documentos_requeridos?: string[];
         };
         /** @description CaminhoStorage (path local no servidor) é omitido de propósito — nunca serializado (json:"-"). */
         DocumentoAnexo: {

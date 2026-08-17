@@ -142,6 +142,14 @@ function NovoEmpenhoDialog({ contratoId }: { contratoId: string }) {
   );
 }
 
+// items do Select de tipo — ver o comentário em contratos-filtro.tsx
+// sobre por quê (sem isso, <SelectValue> mostra o value cru depois de
+// escolher, não o rótulo).
+const ITEMS_TIPO_MOVIMENTACAO = {
+  REFORCO: "Reforço (soma ao saldo)",
+  ANULACAO: "Anulação (subtrai do saldo)",
+};
+
 function NovaMovimentacaoDialog({ empenhoId }: { empenhoId: string }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -178,7 +186,11 @@ function NovaMovimentacaoDialog({ empenhoId }: { empenhoId: string }) {
         <div className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="tipo_movimentacao">Tipo</Label>
-            <Select value={tipo} onValueChange={(value) => setTipo((value as typeof tipo) ?? "")}>
+            <Select
+              items={ITEMS_TIPO_MOVIMENTACAO}
+              value={tipo}
+              onValueChange={(value) => setTipo((value as typeof tipo) ?? "")}
+            >
               <SelectTrigger id="tipo_movimentacao" className="w-full">
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>

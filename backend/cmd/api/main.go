@@ -286,6 +286,7 @@ func main() {
 		api.GET("/processos", processoHandler.Listar)
 		api.GET("/processos/:id", processoHandler.Buscar)
 		api.GET("/processos/:id/documentos", documentoHandler.Listar)
+		api.GET("/processos/:id/documentos/:docId/download", documentoHandler.Baixar)
 		api.GET("/processos/:id/relatorio", relatorioHandler.Gerar)
 		api.GET("/processos/:id/vistorias", vistoriaHandler.ListarPorProcesso)
 		api.GET("/vistorias/:id/relatorio", vistoriaHandler.GerarRelatorioCampo)
@@ -314,6 +315,7 @@ func main() {
 			fiscal.POST("/processos/:id/avancar", processoHandler.Avancar)
 			fiscal.POST("/processos/:id/concluir", processoHandler.Concluir)
 			fiscal.POST("/processos/:id/documentos", documentoHandler.Upload)
+			fiscal.DELETE("/processos/:id/documentos/:docId", documentoHandler.Excluir)
 
 			// Módulo 2 do roadmap: geração dos 3 documentos legais.
 			fiscal.POST("/contratos/:id/notificacao", geradorDocumentosHandler.GerarNotificacao)

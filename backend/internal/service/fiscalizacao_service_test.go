@@ -181,6 +181,90 @@ func TestFiscalizacaoService_Decorar(t *testing.T) {
 			t.Fatalf("esperava CONCLUIDO, veio %s", decorado.EstadoFiscalizacao)
 		}
 	})
+
+	t.Run("documentos_requeridos traz a lista completa (não só os pendentes), inclusive os já satisfeitos", func(t *testing.T) {
+		processo := &models.ProcessoPagamento{
+			ID:           uuid.New(),
+			EtapaAtualID: 1,
+			Status:       models.StatusProcessoAtivo,
+			Contrato:     &models.Contrato{TipoObjeto: models.TipoObjetoConsumo},
+		}
+		// Um dos 3 exigidos na etapa 1 já anexado — DocumentosRequeridos
+		// precisa continuar trazendo os 3, diferente de
+		// documentos_pendentes (que só traria os outros 2).
+		docRepo := &testutil.FakeDocumentoAnexoRepository{
+			Documentos: []models.DocumentoAnexo{
+				{
+					ProcessoPagamentoID: processo.ID,
+					TipoDocumento:       &models.TipoDocumento{Nome: "Ordem de Fornecimento (OF)"},
+				},
+			},
+		}
+		svc := service.NewFiscalizacaoService(docRepo, testutil.NewFakeOcorrenciaRepository())
+
+		decorado, err := svc.Decorar(ctx, processo, true)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		esperados := []string{"Ordem de Fornecimento (OF)", "Pré-Empenho", "Ofício de Solicitação"}
+		if len(decorado.DocumentosRequeridos) != len(esperados) {
+			t.Fatalf("esperava %d documentos requeridos, veio %v", len(esperados), decorado.DocumentosRequeridos)
+		}
+		for _, nome := range esperados {
+			if !contains(decorado.DocumentosRequeridos, nome) {
+				t.Fatalf("esperava %q em DocumentosRequeridos, veio %v", nome, decorado.DocumentosRequeridos)
+			}
+		}
+	})
+
+	t.Run("etapa sem checklist próprio (2) ainda mostra os requisitos cumulados da etapa 1", func(t *testing.T) {
+		// RequisitosAcumulados, não RequisitosEtapa isolada: a etapa 2 em
+		// si não exige nada pra ser deixada (só tramitação externa), mas
+		// o processo só chega na etapa 2 depois de satisfazer a etapa 1
+		// — o cumulativo continua exigindo esses 3 documentos, é
+		// justamente o que impede a lacuna do pedido do usuário (apagar
+		// um documento de etapa já concluída e seguir em frente sem
+		// repor).
+		processo := &models.ProcessoPagamento{
+			ID:           uuid.New(),
+			EtapaAtualID: 2,
+			Status:       models.StatusProcessoAtivo,
+			Contrato:     &models.Contrato{TipoObjeto: models.TipoObjetoConsumo},
+		}
+		svc := service.NewFiscalizacaoService(&testutil.FakeDocumentoAnexoRepository{}, testutil.NewFakeOcorrenciaRepository())
+
+		decorado, err := svc.Decorar(ctx, processo, true)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		esperados := []string{"Ordem de Fornecimento (OF)", "Pré-Empenho", "Ofício de Solicitação"}
+		if len(decorado.DocumentosRequeridos) != len(esperados) {
+			t.Fatalf("esperava %d documentos requeridos (cumulativo da etapa 1), veio %v", len(esperados), decorado.DocumentosRequeridos)
+		}
+		for _, nome := range esperados {
+			if !contains(decorado.DocumentosRequeridos, nome) {
+				t.Fatalf("esperava %q em DocumentosRequeridos, veio %v", nome, decorado.DocumentosRequeridos)
+			}
+		}
+	})
+
+	t.Run("sem Contrato carregado, documentos_requeridos é vazio, não nil", func(t *testing.T) {
+		processo := &models.ProcessoPagamento{
+			ID:           uuid.New(),
+			EtapaAtualID: 2,
+			Status:       models.StatusProcessoAtivo,
+			Contrato:     nil,
+		}
+		svc := service.NewFiscalizacaoService(&testutil.FakeDocumentoAnexoRepository{}, testutil.NewFakeOcorrenciaRepository())
+
+		decorado, err := svc.Decorar(ctx, processo, true)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if decorado.DocumentosRequeridos == nil || len(decorado.DocumentosRequeridos) != 0 {
+			t.Fatalf("esperava slice vazio (não nil), veio %v", decorado.DocumentosRequeridos)
+		}
+	})
 }
 
 func TestFiscalizacaoService_VerificarAvancoPermitido(t *testing.T) {

@@ -26,6 +26,14 @@ import { GATILHO_LABEL, GATILHOS } from "@/lib/modelos-documento";
 
 const SEM_GATILHO = "NENHUM";
 
+// items do Select de gatilho — ver o comentário em contratos-filtro.tsx
+// sobre por quê (sem isso, <SelectValue> mostra o value cru depois de
+// escolher, não o rótulo).
+const ITEMS_GATILHO = {
+  [SEM_GATILHO]: "Nenhum (só biblioteca de referência)",
+  ...GATILHO_LABEL,
+};
+
 /**
  * Cadastra uma categoria nova de modelo de documento — não usa
  * react-hook-form (diferente da maioria dos dialogs deste projeto)
@@ -97,7 +105,7 @@ export function CriarModeloDocumentoDialog() {
 
           <div className="space-y-2">
             <Label htmlFor="gatilho">Gatilho de geração (opcional)</Label>
-            <Select value={gatilho} onValueChange={(v) => setGatilho(v ?? SEM_GATILHO)}>
+            <Select items={ITEMS_GATILHO} value={gatilho} onValueChange={(v) => setGatilho(v ?? SEM_GATILHO)}>
               <SelectTrigger id="gatilho" className="w-full">
                 <SelectValue />
               </SelectTrigger>

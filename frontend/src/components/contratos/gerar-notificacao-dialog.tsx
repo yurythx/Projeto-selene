@@ -35,6 +35,14 @@ const MOTIVOS_COMUNS = [
   "OUTRO",
 ];
 
+// items do Select de motivo — ver o comentário em contratos-filtro.tsx
+// sobre por quê (sem isso, <SelectValue> mostra o value cru depois de
+// escolher — aqui o value já É o texto do motivo na maioria dos casos,
+// mas "OUTRO" precisa virar "Outro (especifique)", não ficar cru).
+const ITEMS_MOTIVO = Object.fromEntries(
+  MOTIVOS_COMUNS.map((motivo) => [motivo, motivo === "OUTRO" ? "Outro (especifique)" : motivo])
+);
+
 // Dialog do Gerador de Documentos Legais — gera a Notificação de
 // Descumprimento (PDF) do contrato, com motivo escolhido de uma lista
 // (ou texto livre em "OUTRO").
@@ -79,7 +87,11 @@ export function GerarNotificacaoDialog({ contratoId }: { contratoId: string }) {
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="motivo">Motivo</Label>
-            <Select value={motivoSelecionado} onValueChange={(value) => setMotivoSelecionado(value ?? "")}>
+            <Select
+              items={ITEMS_MOTIVO}
+              value={motivoSelecionado}
+              onValueChange={(value) => setMotivoSelecionado(value ?? "")}
+            >
               <SelectTrigger id="motivo" className="w-full">
                 <SelectValue placeholder="Selecione o motivo" />
               </SelectTrigger>

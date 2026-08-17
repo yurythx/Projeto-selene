@@ -19,6 +19,12 @@ import {
 const TODOS_TIPOS = "TODOS";
 const TODAS_SITUACOES = "TODAS";
 
+// Passadas como prop `items` do Select (não só usadas no .map() do
+// SelectContent) — sem isso, <SelectValue> só resolve o rótulo enquanto o
+// popup está aberto (o registro interno do base-ui é perdido quando o
+// Portal do SelectContent desmonta ao fechar); sem o `items` persistente,
+// depois de escolher a tela mostra o value cru ("SERVICO") em vez do
+// rótulo ("Serviço"). Achado real em produção, não só teórico.
 const TIPO_OBJETO_OPCOES = [
   { value: TODOS_TIPOS, label: "Todos os tipos" },
   { value: "CONSUMO", label: "Consumo" },
@@ -91,6 +97,7 @@ export function ContratosFiltro({
         />
       </div>
       <Select
+        items={TIPO_OBJETO_OPCOES}
         value={tipoObjetoInicial || TODOS_TIPOS}
         onValueChange={(valor) => atualizarFiltro({ tipo_objeto: valor === TODOS_TIPOS ? "" : (valor ?? "") })}
       >
@@ -106,6 +113,7 @@ export function ContratosFiltro({
         </SelectContent>
       </Select>
       <Select
+        items={SITUACAO_OPCOES}
         value={situacaoInicial || TODAS_SITUACOES}
         onValueChange={(valor) => atualizarFiltro({ situacao: valor === TODAS_SITUACOES ? "" : (valor ?? "") })}
       >

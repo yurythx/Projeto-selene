@@ -601,7 +601,12 @@ paths:
       description: >
         multipart/form-data. Se o SHA-256 do conteúdo já existir para este
         processo, reaproveita o registro existente em vez de duplicar (não
-        cria um novo). Limite de 20MB por arquivo.
+        cria um novo). Além disso, no máximo um documento de cada
+        tipo_documento_id é permitido por processo (ex: não pode haver dois
+        "Pré-Empenho") — um arquivo diferente do mesmo tipo é rejeitado com
+        409; para substituir, exclua o anterior (DELETE
+        /processos/{id}/documentos/{docId}) e envie o novo. Limite de 20MB
+        por arquivo.
       requestBody:
         required: true
         content:
@@ -623,10 +628,53 @@ paths:
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "403": { $ref: "#/components/responses/Proibido" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "409":
+          description: >
+            Já existe um documento deste tipo anexado a este processo —
+            exclua o anterior antes de enviar outro.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
         "413":
           description: Arquivo excede 20MB.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}/documentos/{docId}/download:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+      - name: docId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Documentos]
+      summary: Baixa/pré-visualiza o conteúdo de um documento anexo
+      description: >
+        Content-Disposition "inline" (não "attachment") — pensado pra
+        pré-visualização embutida (iframe/img) na página do processo, não
+        força download direto. Content-Type detectado do conteúdo real do
+        arquivo (não confia só na extensão do nome).
+      responses:
+        "200":
+          description: Conteúdo do arquivo (PDF ou imagem).
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            image/*: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+    delete:
+      tags: [Documentos]
+      summary: Exclui um documento anexo (registro e arquivo físico)
+      description: >
+        Restrito a fiscais. Sem trava de "já usado num avanço de etapa
+        passado" — ver o comentário em DocumentoService.Excluir no
+        backend.
+      responses:
+        "204": { description: Excluído. }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
         "429": { $ref: "#/components/responses/MuitasRequisicoes" }
 
   /api/v1/processos/{id}/relatorio:
@@ -1646,6 +1694,10 @@ components:
               type: array
               items: { type: string, enum: [AVANCAR_ETAPA, CONCLUIR_PAGAMENTO, ANEXAR_DOCUMENTO, REGISTRAR_OCORRENCIA, REGISTRAR_MOVIMENTACAO_EMPENHO] }
               description: "Vocabulário fechado que o frontend usa pra decidir quais botões mostrar — substitui a checagem client-side de EtapaAtualID/Status que existia antes."
+            documentos_requeridos:
+              type: array
+              items: { type: string }
+              description: "Lista COMPLETA e ACUMULADA de nomes de TipoDocumento exigidos até a etapa atual (não só os da etapa atual isolada, nem só os pendentes) — união dos requisitos de TODAS as etapas já percorridas (1..etapa_atual_id inclusive). Isso garante que um documento obrigatório de uma etapa anterior que tenha sido excluído volta a aparecer aqui e bloqueia o avanço, mesmo que a etapa atual em si não exija esse tipo (ex: as etapas 2 e 6 não têm checklist próprio, mas continuam mostrando os requisitos acumulados das etapas anteriores). Cruze com GET /processos/{id}/documentos (por TipoDocumento.Nome) pra saber quais já foram anexados. Vazio só quando o processo não tem Contrato carregado."
 
     DocumentoAnexo:
       type: object

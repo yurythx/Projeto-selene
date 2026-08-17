@@ -36,10 +36,9 @@ function iniciaisDoFiscal(nome?: string): string {
 /**
  * A mesma coleção de processos do quadro Kanban, achatada numa tabela —
  * "a versão em lista que todo CRM tem" (Monday/Trello também oferecem os
- * dois modos sobre o mesmo dado). Reaproveita ProcessoDialog através do
- * callback onOpen (o dialog em si continua vivendo em KanbanBoard, que já
- * o usa pro modo Kanban) — clicar numa linha abre exatamente o mesmo
- * drawer que clicar num card.
+ * dois modos sobre o mesmo dado). onOpen navega pra /kanban/[id] (ver
+ * KanbanBoard) — clicar numa linha leva pra mesma página dedicada do
+ * processo que clicar num card.
  */
 export function ProcessosLista({
   processos,

@@ -27,6 +27,14 @@ import type { ModeloDocumento } from "@/lib/api/client";
 
 const SEM_GATILHO = "NENHUM";
 
+// items do Select de gatilho — ver o comentário em contratos-filtro.tsx
+// sobre por quê (sem isso, <SelectValue> mostra o value cru depois de
+// escolher, não o rótulo).
+const ITEMS_GATILHO = {
+  [SEM_GATILHO]: "Nenhum (só biblioteca de referência)",
+  ...GATILHO_LABEL,
+};
+
 /** Renomeia a categoria e/ou troca o gatilho de geração associado — não mexe no arquivo. */
 export function EditarGatilhoModeloDialog({ modelo }: { modelo: ModeloDocumento }) {
   const router = useRouter();
@@ -71,7 +79,7 @@ export function EditarGatilhoModeloDialog({ modelo }: { modelo: ModeloDocumento 
 
           <div className="space-y-2">
             <Label htmlFor="editar-gatilho">Gatilho de geração</Label>
-            <Select value={gatilho} onValueChange={(v) => setGatilho(v ?? SEM_GATILHO)}>
+            <Select items={ITEMS_GATILHO} value={gatilho} onValueChange={(v) => setGatilho(v ?? SEM_GATILHO)}>
               <SelectTrigger id="editar-gatilho" className="w-full">
                 <SelectValue />
               </SelectTrigger>

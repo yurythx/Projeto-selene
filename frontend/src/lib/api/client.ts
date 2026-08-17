@@ -320,6 +320,36 @@ export function anexarDocumento(
   });
 }
 
+export function excluirDocumento(accessToken: string, processoId: string, documentoId: string) {
+  return apiFetch<void>(`/api/v1/processos/${processoId}/documentos/${documentoId}`, accessToken, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * Baixa o conteúdo de um documento anexo (PDF ou imagem) — Content-
+ * Disposition "inline" (ver o comentário no handler Go), pensado pra
+ * pré-visualização embutida na página do processo. Não passa por
+ * apiFetch — resposta binária, mesmo padrão de baixarRelatorio.
+ */
+export async function baixarDocumentoAnexo(
+  accessToken: string,
+  processoId: string,
+  documentoId: string
+): Promise<Response> {
+  const res = await fetch(`${API_URL}/api/v1/processos/${processoId}/documentos/${documentoId}/download`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => undefined);
+    throw new ApiError(res.status, body);
+  }
+
+  return res;
+}
+
 export function listarRadar(accessToken: string) {
   return apiFetch<ItemRadar[]>("/api/v1/radar", accessToken);
 }

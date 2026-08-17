@@ -14,6 +14,17 @@ import (
 	"projeto-selene/internal/service"
 )
 
+// documentoContentType detecta o Content-Type real do conteúdo — os
+// uploads deste app só aceitam PDF/imagem no cliente (accept=
+// "application/pdf,image/*" em processo-page.tsx), mas nada valida isso
+// no servidor hoje (diferente do .docx de Modelos de Documento, que
+// checa a assinatura ZIP), então sniffar de verdade em vez de confiar só
+// na extensão do nome do arquivo é mais robusto — usado pra decidir
+// "inline" (visualizável no navegador) no header de resposta.
+func documentoContentType(conteudo []byte) string {
+	return http.DetectContentType(conteudo)
+}
+
 // DocumentoHandler expõe as rotas HTTP de upload/consulta de documentos
 // anexos (PDFs) de um processo de pagamento.
 type DocumentoHandler struct {
@@ -127,4 +138,58 @@ func (h *DocumentoHandler) Listar(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, documentos)
+}
+
+// documentoIDsFromParams lê e valida os dois UUIDs da rota
+// /processos/:id/documentos/:docId — repetido em Baixar e Excluir.
+func documentoIDsFromParams(c *gin.Context) (processoID, documentoID uuid.UUID, ok bool) {
+	processoID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id de processo inválido"})
+		return uuid.Nil, uuid.Nil, false
+	}
+	documentoID, err = uuid.Parse(c.Param("docId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id de documento inválido"})
+		return uuid.Nil, uuid.Nil, false
+	}
+	return processoID, documentoID, true
+}
+
+// Baixar trata GET /api/v1/processos/:id/documentos/:docId/download —
+// serve o arquivo com Content-Disposition "inline" (não "attachment"),
+// de propósito: alimenta a pré-visualização embutida na página do
+// processo (iframe/img), não força um download direto — o navegador
+// ainda pode salvar via "Salvar como" se quiser.
+func (h *DocumentoHandler) Baixar(c *gin.Context) {
+	processoID, documentoID, ok := documentoIDsFromParams(c)
+	if !ok {
+		return
+	}
+
+	conteudo, documento, err := h.documentoService.Baixar(c.Request.Context(), processoID, documentoID)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+
+	c.Header("Content-Disposition", `inline; filename="`+documento.NomeArquivo+`"`)
+	c.Data(http.StatusOK, documentoContentType(conteudo), conteudo)
+}
+
+// Excluir trata DELETE /api/v1/processos/:id/documentos/:docId —
+// restrito a fiscais (ver o grupo de rotas em cmd/api/main.go, mesma
+// exigência do upload).
+func (h *DocumentoHandler) Excluir(c *gin.Context) {
+	processoID, documentoID, ok := documentoIDsFromParams(c)
+	if !ok {
+		return
+	}
+
+	if err := h.documentoService.Excluir(c.Request.Context(), processoID, documentoID); err != nil {
+		respondError(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }

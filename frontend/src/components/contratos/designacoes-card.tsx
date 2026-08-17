@@ -49,6 +49,10 @@ const papelLabel: Record<string, string> = {
 type PapelValue = DesignarRequest["papel"];
 
 const PAPEIS: PapelValue[] = ["FISCAL", "FISCAL_SUPLENTE", "GESTOR", "FISCAL_SETORIAL"];
+// items do Select de papel — ver o comentário em contratos-filtro.tsx
+// sobre por quê (sem isso, <SelectValue> mostra o value cru depois de
+// escolher, não o rótulo).
+const ITEMS_PAPEL = Object.fromEntries(PAPEIS.map((p) => [p, papelLabel[p]]));
 
 function NovaDesignacaoDialog({ contratoId }: { contratoId: string }) {
   const queryClient = useQueryClient();
@@ -66,6 +70,12 @@ function NovaDesignacaoDialog({ contratoId }: { contratoId: string }) {
     queryFn: () => fetchJSON<ServidorOpcao[]>("/api/servidores"),
     enabled: open,
   });
+
+  // items do select de Servidor — dinâmico (vem da query), mesmo motivo
+  // do ITEMS_PAPEL acima.
+  const itemsServidor = Object.fromEntries(
+    (servidoresQuery.data ?? []).map((servidor) => [servidor.ID!, `${servidor.Nome} (${servidor.Email})`])
+  );
 
   const limpar = () => {
     setServidorId("");
@@ -110,7 +120,7 @@ function NovaDesignacaoDialog({ contratoId }: { contratoId: string }) {
         <div className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="servidor_id">Servidor</Label>
-            <Select value={servidorId} onValueChange={(value) => setServidorId(value ?? "")}>
+            <Select items={itemsServidor} value={servidorId} onValueChange={(value) => setServidorId(value ?? "")}>
               <SelectTrigger id="servidor_id" className="w-full">
                 <SelectValue
                   placeholder={servidoresQuery.isLoading ? "Carregando..." : "Selecione"}
@@ -127,7 +137,7 @@ function NovaDesignacaoDialog({ contratoId }: { contratoId: string }) {
           </div>
           <div className="space-y-1">
             <Label htmlFor="papel">Papel</Label>
-            <Select value={papel} onValueChange={(value) => setPapel((value as PapelValue) ?? "")}>
+            <Select items={ITEMS_PAPEL} value={papel} onValueChange={(value) => setPapel((value as PapelValue) ?? "")}>
               <SelectTrigger id="papel" className="w-full">
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>

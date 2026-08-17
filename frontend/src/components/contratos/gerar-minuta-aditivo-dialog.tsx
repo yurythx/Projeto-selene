@@ -27,6 +27,15 @@ import {
 } from "@/components/ui/select";
 import { abrirOuBaixarDocumento } from "@/lib/abrir-documento";
 
+// items do Select de tipo de aditivo — ver o comentário em
+// contratos-filtro.tsx sobre por quê (sem isso, <SelectValue> mostra o
+// value cru depois de escolher, não o rótulo).
+const ITEMS_TIPO_ADITIVO = {
+  VALOR: "Valor",
+  PRAZO: "Prazo",
+  VALOR_E_PRAZO: "Valor e Prazo",
+};
+
 const schema = z.object({
   tipo_aditivo: z.enum(["VALOR", "PRAZO", "VALOR_E_PRAZO"]),
   justificativa: z.string().min(1, "Obrigatório"),
@@ -97,6 +106,7 @@ export function GerarMinutaAditivoDialog({ contratoId }: { contratoId: string })
           <div className="space-y-2">
             <Label htmlFor="tipo_aditivo">Tipo de aditivo</Label>
             <Select
+              items={ITEMS_TIPO_ADITIVO}
               defaultValue={form.getValues("tipo_aditivo")}
               onValueChange={(value) =>
                 form.setValue("tipo_aditivo", value as FormValues["tipo_aditivo"])

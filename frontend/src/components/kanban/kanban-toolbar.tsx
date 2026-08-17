@@ -17,6 +17,9 @@ import type { Visualizacao } from "./kanban-board";
 // aceita value="").
 const TODOS_TIPOS = "TODOS";
 
+// Passada como prop `items` do Select — ver o comentário em
+// contratos-filtro.tsx sobre por quê (sem isso, <SelectValue> mostra o
+// value cru depois de escolher, não o rótulo).
 const TIPO_OBJETO_OPCOES = [
   { value: TODOS_TIPOS, label: "Todos os tipos" },
   { value: "CONSUMO", label: "Consumo" },
@@ -58,6 +61,7 @@ export function KanbanToolbar({
           />
         </div>
         <Select
+          items={TIPO_OBJETO_OPCOES}
           value={tipoObjeto || TODOS_TIPOS}
           onValueChange={(valor) => onTipoObjetoChange(valor === TODOS_TIPOS ? "" : (valor ?? ""))}
         >
