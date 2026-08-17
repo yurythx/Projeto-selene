@@ -346,6 +346,41 @@ function decorarProcesso(processo: Processo) {
 
 resetState();
 
+// pdfDeTeste monta um PDF mínimo, mas REALMENTE válido (xref com offsets
+// corretos, calculados aqui, não hardcoded) — vira o corpo devolvido por
+// GET .../download. Precisa ser parseável de verdade porque a
+// pré-visualização de documento não usa mais um <iframe> genérico: usa
+// PDF.js embutido (ver components/kanban/documento-pdf-viewer.tsx), que
+// tenta renderizar o conteúdo de propósito — um PDF fake de faz de conta
+// (só os bytes mágicos "%PDF-1.4" na frente) cairia direto no estado de
+// erro do visualizador, e os specs não conseguiriam verificar a página
+// renderizada de verdade.
+function pdfDeTeste(): Buffer {
+  const objetos = [
+    "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n",
+    "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n",
+    "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Resources<<>>>>endobj\n",
+  ];
+
+  let corpo = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  for (const objeto of objetos) {
+    offsets.push(Buffer.byteLength(corpo));
+    corpo += objeto;
+  }
+
+  const xrefOffset = Buffer.byteLength(corpo);
+  corpo += `xref\n0 ${objetos.length + 1}\n`;
+  corpo += "0000000000 65535 f \n";
+  for (const offset of offsets) {
+    corpo += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  corpo += `trailer<</Size ${objetos.length + 1}/Root 1 0 R>>\n`;
+  corpo += `startxref\n${xrefOffset}\n%%EOF`;
+
+  return Buffer.from(corpo, "latin1");
+}
+
 function json(res: import("node:http").ServerResponse, status: number, body: unknown) {
   const payload = JSON.stringify(body);
   res.writeHead(status, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) });
@@ -561,7 +596,7 @@ const server = createServer((req, res) => {
 
       if (isDownload && req.method === "GET") {
         if (indice === -1) return json(res, 404, { error: "não encontrado" });
-        const corpo = Buffer.from("%PDF-1.4 conteúdo fake de teste (mock-backend)");
+        const corpo = pdfDeTeste();
         res.writeHead(200, {
           "Content-Type": "application/pdf",
           "Content-Disposition": `inline; filename="${lista[indice].NomeArquivo}"`,

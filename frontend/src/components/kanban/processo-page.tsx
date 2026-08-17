@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -55,6 +56,21 @@ import { montarChecklist } from "@/lib/checklist";
 import { cn } from "@/lib/utils";
 import { VistoriasDialog } from "./vistorias-dialog";
 import { OcorrenciasDialog } from "./ocorrencias-dialog";
+
+// pdfjs-dist (via react-pdf) depende de APIs de browser (Worker,
+// DOMMatrix, Canvas) que não existem no servidor — ssr:false é
+// obrigatório, senão o SSR/RSC deste componente client quebra tentando
+// renderizar o visualizador no Node. Sem loading customizado aqui: o
+// próprio DocumentoPdfViewer já mostra "Carregando documento…" assim que
+// monta.
+const DocumentoPdfViewer = dynamic(
+  () => import("./documento-pdf-viewer").then((mod) => mod.DocumentoPdfViewer),
+  { ssr: false }
+);
+
+function ehPdf(nomeArquivo: string): boolean {
+  return nomeArquivo.toLowerCase().endsWith(".pdf");
+}
 
 const ESTADO_FISCALIZACAO_LABEL: Record<string, string> = {
   A_EXECUTAR_CONFERIR: "A executar / conferir",
@@ -552,18 +568,25 @@ export function ProcessoPage({
       />
 
       {/* Pré-visualização rápida — "conferência" sem sair da tela (pedido
-          explícito): um <iframe> aponta pro proxy de download da rota
-          BFF, que repassa o Content-Type/Content-Disposition "inline"
-          reais do backend. Funciona pra PDF (visualizador nativo do
-          navegador) e imagem (o navegador embrulha num documento simples
-          quando servida sozinha num frame) sem precisar detectar o tipo
-          aqui no cliente. */}
+          explícito). PDF usa o visualizador embutido PDF.js
+          (DocumentoPdfViewer — zoom e navegação de página consistentes
+          entre navegadores, escolhido explicitamente pelo usuário no
+          lugar do visualizador nativo do browser). Imagem continua num
+          <iframe> simples apontando pro proxy de download da rota BFF —
+          PDF.js não se aplica a imagem, e o navegador já embrulha uma
+          imagem servida sozinha num frame sem esforço nenhum. */}
       <Dialog open={documentoPreview != null} onOpenChange={(open) => !open && setDocumentoPreview(null)}>
         <DialogContent className="flex h-[85vh] flex-col sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{documentoPreview?.TipoDocumento?.Nome ?? documentoPreview?.NomeArquivo}</DialogTitle>
           </DialogHeader>
-          {documentoPreview && (
+          {documentoPreview && ehPdf(documentoPreview.NomeArquivo ?? "") && (
+            <DocumentoPdfViewer
+              url={`/api/processos/${processoId}/documentos/${documentoPreview.ID}`}
+              nomeArquivo={documentoPreview.NomeArquivo ?? "documento.pdf"}
+            />
+          )}
+          {documentoPreview && !ehPdf(documentoPreview.NomeArquivo ?? "") && (
             <iframe
               src={`/api/processos/${processoId}/documentos/${documentoPreview.ID}`}
               title={documentoPreview.NomeArquivo}

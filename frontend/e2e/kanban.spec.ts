@@ -212,10 +212,16 @@ test.describe("/kanban", () => {
 
     // Pedido explícito do usuário: item satisfeito do checklist também
     // abre a pré-visualização, igual "Documentos anexados" — não precisa
-    // procurar o mesmo nome na outra lista.
+    // procurar o mesmo nome na outra lista. O visualizador é o PDF.js
+    // embutido (DocumentoPdfViewer, também pedido explícito no lugar do
+    // visualizador nativo do navegador) — "Página 1 de 1" só aparece se
+    // o PDF (o mock devolve um PDF mínimo mas de verdade, ver
+    // pdfDeTeste() em mock-backend.ts) foi carregado e parseado com
+    // sucesso, não é só um placeholder estático.
     await itemChecklist.getByRole("button", { name: "Visualizar Ordem de Fornecimento (OF)" }).click();
     const dialogPreview = page.getByRole("dialog", { name: "Ordem de Fornecimento (OF)" });
-    await expect(dialogPreview.locator("iframe")).toHaveAttribute("src", /\/documentos\/.+/);
+    await expect(dialogPreview.getByText("Página 1 de 1")).toBeVisible();
+    await expect(dialogPreview.locator("canvas")).toBeVisible();
   });
 
   test("tentar anexar um segundo documento do mesmo tipo é rejeitado (409)", async ({ page }) => {
@@ -274,16 +280,26 @@ test.describe("/kanban", () => {
     await expect(page.getByText("Documento anexado.")).toBeVisible();
 
     // Visualizar — clicar no NOME do documento (não um ícone à parte)
-    // abre o dialog de pré-visualização com o iframe, sem sair da página
-    // (pedido explícito).
+    // abre o dialog de pré-visualização com o visualizador PDF.js
+    // embutido, sem sair da página (pedido explícito).
     const listaDocumentos = page.getByTestId("documentos-anexados");
     await listaDocumentos.getByRole("button", { name: /Visualizar/ }).click();
-    const dialogPreview = page.getByRole("dialog").filter({ has: page.locator("iframe") });
+    const dialogPreview = page.getByRole("dialog").filter({ has: page.getByText(/Página \d+ de \d+/) });
     await expect(dialogPreview).toBeVisible();
-    await expect(dialogPreview.locator("iframe")).toHaveAttribute("src", /\/documentos\/.+/);
-    // Fecha pelo X, não Escape — o iframe (visualizador nativo de PDF do
-    // navegador) pode ficar com o foco e "engolir" o Escape antes dele
-    // chegar no listener do dialog (contexto de documento separado).
+    await expect(dialogPreview.getByText("Página 1 de 1")).toBeVisible();
+    await expect(dialogPreview.locator("canvas")).toBeVisible();
+
+    // Controles de zoom — pedido explícito do usuário (visualizador com
+    // zoom/navegação, no lugar do nativo do navegador).
+    await expect(dialogPreview.getByText("100%")).toBeVisible();
+    await dialogPreview.getByRole("button", { name: "Aumentar zoom" }).click();
+    await expect(dialogPreview.getByText("121%")).toBeVisible();
+    await dialogPreview.getByRole("button", { name: "Restaurar zoom" }).click();
+    await expect(dialogPreview.getByText("100%")).toBeVisible();
+
+    // Fecha pelo X, não Escape — o pdf.js pode capturar o foco do
+    // canvas/scroll e "engolir" o Escape antes dele chegar no listener
+    // do dialog.
     await dialogPreview.getByRole("button", { name: "Close" }).click();
     await expect(dialogPreview).not.toBeVisible();
 
