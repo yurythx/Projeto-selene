@@ -35,8 +35,10 @@ var etapasSeed = []models.KanbanEtapa{
 // garante o flag certo em bases novas. A migration continua necessária
 // pra fazer o mesmo backfill em bases que já existiam antes dela.
 var tiposDocumentoSeed = []struct {
-	Nome          string
-	ExigeValidade bool
+	Nome                  string
+	ExigeValidade         bool
+	RestritoTipoObjeto    *models.TipoObjeto
+	RestritoTerceirizacao bool
 }{
 	{Nome: "Ordem de Fornecimento (OF)"},
 	{Nome: "Pré-Empenho"},
@@ -53,17 +55,28 @@ var tiposDocumentoSeed = []struct {
 	{Nome: "CND Federal", ExigeValidade: true},
 	{Nome: "CND INSS", ExigeValidade: true},
 	{Nome: "Relatório de Pagamento Assinado"},
-	{Nome: "Planilha de Medição de Serviços"},
-	{Nome: "Boleto DAM"},
+	// RestritoTipoObjeto=SERVICO: só aparecem no select de upload e só
+	// podem ser anexados a processos de contratos SERVICO (ver
+	// service.TipoDocumentoAplicavel) — mesma regra que já valia pro
+	// checklist de avanço de etapa (checklistCondicionalServico), agora
+	// também aplicada ao upload em si.
+	{Nome: "Planilha de Medição de Serviços", RestritoTipoObjeto: &tipoObjetoServicoSeed},
+	{Nome: "Boleto DAM", RestritoTipoObjeto: &tipoObjetoServicoSeed},
 	// SGF-Rondonópolis, Fase 6: específicos de contratos de mão de obra
 	// terceirizada (IN SCL 04/2021 Art.9º-XXXII, alíneas a/b.1/b.2/b.3) —
-	// só entram no checklist quando Contrato.ExigeFiscalizacaoTerceirizacao
-	// é true, ver internal/service/checklist.go.
-	{Nome: "Comprovante de Pagamento de Salário"},
-	{Nome: "Protocolo GFIP"},
-	{Nome: "Guia GRF/GPS"},
-	{Nome: "Relação de Trabalhadores (SEFIP)"},
+	// só entram no checklist e só podem ser anexados quando
+	// Contrato.ExigeFiscalizacaoTerceirizacao é true, ver
+	// internal/service/checklist.go.
+	{Nome: "Comprovante de Pagamento de Salário", RestritoTerceirizacao: true},
+	{Nome: "Protocolo GFIP", RestritoTerceirizacao: true},
+	{Nome: "Guia GRF/GPS", RestritoTerceirizacao: true},
+	{Nome: "Relação de Trabalhadores (SEFIP)", RestritoTerceirizacao: true},
 }
+
+// tipoObjetoServicoSeed existe só pra dar um endereço estável a
+// models.TipoObjetoServico — os literais do slice acima precisam de um
+// ponteiro, e não dá pra tirar o endereço de uma constante diretamente.
+var tipoObjetoServicoSeed = models.TipoObjetoServico
 
 // Seed popula as tabelas de referência (kanban_etapas, tipos_documento) de
 // forma idempotente — seguro de rodar em todo boot da aplicação, já que
@@ -77,7 +90,12 @@ func Seed(db *gorm.DB) error {
 	}
 
 	for _, t := range tiposDocumentoSeed {
-		tipo := models.TipoDocumento{Nome: t.Nome, ExigeValidade: t.ExigeValidade}
+		tipo := models.TipoDocumento{
+			Nome:                  t.Nome,
+			ExigeValidade:         t.ExigeValidade,
+			RestritoTipoObjeto:    t.RestritoTipoObjeto,
+			RestritoTerceirizacao: t.RestritoTerceirizacao,
+		}
 		if err := db.Where(models.TipoDocumento{Nome: t.Nome}).FirstOrCreate(&tipo).Error; err != nil {
 			return fmt.Errorf("database: falha ao semear tipo de documento %q: %w", t.Nome, err)
 		}

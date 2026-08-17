@@ -32,10 +32,10 @@ test.describe("login tradicional", () => {
     await page.getByLabel("Senha").fill("senha12345");
     await page.getByRole("button", { name: "Entrar com e-mail e senha" }).click();
 
-    // callbackUrl é "/", que por sua vez redireciona pra /kanban
+    // callbackUrl é "/", que por sua vez redireciona pra /dashboard
     // (app/(app)/page.tsx) — a sessão local já está válida nesse ponto.
-    await expect(page).toHaveURL(/\/kanban/);
-    await expect(page.getByText("Elaborar OF / Pré-Empenho")).toBeVisible();
+    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   });
 
   test("credenciais erradas mostram mensagem sem sair da página", async ({ page }) => {
@@ -67,7 +67,7 @@ test.describe("login tradicional", () => {
     // Troca de senha desliga mustChangePassword na sessão (via
     // useSession().update(), sem precisar logar de novo) — a partir daqui
     // o proxy.ts para de redirecionar pra /trocar-senha. router.push("/")
-    // por sua vez cai em /kanban (app/(app)/page.tsx redireciona).
-    await expect(page).toHaveURL(/\/kanban/);
+    // por sua vez cai em /dashboard (app/(app)/page.tsx redireciona).
+    await expect(page).toHaveURL(/\/dashboard/);
   });
 });

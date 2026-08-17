@@ -31,6 +31,8 @@ Fluxo de dependência: `handler → service → repository → gorm/postgres`. C
 3. **Emitir OS / Envio à Empresa** — exige Nota de Empenho. Ao confirmar, dispara em goroutine o envio do pacote digital à contratada.
 4. **Execução e Recepção** — exige Nota Fiscal/Fatura e Ordem de Recepção.
 5. **Relatório de Pagamento** — exige as certidões (CNDs, Simples Nacional, Extrato do Empenho) + o relatório assinado reanexado; contratos `SERVICO` exigem adicionalmente Planilha de Medição e Boleto DAM; contratos com `ExigeFiscalizacaoTerceirizacao=true` exigem também os documentos trabalhistas mensais da IN SCL Nº 04/2021 Art.9º-XXXII (Comprovante de Pagamento de Salário, Protocolo GFIP, Guia GRF/GPS, Relação de Trabalhadores/SEFIP) — ver a seção [SGF-Rondonópolis](#sgf-rondonópolis-in-scl-012019-e-042021).
+
+   Esses mesmos documentos condicionais também são **restritos** por tipo de contrato: `TipoDocumento.RestritoTipoObjeto`/`RestritoTerceirizacao` (semeados junto com `tipos_documento`, migration `000010_restricao_tipo_documento`) marcam quais tipos só se aplicam a `SERVICO`/a contratos com terceirização — `service.TipoDocumentoAplicavel` faz valer isso tanto no upload (`DocumentoService.Upload` rejeita com 400 se o tipo não se aplicar ao contrato do processo) quanto no select do frontend (que só oferece os tipos aplicáveis). Documentos sem restrição continuam disponíveis em qualquer tipo de contrato.
 6. **Contabilidade (Liquidação e Pagamento)** — etapa final; `POST /processos/:id/concluir` marca como pago.
 
 Toda transição é atômica com a gravação em `kanban_logs` (mesma transação SQL) — ver `internal/service/kanban_service.go`.

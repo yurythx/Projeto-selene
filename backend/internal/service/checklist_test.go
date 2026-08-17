@@ -174,6 +174,42 @@ func TestChecklistPendente(t *testing.T) {
 	})
 }
 
+func TestTipoDocumentoAplicavel(t *testing.T) {
+	servico := models.TipoObjetoServico
+
+	t.Run("documento sem restrição se aplica a qualquer tipo de contrato", func(t *testing.T) {
+		tipo := models.TipoDocumento{Nome: "Nota Fiscal / Fatura"}
+		for _, obj := range []models.TipoObjeto{models.TipoObjetoConsumo, models.TipoObjetoPermanente, models.TipoObjetoServico} {
+			if !TipoDocumentoAplicavel(tipo, obj, false) {
+				t.Fatalf("documento sem restrição deveria se aplicar a %v", obj)
+			}
+		}
+	})
+
+	t.Run("documento restrito a SERVICO não se aplica a CONSUMO/PERMANENTE", func(t *testing.T) {
+		tipo := models.TipoDocumento{Nome: "Boleto DAM", RestritoTipoObjeto: &servico}
+		if TipoDocumentoAplicavel(tipo, models.TipoObjetoConsumo, false) {
+			t.Fatal("não deveria se aplicar a CONSUMO")
+		}
+		if TipoDocumentoAplicavel(tipo, models.TipoObjetoPermanente, false) {
+			t.Fatal("não deveria se aplicar a PERMANENTE")
+		}
+		if !TipoDocumentoAplicavel(tipo, models.TipoObjetoServico, false) {
+			t.Fatal("deveria se aplicar a SERVICO")
+		}
+	})
+
+	t.Run("documento restrito a terceirização só se aplica quando a flag do contrato é true", func(t *testing.T) {
+		tipo := models.TipoDocumento{Nome: "Protocolo GFIP", RestritoTerceirizacao: true}
+		if TipoDocumentoAplicavel(tipo, models.TipoObjetoServico, false) {
+			t.Fatal("não deveria se aplicar sem ExigeFiscalizacaoTerceirizacao")
+		}
+		if !TipoDocumentoAplicavel(tipo, models.TipoObjetoServico, true) {
+			t.Fatal("deveria se aplicar com ExigeFiscalizacaoTerceirizacao=true")
+		}
+	})
+}
+
 func assertContains(t *testing.T, got []string, want string) {
 	t.Helper()
 	for _, g := range got {

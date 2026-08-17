@@ -24,8 +24,10 @@ test.describe("barra de navegação", () => {
     // 'unsafe-inline' em script-src (ver proxy.ts), então sem passar o
     // nonce da requisição pro ThemeProvider (app/layout.tsx →
     // components/providers.tsx) esse script seria bloqueado.
-    await page.getByRole("button", { name: "Alternar tema" }).click();
-    await page.getByText("Escuro", { exact: true }).click();
+    //
+    // Um clique só, sem dropdown — ThemeToggle troca direto pro tema
+    // oposto (pedido explícito do usuário: sem menu "sistema").
+    await page.getByRole("button", { name: "Mudar para tema escuro" }).click();
     await expect(page.locator("html")).toHaveClass(/dark/);
 
     await page.reload();
@@ -48,5 +50,43 @@ test.describe("barra de navegação", () => {
 
     await page.goto("/kanban");
     await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("recolhe a sidebar pro modo só-ícone e expande de volta", async ({ page }) => {
+    await page.goto("/kanban");
+
+    const linkKanban = page.getByRole("link", { name: "Kanban" });
+    await expect(linkKanban).toBeVisible();
+    await expect(linkKanban).toHaveText(/Kanban/);
+
+    await page.getByRole("button", { name: "Recolher barra lateral" }).click();
+
+    // O link continua no DOM (mesmo nome acessível, via aria-label) —
+    // só o texto visível some, o ícone continua clicável.
+    await expect(linkKanban).toBeVisible();
+    await expect(linkKanban).toHaveText("");
+
+    await page.getByRole("button", { name: "Expandir barra lateral" }).click();
+    await expect(linkKanban).toHaveText(/Kanban/);
+  });
+
+  test("mobile: sidebar começa escondida, hambúrguer abre o drawer, e navegar fecha ele", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/kanban");
+
+    // Escondida por padrão (fora da tela) — o link existe no DOM mas não
+    // deveria estar visível pro usuário nesse viewport.
+    await expect(page.getByRole("link", { name: "Contratos" })).not.toBeInViewport();
+
+    await page.getByRole("button", { name: "Abrir menu" }).click();
+    await expect(page.getByRole("link", { name: "Contratos" })).toBeInViewport();
+
+    await page.getByRole("link", { name: "Contratos" }).click();
+    await expect(page).toHaveURL(/\/contratos/);
+    // Drawer fecha sozinho ao navegar — o link de Kanban (agora fora da
+    // rota ativa) não deveria estar visível de novo sem reabrir o menu.
+    await expect(page.getByRole("link", { name: "Kanban" })).not.toBeInViewport();
   });
 });

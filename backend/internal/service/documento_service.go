@@ -73,11 +73,21 @@ func (s *DocumentoService) Upload(
 	// nível de "../", não protege contra vários.
 	nomeArquivo = sanitizarNomeArquivo(nomeArquivo)
 
-	if _, err := s.processoRepo.FindByID(ctx, processoID); err != nil {
+	processo, err := s.processoRepo.FindByID(ctx, processoID)
+	if err != nil {
 		return nil, err
 	}
-	if _, err := s.tipoDocRepo.FindByID(ctx, tipoDocumentoID); err != nil {
+	tipoDoc, err := s.tipoDocRepo.FindByID(ctx, tipoDocumentoID)
+	if err != nil {
 		return nil, err
+	}
+
+	// processo.Contrato só vem nil nos dublês de teste que não preload
+	// (FindByID real sempre traz o Contrato) — nesse caso não há como
+	// avaliar a restrição, então não bloqueia (fail-open) em vez de
+	// derrubar um nil pointer.
+	if processo.Contrato != nil && !TipoDocumentoAplicavel(*tipoDoc, processo.Contrato.TipoObjeto, processo.Contrato.ExigeFiscalizacaoTerceirizacao) {
+		return nil, ErrTipoDocumentoNaoAplicavel
 	}
 
 	soma := sha256.Sum256(conteudo)

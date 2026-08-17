@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -38,11 +39,56 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolationCode
 }
 
+// FiltroContrato define os critérios opcionais de busca/filtro de
+// GET /contratos — todo campo vazio/zero significa "sem filtro nesse
+// critério" (nunca falha por filtro malformado, mesmo espírito de
+// Pagina.Normalizada em pagination.go).
+type FiltroContrato struct {
+	// Busca casa (ILIKE, sem diferenciar maiúsc./minúsc. nem acento do lado
+	// do usuário — Postgres ILIKE já ignora caixa; acento não é
+	// normalizado, mesma limitação aceita em qualquer busca por texto livre
+	// deste projeto) contra NumeroContrato, ContratadaNome ou
+	// ContratadaCNPJ (com ou sem máscara, já que a coluna guarda o valor
+	// como foi cadastrado).
+	Busca string
+	// TipoObjeto, quando um dos 3 valores válidos, restringe a esse tipo.
+	// Qualquer outro valor (incluindo "") é tratado como "sem filtro".
+	TipoObjeto models.TipoObjeto
+	// Situacao: "ativo" filtra Ativo=true, "encerrado" filtra Ativo=false,
+	// qualquer outro valor (incluindo "") não filtra.
+	Situacao string
+}
+
+// aplicarFiltroContrato encadeia as cláusulas WHERE de FiltroContrato numa
+// query GORM já iniciada — compartilhado entre a contagem (Count) e a
+// busca da página (Find) em List, pra nunca divergir entre "quantos tem"
+// e "quais são".
+func aplicarFiltroContrato(q *gorm.DB, filtro FiltroContrato) *gorm.DB {
+	if busca := strings.TrimSpace(filtro.Busca); busca != "" {
+		padrao := "%" + busca + "%"
+		q = q.Where("numero_contrato ILIKE ? OR contratada_nome ILIKE ? OR contratada_cnpj ILIKE ?", padrao, padrao, padrao)
+	}
+
+	switch filtro.TipoObjeto {
+	case models.TipoObjetoConsumo, models.TipoObjetoPermanente, models.TipoObjetoServico:
+		q = q.Where("tipo_objeto = ?", filtro.TipoObjeto)
+	}
+
+	switch filtro.Situacao {
+	case "ativo":
+		q = q.Where("ativo = ?", true)
+	case "encerrado":
+		q = q.Where("ativo = ?", false)
+	}
+
+	return q
+}
+
 // ContratoRepository abstrai o acesso à tabela `contratos`.
 type ContratoRepository interface {
 	Create(ctx context.Context, contrato *models.Contrato) error
 	FindByID(ctx context.Context, id uuid.UUID) (*models.Contrato, error)
-	List(ctx context.Context, pagina Pagina) (ResultadoPaginado[models.Contrato], error)
+	List(ctx context.Context, pagina Pagina, filtro FiltroContrato) (ResultadoPaginado[models.Contrato], error)
 	Update(ctx context.Context, contrato *models.Contrato) error
 	// ListAtivos retorna todos os contratos com Ativo=true, sem paginação
 	// — usado pelo RadarService (Fase 1 do roadmap) para varrer vigência
@@ -93,16 +139,16 @@ func (r *gormContratoRepository) FindByID(ctx context.Context, id uuid.UUID) (*m
 	return &contrato, nil
 }
 
-func (r *gormContratoRepository) List(ctx context.Context, pagina Pagina) (ResultadoPaginado[models.Contrato], error) {
+func (r *gormContratoRepository) List(ctx context.Context, pagina Pagina, filtro FiltroContrato) (ResultadoPaginado[models.Contrato], error) {
 	pagina = pagina.Normalizada()
 
 	var total int64
-	if err := r.db.WithContext(ctx).Model(&models.Contrato{}).Count(&total).Error; err != nil {
+	if err := aplicarFiltroContrato(r.db.WithContext(ctx).Model(&models.Contrato{}), filtro).Count(&total).Error; err != nil {
 		return ResultadoPaginado[models.Contrato]{}, fmt.Errorf("repository: contar contratos: %w", err)
 	}
 
 	contratos := []models.Contrato{}
-	err := r.db.WithContext(ctx).
+	err := aplicarFiltroContrato(r.db.WithContext(ctx).Model(&models.Contrato{}), filtro).
 		Preload("Fiscal").
 		Order("numero_contrato").
 		Offset(pagina.Offset()).

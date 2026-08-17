@@ -103,11 +103,14 @@ func (f *FakeContratoRepository) FindByID(ctx context.Context, id uuid.UUID) (*m
 	return nil, repository.ErrContratoNotFound
 }
 
-func (f *FakeContratoRepository) List(ctx context.Context, pagina repository.Pagina) (repository.ResultadoPaginado[models.Contrato], error) {
+func (f *FakeContratoRepository) List(ctx context.Context, pagina repository.Pagina, filtro repository.FiltroContrato) (repository.ResultadoPaginado[models.Contrato], error) {
 	pagina = pagina.Normalizada()
 
 	out := make([]models.Contrato, 0, len(f.Contratos))
 	for _, c := range f.Contratos {
+		if !contratoCasaFiltro(*c, filtro) {
+			continue
+		}
 		out = append(out, *c)
 	}
 
@@ -127,6 +130,41 @@ func (f *FakeContratoRepository) List(ctx context.Context, pagina repository.Pag
 		Pagina:        pagina.Numero,
 		TamanhoPagina: pagina.Tamanho,
 	}, nil
+}
+
+// contratoCasaFiltro espelha repository.aplicarFiltroContrato (não
+// exportada) em memória — mesma semântica de "campo vazio = sem filtro
+// nesse critério", pra qualquer teste que exercite FakeContratoRepository
+// se comportar como o repository GORM real faria.
+func contratoCasaFiltro(c models.Contrato, filtro repository.FiltroContrato) bool {
+	if busca := strings.TrimSpace(filtro.Busca); busca != "" {
+		busca = strings.ToLower(busca)
+		if !strings.Contains(strings.ToLower(c.NumeroContrato), busca) &&
+			!strings.Contains(strings.ToLower(c.ContratadaNome), busca) &&
+			!strings.Contains(strings.ToLower(c.ContratadaCNPJ), busca) {
+			return false
+		}
+	}
+
+	switch filtro.TipoObjeto {
+	case models.TipoObjetoConsumo, models.TipoObjetoPermanente, models.TipoObjetoServico:
+		if c.TipoObjeto != filtro.TipoObjeto {
+			return false
+		}
+	}
+
+	switch filtro.Situacao {
+	case "ativo":
+		if !c.Ativo {
+			return false
+		}
+	case "encerrado":
+		if c.Ativo {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (f *FakeContratoRepository) Update(ctx context.Context, contrato *models.Contrato) error {

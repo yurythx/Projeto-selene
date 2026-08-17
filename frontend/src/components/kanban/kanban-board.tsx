@@ -32,8 +32,28 @@ import type {
 import { itensDoProcesso, nivelMaisCritico } from "@/lib/radar";
 import { RadarNivelBadge } from "@/components/radar/radar-badge";
 import { corDaEtapa } from "@/lib/kanban-colors";
+import { filtrarProcessos, FILTRO_KANBAN_VAZIO, type FiltroKanban } from "@/lib/kanban-filtro";
+import { useMontado } from "@/lib/use-montado";
 import { ProcessoDialog } from "./processo-dialog";
 import { NovoProcessoDialog } from "./novo-processo-dialog";
+import { KanbanToolbar } from "./kanban-toolbar";
+import { ProcessosLista } from "./processos-lista";
+
+export type Visualizacao = "kanban" | "lista";
+
+// Preferência de visualização (Kanban/Lista) sobrevive a um reload — mesmo
+// truque de useMontado (ver lib/use-montado.ts, extraído de
+// theme-toggle.tsx): o valor default (renderizado no servidor E na
+// primeira pintura no cliente, antes da hidratação assentar) é sempre
+// "kanban", a leitura do localStorage só acontece depois de `montado`
+// virar true — sem isso, tanto o SSR quanto um useEffect+setState
+// causariam cascata de render/mismatch de hidratação.
+const CHAVE_VISUALIZACAO = "selene:kanban:visualizacao";
+
+function lerVisualizacaoSalva(): Visualizacao {
+  const salvo = localStorage.getItem(CHAVE_VISUALIZACAO);
+  return salvo === "lista" ? "lista" : "kanban";
+}
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -154,6 +174,24 @@ export function KanbanBoard({
   const [selecionado, setSelecionado] = useState<ProcessoPagamento | null>(null);
   const [novoOpen, setNovoOpen] = useState(false);
   const [activeProcesso, setActiveProcesso] = useState<ProcessoPagamento | null>(null);
+  const [filtro, setFiltro] = useState<FiltroKanban>(FILTRO_KANBAN_VAZIO);
+  const [visualizacaoEscolhida, setVisualizacaoEscolhida] = useState<Visualizacao | null>(null);
+  const montado = useMontado();
+  const visualizacao: Visualizacao = visualizacaoEscolhida ?? (montado ? lerVisualizacaoSalva() : "kanban");
+
+  function mudarVisualizacao(nova: Visualizacao) {
+    setVisualizacaoEscolhida(nova);
+    localStorage.setItem(CHAVE_VISUALIZACAO, nova);
+  }
+
+  // Filtrado por coluna (visão Kanban, contagem no cabeçalho reflete o
+  // filtro) e achatado (visão Lista) a partir do MESMO filtro — trocar de
+  // modo não perde busca/filtro em andamento.
+  const colunasFiltradas = useMemo(
+    () => colunasIniciais.map((coluna) => filtrarProcessos(coluna, filtro)),
+    [colunasIniciais, filtro]
+  );
+  const todosProcessosFiltrados = useMemo(() => colunasFiltradas.flat(), [colunasFiltradas]);
 
   const sensors = useSensors(
     // distance: 8 — um clique simples (sem mover o ponteiro) não deve
@@ -228,6 +266,23 @@ export function KanbanBoard({
         </div>
       )}
 
+      <KanbanToolbar
+        busca={filtro.busca}
+        onBuscaChange={(busca) => setFiltro((f) => ({ ...f, busca }))}
+        tipoObjeto={filtro.tipoObjeto}
+        onTipoObjetoChange={(tipoObjeto) => setFiltro((f) => ({ ...f, tipoObjeto }))}
+        visualizacao={visualizacao}
+        onVisualizacaoChange={mudarVisualizacao}
+      />
+
+      {visualizacao === "lista" ? (
+        <ProcessosLista
+          processos={todosProcessosFiltrados}
+          etapas={etapas}
+          radarItens={radarItens}
+          onOpen={setSelecionado}
+        />
+      ) : (
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -237,7 +292,7 @@ export function KanbanBoard({
         <div className="grid grid-cols-1 gap-4 overflow-x-auto sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {etapas.map((etapa, i) => {
             const cor = corDaEtapa(i);
-            const processos = colunasIniciais[i] ?? [];
+            const processos = colunasFiltradas[i] ?? [];
             const arrastandoAlgo = activeProcesso != null;
             const ehDestinoValido = arrastandoAlgo && etapa.ID === proximaEtapaValidaId;
             const ehOrigem = arrastandoAlgo && etapa.ID === activeProcesso?.EtapaAtualID;
@@ -301,6 +356,7 @@ export function KanbanBoard({
           )}
         </DragOverlay>
       </DndContext>
+      )}
 
       {selecionado && (
         <ProcessoDialog

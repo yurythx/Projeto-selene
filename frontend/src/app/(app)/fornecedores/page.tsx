@@ -1,15 +1,6 @@
-import Link from "next/link";
 import { getAccessToken } from "@/lib/auth-token";
 import { listarFornecedores, requireApi } from "@/lib/api/client";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { FornecedoresLista } from "@/components/fornecedores/fornecedores-lista";
 
 export default async function FornecedoresPage() {
   const accessToken = await getAccessToken();
@@ -30,43 +21,7 @@ export default async function FornecedoresPage() {
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Fornecedor</TableHead>
-              <TableHead>CNPJ</TableHead>
-              <TableHead>Contratos</TableHead>
-              <TableHead>Ativos</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {fornecedores.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={4} className="text-muted-foreground text-center">
-                  Nenhum fornecedor cadastrado ainda.
-                </TableCell>
-              </TableRow>
-            )}
-            {fornecedores.map((fornecedor) => (
-              <TableRow key={fornecedor.cnpj} className="hover:bg-accent">
-                <TableCell className="font-medium">
-                  <Link href={`/fornecedores/${fornecedor.cnpj}`} className="hover:underline">
-                    {fornecedor.nome}
-                  </Link>
-                </TableCell>
-                <TableCell>{fornecedor.cnpj_formatado}</TableCell>
-                <TableCell>{fornecedor.qtd_contratos}</TableCell>
-                <TableCell>
-                  <Badge variant={fornecedor.qtd_contratos_ativos ? "success" : "secondary"}>
-                    {fornecedor.qtd_contratos_ativos}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <FornecedoresLista fornecedores={fornecedores} />
     </div>
   );
 }

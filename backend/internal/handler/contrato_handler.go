@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"projeto-selene/internal/models"
+	"projeto-selene/internal/repository"
 	"projeto-selene/internal/service"
 )
 
@@ -67,9 +68,19 @@ func (h *ContratoHandler) Criar(c *gin.Context) {
 	c.JSON(http.StatusCreated, contrato)
 }
 
-// Listar trata GET /api/v1/contratos?pagina=&tamanho=.
+// Listar trata GET
+// /api/v1/contratos?pagina=&tamanho=&busca=&tipo_objeto=&situacao=. Os
+// três últimos são opcionais — ver repository.FiltroContrato pro
+// comportamento de cada um (inclusive valores inválidos, que são
+// ignorados em vez de gerar erro).
 func (h *ContratoHandler) Listar(c *gin.Context) {
-	resultado, err := h.contratoService.Listar(c.Request.Context(), paginaFromQuery(c))
+	filtro := repository.FiltroContrato{
+		Busca:      c.Query("busca"),
+		TipoObjeto: models.TipoObjeto(c.Query("tipo_objeto")),
+		Situacao:   c.Query("situacao"),
+	}
+
+	resultado, err := h.contratoService.Listar(c.Request.Context(), paginaFromQuery(c), filtro)
 	if err != nil {
 		respondError(c, err)
 		return

@@ -94,6 +94,25 @@ func RequisitosEtapa(etapaOrigemID int, tipoObjeto models.TipoObjeto, exigeFisca
 	return requisitos
 }
 
+// TipoDocumentoAplicavel reporta se `tipo` pode ser anexado (e deve
+// aparecer no select de upload) num processo cujo contrato tem o
+// tipoObjeto e a flag de terceirização informados. Usa
+// TipoDocumento.RestritoTipoObjeto/RestritoTerceirizacao — dados
+// semeados a partir das mesmas duas listas condicionais acima
+// (checklistCondicionalServico/checklistCondicionalTerceirizacao), então
+// nunca diverge do que RequisitosEtapa exige pra avançar a Etapa 5.
+// Documentos sem nenhuma restrição (a maioria — os da Coluna 1/3/4 e as
+// CNDs da Coluna 5) são sempre aplicáveis, em qualquer tipo de contrato.
+func TipoDocumentoAplicavel(tipo models.TipoDocumento, tipoObjeto models.TipoObjeto, exigeFiscalizacaoTerceirizacao bool) bool {
+	if tipo.RestritoTipoObjeto != nil && *tipo.RestritoTipoObjeto != tipoObjeto {
+		return false
+	}
+	if tipo.RestritoTerceirizacao && !exigeFiscalizacaoTerceirizacao {
+		return false
+	}
+	return true
+}
+
 // ChecklistPendente compara os documentos exigidos pela etapaOrigemID
 // (dado o tipoObjeto do contrato) com os documentos já anexados ao
 // processo, e retorna os nomes dos que ainda faltam. Uma lista vazia

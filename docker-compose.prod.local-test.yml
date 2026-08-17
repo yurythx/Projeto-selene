@@ -1,0 +1,14 @@
+# Override SÓ para testar docker-compose.prod.yml localmente lado a lado
+# com o stack de dev (docker-compose.yml) já rodando — não faz parte do
+# deploy real (não commitado, ver .gitignore). O compose de produção
+# original publica o Jaeger em 127.0.0.1:16686, mas essa porta já está
+# ocupada pelo Jaeger do stack de dev nesta máquina; aqui só trocamos a
+# porta do host, mantendo o resto do serviço intacto.
+services:
+  jaeger:
+    # "ports" é concatenado (não substituído) por padrão quando combinando
+    # compose files — sem !reset, a porta 16686 original continua tentando
+    # bindar junto com a nova, e o conflito persiste. !reset limpa a lista
+    # herdada antes de aplicar esta.
+    ports: !reset
+      - "127.0.0.1:16687:16686"

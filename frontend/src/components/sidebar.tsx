@@ -1,9 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { KanbanSquare, FileText, Radar as RadarIcon, Building2, ShieldCheck, Settings, LogOut } from "lucide-react";
+import {
+  LayoutDashboard,
+  KanbanSquare,
+  FileText,
+  Radar as RadarIcon,
+  Building2,
+  ShieldCheck,
+  Settings,
+  LogOut,
+  X,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -17,8 +30,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useMontado } from "@/lib/use-montado";
+import { useSidebarContext } from "@/components/sidebar-context";
 
 const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/contratos", label: "Contratos", icon: FileText },
   { href: "/radar", label: "Radar", icon: RadarIcon },
@@ -30,20 +46,49 @@ const NAV_ITEMS = [
 // usado como --sidebar-primary no modo escuro em globals.css
 // (oklch(0.488 0.243 264.376) ≈ faixa índigo/violeta), aplicado aqui
 // explicitamente pra funcionar igual nos dois temas (o token claro é só
-// cinza neutro, sem "cor de marca" de verdade).
-const ITEM_ATIVO = "bg-indigo-600 text-white dark:bg-indigo-500";
+// cinza neutro, sem "cor de marca" de verdade). shadow-sm dá o relevo de
+// "pílula" que o item ativo tem no Monday de verdade, em vez de só uma
+// mancha de cor chapada.
+const ITEM_ATIVO = "bg-indigo-600 text-white shadow-sm dark:bg-indigo-500";
 const ITEM_INATIVO =
   "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
+const CHAVE_COLAPSADO = "selene:sidebar:colapsado";
+
+function lerColapsadoSalvo(): boolean {
+  return localStorage.getItem(CHAVE_COLAPSADO) === "1";
+}
+
 /**
- * Barra de navegação LATERAL (estilo Monday.com) — substitui a antiga nav
- * horizontal (ver histórico do componente Nav). Fixa à esquerda, cor de
- * marca única no item ativo, avatar/tema na base. "Administração" e
- * "Configurações" só aparecem pra `session.user.isAdmin`.
+ * Barra de navegação LATERAL (estilo Monday.com). Três estados:
+ *
+ * - Desktop (md+), expandida: 256px, ícone + rótulo, é o default.
+ * - Desktop (md+), colapsada: 64px, só ícone (com tooltip nativo via
+ *   `title`) — alternado pelo botão-pílula preso na borda direita,
+ *   preferência persistida em localStorage (mesmo truque de useMontado
+ *   usado em kanban-board.tsx pra visualização Kanban/Lista, evita
+ *   mismatch de hidratação).
+ * - Mobile (< md): vira um drawer fora do fluxo (`fixed`), escondido por
+ *   padrão (`-translate-x-full`) e aberto pelo hambúrguer em
+ *   MobileTopBar — os dois compartilham o estado via SidebarProvider
+ *   (ver sidebar-context.tsx). Sempre em largura total quando aberta,
+ *   independente da preferência de colapso do desktop (64px não faz
+ *   sentido num drawer que já é overlay, não ocupa espaço permanente).
  */
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { mobileOpen, setMobileOpen } = useSidebarContext();
+  const [colapsadoEscolhido, setColapsadoEscolhido] = useState<boolean | null>(null);
+  const montado = useMontado();
+  const colapsado = colapsadoEscolhido ?? (montado ? lerColapsadoSalvo() : false);
+  const mostrarRotulos = !colapsado || mobileOpen;
+
+  function alternarColapsado() {
+    const novo = !colapsado;
+    setColapsadoEscolhido(novo);
+    localStorage.setItem(CHAVE_COLAPSADO, novo ? "1" : "0");
+  }
 
   const iniciais = (session?.user?.name ?? session?.user?.email ?? "?")
     .trim()
@@ -53,117 +98,173 @@ export function Sidebar() {
     .join("")
     .toUpperCase();
 
+  const itemClasse = (ativo: boolean) =>
+    cn(
+      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+      !mostrarRotulos && "justify-center px-0",
+      ativo ? ITEM_ATIVO : ITEM_INATIVO
+    );
+
   return (
-    <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r">
-      <div className="flex h-14 items-center gap-2 px-4">
-        <div className="flex size-7 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white dark:bg-indigo-500">
-          S
-        </div>
-        <span className="font-semibold">Selene</span>
-      </div>
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
-      <nav className="flex-1 space-y-1 px-3 py-2">
-        {NAV_ITEMS.map((item) => {
-          const ativo = pathname.startsWith(item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                ativo ? ITEM_ATIVO : ITEM_INATIVO
-              )}
-            >
-              <Icon className="size-4 shrink-0" />
-              {item.label}
-            </Link>
-          );
-        })}
+      <aside
+        className={cn(
+          "bg-sidebar text-sidebar-foreground border-sidebar-border fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col border-r shadow-xl transition-transform duration-200 md:sticky md:top-0 md:translate-x-0 md:shadow-none",
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
+          colapsado ? "md:w-16" : "md:w-64"
+        )}
+      >
+        {/* Botão de colapsar — só desktop, "pílula" presa na borda direita
+            da sidebar (padrão Notion/Linear), fora do fluxo interno pra
+            não brigar por espaço com o cabeçalho quando colapsada. */}
+        <button
+          type="button"
+          onClick={alternarColapsado}
+          aria-label={colapsado ? "Expandir barra lateral" : "Recolher barra lateral"}
+          className="border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-16 -right-3 z-10 hidden size-6 items-center justify-center rounded-full border shadow-sm md:flex"
+        >
+          {colapsado ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
+        </button>
 
-        {session?.user?.isAdmin && (
-          <>
-            <div
-              className="text-sidebar-foreground/40 px-3 pt-4 pb-1 text-xs font-semibold tracking-wide uppercase"
-              aria-hidden="true"
-            >
-              Admin
+        <div className="border-sidebar-border flex h-14 shrink-0 items-center justify-between gap-2 border-b px-4">
+          <div className={cn("flex items-center gap-2 overflow-hidden", !mostrarRotulos && "w-full justify-center")}>
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white dark:bg-indigo-500">
+              S
             </div>
-            {/* Rótulo "Administração" preservado ao pé da letra — é o
-                accessible name que e2e/admin.spec.ts procura via
-                getByRole("link", {name: "Administração"}). */}
-            <Link
-              href="/admin/usuarios"
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                pathname.startsWith("/admin") ? ITEM_ATIVO : ITEM_INATIVO
-              )}
-            >
-              <ShieldCheck className="size-4 shrink-0" />
-              Administração
-            </Link>
-            <Link
-              href="/configuracoes/modelos-documentos"
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                pathname.startsWith("/configuracoes") ? ITEM_ATIVO : ITEM_INATIVO
-              )}
-            >
-              <Settings className="size-4 shrink-0" />
-              Configurações
-            </Link>
-          </>
-        )}
-      </nav>
+            {mostrarRotulos && <span className="truncate font-semibold">Selene</span>}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Fechar menu"
+            className="hover:bg-sidebar-accent flex size-8 shrink-0 items-center justify-center rounded-lg md:hidden"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
 
-      <div className="border-sidebar-border flex items-center justify-between border-t p-3">
-        <ThemeToggle />
-        {session?.user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full"
-                  aria-label={`Menu de ${session.user.name ?? session.user.email}`}
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-3">
+          {NAV_ITEMS.map((item) => {
+            const ativo = pathname.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-label={item.label}
+                title={!mostrarRotulos ? item.label : undefined}
+                onClick={() => setMobileOpen(false)}
+                className={itemClasse(ativo)}
+              >
+                <Icon className="size-4 shrink-0" />
+                {mostrarRotulos && item.label}
+              </Link>
+            );
+          })}
+
+          {session?.user?.isAdmin && (
+            <>
+              {mostrarRotulos ? (
+                <div
+                  className="text-sidebar-foreground/40 px-3 pt-4 pb-1 text-xs font-semibold tracking-wide uppercase"
+                  aria-hidden="true"
                 >
-                  <Avatar className="size-8">
-                    <AvatarFallback>{iniciais}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" side="top">
-              {/* DropdownMenuLabel (Menu.GroupLabel do base-ui) exige um
-                  Menu.Group ancestral — sem ele, useMenuGroupRootContext()
-                  lança "Base UI error #31: MenuGroupContext is missing" e
-                  quebra a página inteira (ErrorBoundary) toda vez que
-                  alguém abre este menu. Bug real já corrigido uma vez
-                  nesta sessão — não reintroduzir. */}
-              <DropdownMenuGroup>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{session.user.name}</p>
-                    <p className="text-muted-foreground text-xs leading-none">
-                      {session.user.email}
-                    </p>
-                  </div>
-                </DropdownMenuLabel>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              {/* onClick, não onSelect — DropdownMenuItem é @base-ui/react/menu
-                  (não Radix): a prop que existe de verdade é onClick; onSelect
-                  é ignorado (não é um evento nativo de clique). Mesmo bug já
-                  corrigido uma vez nesta sessão — não reintroduzir. */}
-              <DropdownMenuItem onClick={() => signOut({ redirectTo: "/login" })}>
-                <LogOut />
-                Sair
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-    </aside>
+                  Admin
+                </div>
+              ) : (
+                <div className="border-sidebar-border mx-2 my-3 border-t" aria-hidden="true" />
+              )}
+              {/* Rótulo "Administração" preservado ao pé da letra — é o
+                  accessible name que e2e/admin.spec.ts procura via
+                  getByRole("link", {name: "Administração"}); aria-label
+                  explícito garante o mesmo nome acessível mesmo colapsada
+                  (sem o texto visível). */}
+              <Link
+                href="/admin/usuarios"
+                aria-label="Administração"
+                title={!mostrarRotulos ? "Administração" : undefined}
+                onClick={() => setMobileOpen(false)}
+                className={itemClasse(pathname.startsWith("/admin"))}
+              >
+                <ShieldCheck className="size-4 shrink-0" />
+                {mostrarRotulos && "Administração"}
+              </Link>
+              <Link
+                href="/configuracoes/modelos-documentos"
+                aria-label="Configurações"
+                title={!mostrarRotulos ? "Configurações" : undefined}
+                onClick={() => setMobileOpen(false)}
+                className={itemClasse(pathname.startsWith("/configuracoes"))}
+              >
+                <Settings className="size-4 shrink-0" />
+                {mostrarRotulos && "Configurações"}
+              </Link>
+            </>
+          )}
+        </nav>
+
+        <div
+          className={cn(
+            "border-sidebar-border flex shrink-0 items-center border-t p-3",
+            mostrarRotulos ? "justify-between" : "flex-col gap-2"
+          )}
+        >
+          <ThemeToggle />
+          {session?.user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full"
+                    aria-label={`Menu de ${session.user.name ?? session.user.email}`}
+                  >
+                    <Avatar className="size-8">
+                      <AvatarFallback>{iniciais}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align={mostrarRotulos ? "end" : "center"} side="top">
+                {/* DropdownMenuLabel (Menu.GroupLabel do base-ui) exige um
+                    Menu.Group ancestral — sem ele, useMenuGroupRootContext()
+                    lança "Base UI error #31: MenuGroupContext is missing" e
+                    quebra a página inteira (ErrorBoundary) toda vez que
+                    alguém abre este menu. Bug real já corrigido uma vez
+                    nesta sessão — não reintroduzir. */}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{session.user.name}</p>
+                      <p className="text-muted-foreground text-xs leading-none">
+                        {session.user.email}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                {/* onClick, não onSelect — @base-ui/react/menu (não Radix):
+                    a prop que existe de verdade é onClick; onSelect é
+                    ignorado (não é um evento nativo de clique). Mesmo bug
+                    já corrigido uma vez nesta sessão — não reintroduzir. */}
+                <DropdownMenuItem onClick={() => signOut({ redirectTo: "/login" })}>
+                  <LogOut />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }

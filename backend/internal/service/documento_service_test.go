@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,6 +49,75 @@ func (f *fakeTipoDocumentoRepositoryOK) FindByID(ctx context.Context, id int) (*
 }
 func (f *fakeTipoDocumentoRepositoryOK) FindByNome(ctx context.Context, nome string) (*models.TipoDocumento, error) {
 	return &models.TipoDocumento{Nome: nome}, nil
+}
+
+// fakeProcessoPagamentoRepositoryComContrato devolve um processo com
+// Contrato preenchido (TipoObjeto/ExigeFiscalizacaoTerceirizacao
+// configuráveis), pra exercitar a checagem de TipoDocumentoAplicavel em
+// DocumentoService.Upload — o fake "OK" acima devolve Contrato nil de
+// propósito (caminho fail-open), este aqui testa o caminho real.
+type fakeProcessoPagamentoRepositoryComContrato struct {
+	fakeProcessoPagamentoRepositoryOK
+	tipoObjeto                     models.TipoObjeto
+	exigeFiscalizacaoTerceirizacao bool
+}
+
+func (f *fakeProcessoPagamentoRepositoryComContrato) FindByID(ctx context.Context, id uuid.UUID) (*models.ProcessoPagamento, error) {
+	return &models.ProcessoPagamento{
+		ID: id,
+		Contrato: &models.Contrato{
+			TipoObjeto:                     f.tipoObjeto,
+			ExigeFiscalizacaoTerceirizacao: f.exigeFiscalizacaoTerceirizacao,
+		},
+	}, nil
+}
+
+// fakeTipoDocumentoRepositoryRestrito devolve um TipoDocumento restrito a
+// SERVICO — simula "Boleto DAM"/"Planilha de Medição de Serviços".
+type fakeTipoDocumentoRepositoryRestrito struct{}
+
+func (f *fakeTipoDocumentoRepositoryRestrito) List(ctx context.Context) ([]models.TipoDocumento, error) {
+	return nil, nil
+}
+func (f *fakeTipoDocumentoRepositoryRestrito) FindByID(ctx context.Context, id int) (*models.TipoDocumento, error) {
+	restrito := models.TipoObjetoServico
+	return &models.TipoDocumento{ID: id, Nome: "Boleto DAM", RestritoTipoObjeto: &restrito}, nil
+}
+func (f *fakeTipoDocumentoRepositoryRestrito) FindByNome(ctx context.Context, nome string) (*models.TipoDocumento, error) {
+	restrito := models.TipoObjetoServico
+	return &models.TipoDocumento{Nome: nome, RestritoTipoObjeto: &restrito}, nil
+}
+
+// TestDocumentoServiceUpload_TipoNaoAplicavel é o teste de regressão pro
+// filtro por tipo de contrato: um documento restrito a SERVICO (ex:
+// "Boleto DAM") não pode ser anexado a um processo de contrato
+// CONSUMO/PERMANENTE, mesmo que o cliente force o tipo_documento_id no
+// request (o select do frontend já filtra, mas a regra de verdade
+// precisa estar no backend).
+func TestDocumentoServiceUpload_TipoNaoAplicavel(t *testing.T) {
+	storageDir := t.TempDir()
+	docRepo := &fakeDocumentoAnexoRepository{}
+	tipoDocRepo := &fakeTipoDocumentoRepositoryRestrito{}
+
+	t.Run("contrato CONSUMO rejeita documento restrito a SERVICO", func(t *testing.T) {
+		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoConsumo}
+		svc := NewDocumentoService(docRepo, tipoDocRepo, processoRepo, storageDir)
+
+		_, err := svc.Upload(context.Background(), uuid.New(), 1, "boleto.pdf", []byte("conteúdo"), uuid.New(), nil)
+		if !errors.Is(err, ErrTipoDocumentoNaoAplicavel) {
+			t.Fatalf("esperava ErrTipoDocumentoNaoAplicavel, veio %v", err)
+		}
+	})
+
+	t.Run("contrato SERVICO aceita o mesmo documento", func(t *testing.T) {
+		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoServico}
+		svc := NewDocumentoService(docRepo, tipoDocRepo, processoRepo, storageDir)
+
+		_, err := svc.Upload(context.Background(), uuid.New(), 1, "boleto.pdf", []byte("conteúdo servico"), uuid.New(), nil)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+	})
 }
 
 func TestSanitizarNomeArquivo(t *testing.T) {

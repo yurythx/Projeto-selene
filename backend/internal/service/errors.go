@@ -157,3 +157,10 @@ var ErrArquivoNaoEDocx = errors.New("service: arquivo enviado não é um .docx v
 // explicitamente com o usuário), aplicada pelo handler ANTES de chamar
 // KanbanService.AvancarEtapa.
 var ErrOcorrenciaAbertaBloqueiaAvanco = errors.New("service: existe ocorrência aberta vinculada a este processo — regularize antes de avançar")
+
+// ErrTipoDocumentoNaoAplicavel é retornado por DocumentoService.Upload
+// quando o TipoDocumento escolhido é restrito a um tipo de contrato (ex:
+// "Boleto DAM" só se aplica a SERVICO) ou a contratos com
+// ExigeFiscalizacaoTerceirizacao=true, e o contrato do processo não
+// atende essa condição — ver service.TipoDocumentoAplicavel.
+var ErrTipoDocumentoNaoAplicavel = errors.New("service: este tipo de documento não se aplica ao tipo de contrato deste processo")

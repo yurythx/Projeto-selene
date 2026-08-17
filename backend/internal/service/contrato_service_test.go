@@ -97,7 +97,7 @@ func (f *fakeContratoRepository) FindByID(ctx context.Context, id uuid.UUID) (*m
 	return nil, repository.ErrContratoNotFound
 }
 
-func (f *fakeContratoRepository) List(ctx context.Context, pagina repository.Pagina) (repository.ResultadoPaginado[models.Contrato], error) {
+func (f *fakeContratoRepository) List(ctx context.Context, pagina repository.Pagina, filtro repository.FiltroContrato) (repository.ResultadoPaginado[models.Contrato], error) {
 	var out []models.Contrato
 	for _, c := range f.criados {
 		out = append(out, *c)

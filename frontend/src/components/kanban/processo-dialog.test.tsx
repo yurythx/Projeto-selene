@@ -198,4 +198,36 @@ describe("ProcessoDialog", () => {
     expect(screen.queryByRole("button", { name: "Avançar etapa" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Marcar como pago" })).not.toBeInTheDocument();
   });
+
+  it("filtra o select de tipo de documento pelo tipo de contrato do processo", async () => {
+    global.fetch = mockFetchPadrao();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const tiposComRestricao: TipoDocumento[] = [
+      { ID: 1, Nome: "Ofício de Solicitação" },
+      { ID: 2, Nome: "Boleto DAM", RestritoTipoObjeto: "SERVICO" },
+      { ID: 3, Nome: "Protocolo GFIP", RestritoTerceirizacao: true },
+    ];
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ProcessoDialog
+          processo={{
+            ...processo,
+            Contrato: { ...processo.Contrato, TipoObjeto: "CONSUMO", ExigeFiscalizacaoTerceirizacao: false },
+          }}
+          tiposDocumento={tiposComRestricao}
+          isFiscal
+          open
+          onOpenChange={() => {}}
+        />
+      </QueryClientProvider>
+    );
+
+    await user.click(await screen.findByRole("combobox", { name: /tipo de documento/i }));
+    expect(await screen.findByText("Ofício de Solicitação")).toBeInTheDocument();
+    expect(screen.queryByText("Boleto DAM")).not.toBeInTheDocument();
+    expect(screen.queryByText("Protocolo GFIP")).not.toBeInTheDocument();
+  });
 });

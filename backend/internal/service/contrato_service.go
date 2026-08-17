@@ -125,9 +125,10 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 	return contrato, nil
 }
 
-// Listar retorna uma página de contratos cadastrados.
-func (s *ContratoService) Listar(ctx context.Context, pagina repository.Pagina) (repository.ResultadoPaginado[models.Contrato], error) {
-	resultado, err := s.contratoRepo.List(ctx, pagina)
+// Listar retorna uma página de contratos cadastrados, opcionalmente
+// restrita por filtro (busca textual, tipo de objeto, situação).
+func (s *ContratoService) Listar(ctx context.Context, pagina repository.Pagina, filtro repository.FiltroContrato) (repository.ResultadoPaginado[models.Contrato], error) {
+	resultado, err := s.contratoRepo.List(ctx, pagina, filtro)
 	if err != nil {
 		return repository.ResultadoPaginado[models.Contrato]{}, fmt.Errorf("service: listar contratos: %w", err)
 	}

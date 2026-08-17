@@ -390,12 +390,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Lista contratos (paginado) */
+        /** Lista contratos (paginado, com busca e filtros opcionais) */
         get: {
             parameters: {
                 query?: {
                     pagina?: components["parameters"]["Pagina"];
                     tamanho?: components["parameters"]["Tamanho"];
+                    /** @description Texto livre (ILIKE) casado contra número do contrato, nome da contratada ou CNPJ. Vazio = sem filtro. */
+                    busca?: string;
+                    /** @description Valor diferente de CONSUMO/PERMANENTE/SERVICO (inclusive ausente) é tratado como 'sem filtro', não como erro. */
+                    tipo_objeto?: "CONSUMO" | "PERMANENTE" | "SERVICO";
+                    /** @description 'ativo' ou 'encerrado'. Qualquer outro valor (inclusive ausente) é tratado como 'sem filtro'. */
+                    situacao?: "ativo" | "encerrado";
                 };
                 header?: never;
                 path?: never;
@@ -2471,6 +2477,13 @@ export interface components {
             Nome?: string;
             /** @description true = tipo que vence (certidões) — o upload aceita 'data_validade'. */
             ExigeValidade?: boolean;
+            /**
+             * @description Quando preenchido, este tipo só se aplica a contratos deste TipoObjeto (ex: 'Boleto DAM' só em SERVICO) — o cliente deve ocultá-lo do select quando o contrato do processo for de outro tipo, e o upload é rejeitado (400) se enviado mesmo assim.
+             * @enum {string|null}
+             */
+            RestritoTipoObjeto?: "CONSUMO" | "PERMANENTE" | "SERVICO" | null;
+            /** @description true = só se aplica a contratos com ExigeFiscalizacaoTerceirizacao=true (documentos mensais do Art.9º-XXXII). */
+            RestritoTerceirizacao?: boolean;
         };
         /** @description Um alerta individual do Radar (Fase 1 do roadmap). */
         ItemRadar: {

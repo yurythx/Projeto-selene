@@ -160,8 +160,22 @@ export async function requireApi<T>(promise: Promise<T>): Promise<T> {
   }
 }
 
-export function listarContratos(accessToken: string, pagina = 1, tamanho = 20) {
+export interface FiltroContrato {
+  busca?: string;
+  tipoObjeto?: string;
+  situacao?: "ativo" | "encerrado";
+}
+
+export function listarContratos(
+  accessToken: string,
+  pagina = 1,
+  tamanho = 20,
+  filtro: FiltroContrato = {}
+) {
   const params = new URLSearchParams({ pagina: String(pagina), tamanho: String(tamanho) });
+  if (filtro.busca) params.set("busca", filtro.busca);
+  if (filtro.tipoObjeto) params.set("tipo_objeto", filtro.tipoObjeto);
+  if (filtro.situacao) params.set("situacao", filtro.situacao);
   return apiFetch<ResultadoPaginado<Contrato>>(`/api/v1/contratos?${params}`, accessToken);
 }
 

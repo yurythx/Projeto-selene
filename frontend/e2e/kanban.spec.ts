@@ -181,6 +181,31 @@ test.describe("/kanban", () => {
     await expect(page.getByText("arquivo-teste.pdf")).toBeVisible();
   });
 
+  test("alterna pra visão em Lista e filtra por busca", async ({ page }) => {
+    await page.goto("/kanban");
+    await expect(page.getByText("1/2026").first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Lista" }).click();
+
+    // Na Lista, o número do contrato aparece numa célula de tabela, não
+    // mais dentro de um card do quadro — a mesma asserção de texto ainda
+    // funciona porque só muda a estrutura ao redor.
+    const linha = page.getByRole("row").filter({ hasText: "1/2026" });
+    await expect(linha).toBeVisible();
+    await expect(linha.getByText("Fornecedora Seed Ltda")).toBeVisible();
+
+    // Busca que não casa com nada some com a linha, sem quebrar a página.
+    await page.getByPlaceholder(/Buscar por contrato/).fill("empresa que não existe");
+    await expect(page.getByRole("row").filter({ hasText: "1/2026" })).not.toBeVisible();
+    await expect(page.getByText("Nenhum processo encontrado.")).toBeVisible();
+
+    // Limpar a busca traz o processo de volta e volta pro Kanban preserva
+    // o mesmo filtro (agora vazio).
+    await page.getByPlaceholder(/Buscar por contrato/).fill("");
+    await page.getByRole("button", { name: "Kanban" }).click();
+    await expect(page.getByText("1/2026").first()).toBeVisible();
+  });
+
   test("registra uma vistoria de campo e anexa uma foto", async ({ page }) => {
     await page.goto("/kanban");
     await page.getByText("1/2026").first().click();

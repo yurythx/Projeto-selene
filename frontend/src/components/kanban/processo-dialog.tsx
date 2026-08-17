@@ -32,6 +32,7 @@ import type {
 } from "@/lib/api/client";
 import { RadarNivelBadge } from "@/components/radar/radar-badge";
 import { abrirOuBaixarDocumento } from "@/lib/abrir-documento";
+import { tiposDocumentoAplicaveis } from "@/lib/tipos-documento";
 import { VistoriasDialog } from "./vistorias-dialog";
 import { OcorrenciasDialog } from "./ocorrencias-dialog";
 import { TriangleAlertIcon } from "lucide-react";
@@ -82,7 +83,21 @@ export function ProcessoDialog({
   const [vistoriasOpen, setVistoriasOpen] = useState(false);
   const [ocorrenciasOpen, setOcorrenciasOpen] = useState(false);
 
-  const tipoDocumentoSelecionado = tiposDocumento.find(
+  // Filtrado pelo tipo de contrato do processo — documentos restritos a
+  // SERVICO (Planilha de Medição, Boleto DAM) ou a
+  // ExigeFiscalizacaoTerceirizacao (Comprovante de Salário, GFIP, GRF/GPS,
+  // SEFIP) só aparecem no select quando o contrato deste processo
+  // realmente se qualifica; ver lib/tipos-documento.ts e o comentário em
+  // service.TipoDocumentoAplicavel no backend, que é quem faz valer a
+  // regra de verdade (este filtro é só pra não oferecer no select uma
+  // opção que o upload rejeitaria).
+  const tiposAplicaveis = tiposDocumentoAplicaveis(
+    tiposDocumento,
+    processo.Contrato?.TipoObjeto,
+    processo.Contrato?.ExigeFiscalizacaoTerceirizacao
+  );
+
+  const tipoDocumentoSelecionado = tiposAplicaveis.find(
     (tipo) => String(tipo.ID) === tipoSelecionado
   );
 
@@ -287,7 +302,7 @@ export function ProcessoDialog({
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {tiposDocumento.map((tipo) => (
+                  {tiposAplicaveis.map((tipo) => (
                     <SelectItem key={tipo.ID} value={String(tipo.ID)}>
                       {tipo.Nome}
                     </SelectItem>

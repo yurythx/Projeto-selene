@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { NovoContratoDialog } from "@/components/contratos/novo-contrato-dialog";
+import { ContratosFiltro } from "@/components/contratos/contratos-filtro";
+import { Paginacao } from "@/components/paginacao";
 
 const TIPO_OBJETO_LABEL: Record<string, string> = {
   CONSUMO: "Consumo",
@@ -19,12 +21,18 @@ const TIPO_OBJETO_LABEL: Record<string, string> = {
   SERVICO: "Serviço",
 };
 
+const TAMANHO_PAGINA = 20;
+
 function formatarData(iso?: string) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
-export default async function ContratosPage() {
+export default async function ContratosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pagina?: string; busca?: string; tipo_objeto?: string; situacao?: string }>;
+}) {
   const session = await auth();
   const accessToken = await getAccessToken();
 
@@ -35,7 +43,19 @@ export default async function ContratosPage() {
     return null;
   }
 
-  const resultado = await requireApi(listarContratos(accessToken));
+  const sp = await searchParams;
+  const paginaAtual = Number(sp.pagina) > 0 ? Number(sp.pagina) : 1;
+  const busca = sp.busca ?? "";
+  const tipoObjeto = sp.tipo_objeto ?? "";
+  const situacao = sp.situacao === "ativo" || sp.situacao === "encerrado" ? sp.situacao : undefined;
+
+  const resultado = await requireApi(
+    listarContratos(accessToken, paginaAtual, TAMANHO_PAGINA, { busca, tipoObjeto, situacao })
+  );
+  const total = resultado.total ?? 0;
+  const totalPaginas = Math.max(1, Math.ceil(total / (resultado.tamanho_pagina ?? TAMANHO_PAGINA)));
+
+  const filtroAtivo = Boolean(busca || tipoObjeto || situacao);
 
   return (
     <div className="space-y-6">
@@ -43,12 +63,15 @@ export default async function ContratosPage() {
         <div>
           <h1 className="text-2xl font-semibold">Contratos</h1>
           <p className="text-muted-foreground text-sm">
-            {resultado.total} contrato{resultado.total === 1 ? "" : "s"} cadastrado
-            {resultado.total === 1 ? "" : "s"}.
+            {total} contrato{total === 1 ? "" : "s"}
+            {filtroAtivo ? " encontrado" : " cadastrado"}
+            {total === 1 ? "" : "s"}.
           </p>
         </div>
         {session?.user?.isFiscal && <NovoContratoDialog fiscalNome={session.user.name ?? ""} />}
       </div>
+
+      <ContratosFiltro buscaInicial={busca} tipoObjetoInicial={tipoObjeto} situacaoInicial={situacao ?? ""} />
 
       <div className="overflow-x-auto rounded-lg border shadow-sm">
         <Table>
@@ -66,7 +89,9 @@ export default async function ContratosPage() {
             {resultado.dados.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-muted-foreground text-center">
-                  Nenhum contrato cadastrado ainda.
+                  {filtroAtivo
+                    ? "Nenhum contrato encontrado com esses filtros."
+                    : "Nenhum contrato cadastrado ainda."}
                 </TableCell>
               </TableRow>
             )}
@@ -93,6 +118,8 @@ export default async function ContratosPage() {
           </TableBody>
         </Table>
       </div>
+
+      <Paginacao paginaAtual={resultado.pagina ?? paginaAtual} totalPaginas={totalPaginas} />
     </div>
   );
 }
