@@ -56,15 +56,22 @@ func (f *fakeTipoDocumentoRepositoryOK) FindByNome(ctx context.Context, nome str
 // configuráveis), pra exercitar a checagem de TipoDocumentoAplicavel em
 // DocumentoService.Upload — o fake "OK" acima devolve Contrato nil de
 // propósito (caminho fail-open), este aqui testa o caminho real.
+// etapaAtualID alimenta a checagem de RequisitosAcumulados (só é possível
+// anexar um tipo que já faz parte do checklist até a etapa atual) — zero
+// value (0) faz RequisitosAcumulados devolver uma lista vazia, então os
+// testes que exercitam documentos condicionais de Etapa 5 (Boleto DAM
+// etc.) precisam setar etapaAtualID: 5 explicitamente.
 type fakeProcessoPagamentoRepositoryComContrato struct {
 	fakeProcessoPagamentoRepositoryOK
 	tipoObjeto                     models.TipoObjeto
 	exigeFiscalizacaoTerceirizacao bool
+	etapaAtualID                   int
 }
 
 func (f *fakeProcessoPagamentoRepositoryComContrato) FindByID(ctx context.Context, id uuid.UUID) (*models.ProcessoPagamento, error) {
 	return &models.ProcessoPagamento{
-		ID: id,
+		ID:           id,
+		EtapaAtualID: f.etapaAtualID,
 		Contrato: &models.Contrato{
 			TipoObjeto:                     f.tipoObjeto,
 			ExigeFiscalizacaoTerceirizacao: f.exigeFiscalizacaoTerceirizacao,
@@ -100,7 +107,7 @@ func TestDocumentoServiceUpload_TipoNaoAplicavel(t *testing.T) {
 	tipoDocRepo := &fakeTipoDocumentoRepositoryRestrito{}
 
 	t.Run("contrato CONSUMO rejeita documento restrito a SERVICO", func(t *testing.T) {
-		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoConsumo}
+		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoConsumo, etapaAtualID: 5}
 		svc := NewDocumentoService(docRepo, tipoDocRepo, processoRepo, storageDir)
 
 		_, err := svc.Upload(context.Background(), uuid.New(), 1, "boleto.pdf", []byte("conteúdo"), uuid.New(), nil)
@@ -110,7 +117,11 @@ func TestDocumentoServiceUpload_TipoNaoAplicavel(t *testing.T) {
 	})
 
 	t.Run("contrato SERVICO aceita o mesmo documento", func(t *testing.T) {
-		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoServico}
+		// etapaAtualID: 5 — "Boleto DAM" só entra no checklist acumulado
+		// (RequisitosAcumulados) como condicional da Etapa 5 pra contratos
+		// SERVICO; sem isso a nova checagem de "documento ainda não exigido
+		// nesta etapa" rejeitaria mesmo um contrato SERVICO válido.
+		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoServico, etapaAtualID: 5}
 		svc := NewDocumentoService(docRepo, tipoDocRepo, processoRepo, storageDir)
 
 		_, err := svc.Upload(context.Background(), uuid.New(), 1, "boleto.pdf", []byte("conteúdo servico"), uuid.New(), nil)
@@ -171,6 +182,71 @@ func TestDocumentoServiceUpload_UmPorTipo(t *testing.T) {
 		_, err := svc.Upload(context.Background(), processoID, 1, "pre-empenho-v2.pdf", []byte("conteúdo diferente, mesmo tipo"), uuid.New(), nil)
 		if err != nil {
 			t.Fatalf("erro inesperado depois de excluir o anterior: %v", err)
+		}
+	})
+}
+
+// fakeTipoDocumentoRepositoryComNome devolve um TipoDocumento com o nome
+// configurado (sem nenhuma restrição de contrato) — usado pra testar a
+// checagem de "documento ainda não exigido nesta etapa" com nomes reais
+// do checklist (ver checklist.go), diferente de fakeTipoDocumentoRepositoryOK
+// (nome fixo "Tipo Teste", que nunca bate com nenhum checklist de verdade).
+type fakeTipoDocumentoRepositoryComNome struct {
+	nome string
+}
+
+func (f *fakeTipoDocumentoRepositoryComNome) List(ctx context.Context) ([]models.TipoDocumento, error) {
+	return nil, nil
+}
+func (f *fakeTipoDocumentoRepositoryComNome) FindByID(ctx context.Context, id int) (*models.TipoDocumento, error) {
+	return &models.TipoDocumento{ID: id, Nome: f.nome}, nil
+}
+func (f *fakeTipoDocumentoRepositoryComNome) FindByNome(ctx context.Context, nome string) (*models.TipoDocumento, error) {
+	return &models.TipoDocumento{Nome: nome}, nil
+}
+
+// TestDocumentoServiceUpload_NaoExigidoNestaEtapa cobre a regra pedida
+// pelo usuário: "quero que apareça somente os documentos que realmente
+// podem ser inseridos na etapa" — o backend rejeita o upload de um tipo
+// que ainda não faz parte do checklist cumulado até a etapa atual do
+// processo (ex: uma CND, só exigida na Etapa 5, enquanto o processo
+// ainda está na Etapa 1), mas continua aceitando tipos de etapas já
+// concluídas (a regra cumulativa de RequisitosAcumulados/checklist
+// precisa continuar permitindo reenviar um obrigatório antigo excluído).
+func TestDocumentoServiceUpload_NaoExigidoNestaEtapa(t *testing.T) {
+	storageDir := t.TempDir()
+	docRepo := &fakeDocumentoAnexoRepository{}
+
+	t.Run("documento de uma etapa futura é rejeitado", func(t *testing.T) {
+		tipoDocRepo := &fakeTipoDocumentoRepositoryComNome{nome: "CND Federal"} // só exigido na Etapa 5
+		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoConsumo, etapaAtualID: 1}
+		svc := NewDocumentoService(docRepo, tipoDocRepo, processoRepo, storageDir)
+
+		_, err := svc.Upload(context.Background(), uuid.New(), 1, "cnd.pdf", []byte("conteúdo"), uuid.New(), nil)
+		if !errors.Is(err, ErrTipoDocumentoNaoExigidoAinda) {
+			t.Fatalf("esperava ErrTipoDocumentoNaoExigidoAinda, veio %v", err)
+		}
+	})
+
+	t.Run("documento da etapa atual é aceito", func(t *testing.T) {
+		tipoDocRepo := &fakeTipoDocumentoRepositoryComNome{nome: "Nota de Empenho"} // exigido na Etapa 3
+		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoConsumo, etapaAtualID: 3}
+		svc := NewDocumentoService(docRepo, tipoDocRepo, processoRepo, storageDir)
+
+		_, err := svc.Upload(context.Background(), uuid.New(), 1, "empenho.pdf", []byte("conteúdo"), uuid.New(), nil)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+	})
+
+	t.Run("documento de uma etapa já concluída continua aceito (regra cumulativa)", func(t *testing.T) {
+		tipoDocRepo := &fakeTipoDocumentoRepositoryComNome{nome: "Pré-Empenho"} // exigido na Etapa 1
+		processoRepo := &fakeProcessoPagamentoRepositoryComContrato{tipoObjeto: models.TipoObjetoConsumo, etapaAtualID: 4}
+		svc := NewDocumentoService(docRepo, tipoDocRepo, processoRepo, storageDir)
+
+		_, err := svc.Upload(context.Background(), uuid.New(), 1, "pre-empenho.pdf", []byte("conteúdo"), uuid.New(), nil)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
 		}
 	})
 }

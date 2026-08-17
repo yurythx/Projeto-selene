@@ -130,19 +130,33 @@ export function ProcessoPage({
   });
   const documentos = documentosQuery.data;
 
-  // Filtrado pelo tipo de contrato do processo — documentos restritos a
-  // SERVICO (Planilha de Medição, Boleto DAM) ou a
-  // ExigeFiscalizacaoTerceirizacao (Comprovante de Salário, GFIP, GRF/GPS,
-  // SEFIP) só aparecem no select quando o contrato deste processo
-  // realmente se qualifica; ver lib/tipos-documento.ts e o comentário em
-  // service.TipoDocumentoAplicavel no backend, que é quem faz valer a
-  // regra de verdade (este filtro é só pra não oferecer no select uma
-  // opção que o upload rejeitaria).
+  const checklist = montarChecklist(processo.documentos_requeridos ?? [], documentos);
+  const checklistCompleto = checklist.every((item) => item.satisfeito);
+
+  // Só oferece no select os tipos que REALMENTE podem ser inseridos nesta
+  // etapa — pedido explícito do usuário. Dois filtros combinados:
+  // 1. Tipo de contrato (já existia): documentos restritos a SERVICO
+  //    (Planilha de Medição, Boleto DAM) ou a
+  //    ExigeFiscalizacaoTerceirizacao (Comprovante de Salário, GFIP,
+  //    GRF/GPS, SEFIP) só aparecem quando o contrato deste processo
+  //    realmente se qualifica; ver lib/tipos-documento.ts e
+  //    service.TipoDocumentoAplicavel no backend.
+  // 2. Checklist cumulado até a etapa atual (novo): um tipo só aparece se
+  //    ainda estiver PENDENTE no checklist (documentos_requeridos, que já
+  //    é cumulativo entre etapas — ver RequisitosAcumulados no backend).
+  //    Isso esconde documentos de etapas futuras (ex: uma CND, só exigida
+  //    na Etapa 5, enquanto o processo ainda está na Etapa 1) e também os
+  //    tipos já satisfeitos (reenviar um tipo já anexado seria rejeitado
+  //    com 409 — pra substituir, exclua o anterior primeiro, o que volta
+  //    a liberá-lo aqui). O backend (DocumentoService.Upload) é quem faz
+  //    valer as duas regras de verdade; este filtro só evita oferecer uma
+  //    opção que o upload rejeitaria.
+  const nomesPendentes = new Set(checklist.filter((item) => !item.satisfeito).map((item) => item.nome));
   const tiposAplicaveis = tiposDocumentoAplicaveis(
     tiposDocumento,
     processo.Contrato?.TipoObjeto,
     processo.Contrato?.ExigeFiscalizacaoTerceirizacao
-  );
+  ).filter((tipo) => Boolean(tipo.Nome) && nomesPendentes.has(tipo.Nome!));
   const tipoDocumentoSelecionado = tiposAplicaveis.find((tipo) => String(tipo.ID) === tipoSelecionado);
   // items — sem isso, <SelectValue> só consegue resolver o rótulo
   // enquanto o popup está aberto (o registro interno do base-ui some
@@ -151,9 +165,6 @@ export function ProcessoPage({
   // documento. Achado real reportado em produção, não só teórico — ver
   // o mesmo padrão aplicado nos outros Selects dinâmicos do app.
   const itemsTipoDocumento = Object.fromEntries(tiposAplicaveis.map((tipo) => [String(tipo.ID), tipo.Nome]));
-
-  const checklist = montarChecklist(processo.documentos_requeridos ?? [], documentos);
-  const checklistCompleto = checklist.every((item) => item.satisfeito);
 
   const uploadMutation = useMutation({
     mutationFn: async (formData: FormData) =>
@@ -389,7 +400,13 @@ export function ProcessoPage({
                 </ul>
               )}
 
-              {isFiscal && (
+              {isFiscal && tiposAplicaveis.length === 0 && (
+                <p className="text-muted-foreground border-t pt-4 text-sm">
+                  Nenhum documento pendente para anexar nesta etapa.
+                </p>
+              )}
+
+              {isFiscal && tiposAplicaveis.length > 0 && (
                 <form onSubmit={handleUploadSubmit} className="border-t pt-4">
                   <div className="flex flex-wrap items-end gap-2">
                     <div className="min-w-[200px] flex-1 space-y-1">

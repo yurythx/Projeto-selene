@@ -171,3 +171,11 @@ var ErrTipoDocumentoNaoAplicavel = errors.New("service: este tipo de documento n
 // (ex: não pode ter dois "Pré-Empenho"). Exclua o anterior antes de
 // enviar outro.
 var ErrTipoDocumentoJaAnexado = errors.New("service: já existe um documento deste tipo anexado a este processo — exclua o anterior antes de enviar outro")
+
+// ErrTipoDocumentoNaoExigidoAinda é retornado por DocumentoService.Upload
+// quando o TipoDocumento escolhido não faz parte do checklist cumulado
+// até a etapa atual do processo (ver RequisitosAcumulados) — ex: tentar
+// anexar uma CND (só exigida na Etapa 5) enquanto o processo ainda está
+// na Etapa 1. Pedido explícito do usuário: só oferecer/aceitar os
+// documentos que "realmente podem ser inseridos na etapa".
+var ErrTipoDocumentoNaoExigidoAinda = errors.New("service: este tipo de documento não faz parte do checklist até a etapa atual deste processo")

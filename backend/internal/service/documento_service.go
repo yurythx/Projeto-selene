@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -89,6 +90,22 @@ func (s *DocumentoService) Upload(
 	// derrubar um nil pointer.
 	if processo.Contrato != nil && !TipoDocumentoAplicavel(*tipoDoc, processo.Contrato.TipoObjeto, processo.Contrato.ExigeFiscalizacaoTerceirizacao) {
 		return nil, ErrTipoDocumentoNaoAplicavel
+	}
+
+	// Regra pedida pelo usuário: só é possível anexar um tipo de documento
+	// que já faz parte do checklist até a etapa atual do processo (etapas
+	// 1..EtapaAtualID, cumulativo — RequisitosAcumulados) — evita, por
+	// exemplo, anexar uma CND (só exigida na Etapa 5) enquanto o processo
+	// ainda está na Etapa 1. Documentos de etapas já concluídas continuam
+	// permitidos (a regra é cumulativa, não "só a etapa atual isolada"):
+	// reenviar um obrigatório de uma etapa anterior que foi excluído
+	// precisa continuar funcionando em qualquer etapa posterior (ver o
+	// comentário em RequisitosAcumulados).
+	if processo.Contrato != nil {
+		requeridos := RequisitosAcumulados(processo.EtapaAtualID, processo.Contrato.TipoObjeto, processo.Contrato.ExigeFiscalizacaoTerceirizacao)
+		if !slices.Contains(requeridos, tipoDoc.Nome) {
+			return nil, ErrTipoDocumentoNaoExigidoAinda
+		}
 	}
 
 	soma := sha256.Sum256(conteudo)

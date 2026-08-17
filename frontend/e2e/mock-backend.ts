@@ -60,6 +60,11 @@ const tiposDocumento = [
   // ExigeValidade=true testa o campo condicional "data_validade" no
   // formulário de upload (ver components/kanban/processo-dialog.tsx).
   { ID: 3, Nome: "CND Trabalhista", ExigeValidade: true },
+  // Segundo tipo exigido já na Etapa 1 (ver REQUISITOS_POR_ETAPA abaixo) —
+  // precisa existir aqui pra aparecer no select de upload, agora que ele só
+  // oferece tipos que fazem parte do checklist pendente da etapa atual (ver
+  // processo-page.tsx).
+  { ID: 4, Nome: "Pré-Empenho" },
 ];
 
 interface Contrato {

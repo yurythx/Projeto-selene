@@ -1005,7 +1005,7 @@ export interface paths {
         put?: never;
         /**
          * Anexa um documento ao processo
-         * @description multipart/form-data. Se o SHA-256 do conteúdo já existir para este processo, reaproveita o registro existente em vez de duplicar (não cria um novo). Além disso, no máximo um documento de cada tipo_documento_id é permitido por processo (ex: não pode haver dois "Pré-Empenho") — um arquivo diferente do mesmo tipo é rejeitado com 409; para substituir, exclua o anterior (DELETE /processos/{id}/documentos/{docId}) e envie o novo. Limite de 20MB por arquivo.
+         * @description multipart/form-data. Se o SHA-256 do conteúdo já existir para este processo, reaproveita o registro existente em vez de duplicar (não cria um novo). Além disso, no máximo um documento de cada tipo_documento_id é permitido por processo (ex: não pode haver dois "Pré-Empenho") — um arquivo diferente do mesmo tipo é rejeitado com 409; para substituir, exclua o anterior (DELETE /processos/{id}/documentos/{docId}) e envie o novo. tipo_documento_id também precisa fazer parte do checklist cumulado até a etapa atual do processo (etapas 1..EtapaAtualID — ver documentos_requeridos em GET /processos/{id}); um tipo de uma etapa ainda não alcançada (ex: uma CND, só exigida na Etapa 5, num processo ainda na Etapa 1) é rejeitado com 400. Limite de 20MB por arquivo.
          */
         post: {
             parameters: {

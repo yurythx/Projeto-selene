@@ -228,15 +228,15 @@ test.describe("/kanban", () => {
     await page.getByRole("button", { name: "Anexar" }).click();
     await expect(page.getByText("Documento anexado.")).toBeVisible();
 
-    // Segundo upload — o tipo escolhido na UI é outro ("Nota Fiscal /
-    // Fatura"), mas o mock (que não faz parsing real do multipart, ver
-    // comentário em mock-backend.ts) sempre associa TipoDocumentoID 1 ao
-    // upload, exatamente como o primeiro. Isso simula bem o cenário real:
-    // regra pedida pelo usuário, no máximo um documento de cada tipo por
-    // processo (ex: não pode ter dois "Pré-Empenho") — o backend real
-    // rejeita com 409, e o mock reproduz o mesmo comportamento.
+    // Segundo upload — o tipo escolhido na UI é outro ("Pré-Empenho"), mas
+    // o mock (que não faz parsing real do multipart, ver comentário em
+    // mock-backend.ts) sempre associa TipoDocumentoID 1 ao upload, exatamente
+    // como o primeiro. Isso simula bem o cenário real: regra pedida pelo
+    // usuário, no máximo um documento de cada tipo por processo (ex: não
+    // pode ter dois "Pré-Empenho") — o backend real rejeita com 409, e o
+    // mock reproduz o mesmo comportamento.
     await comboTipo.click();
-    await page.getByRole("option", { name: "Nota Fiscal / Fatura" }).click();
+    await page.getByRole("option", { name: "Pré-Empenho" }).click();
     await page.setInputFiles("#arquivo", {
       name: "documento-2.pdf",
       mimeType: "application/pdf",
