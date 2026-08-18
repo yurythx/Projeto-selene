@@ -41,15 +41,16 @@ const NAV_ITEMS = [
   { href: "/fornecedores", label: "Fornecedores", icon: Building2 },
 ];
 
-// Cor de marca única e consistente (estilo Monday.com: um roxo/índigo
-// vibrante marca o item ativo, independente do tema) — mesmo tom já
-// usado como --sidebar-primary no modo escuro em globals.css
-// (oklch(0.488 0.243 264.376) ≈ faixa índigo/violeta), aplicado aqui
-// explicitamente pra funcionar igual nos dois temas (o token claro é só
-// cinza neutro, sem "cor de marca" de verdade). shadow-sm dá o relevo de
-// "pílula" que o item ativo tem no Monday de verdade, em vez de só uma
-// mancha de cor chapada.
-const ITEM_ATIVO = "bg-indigo-600 text-white shadow-sm dark:bg-indigo-500";
+// Cor de marca única e consistente (estilo Monday.com: uma cor vibrante
+// marca o item ativo, independente do tema) — âmbar (#fbbf24), o accent
+// real da marca PaperMoon (ver globals.css, extraído do CSS compilado de
+// papermoon.cloud), a MESMA cor exata nos dois temas — antes daqui era
+// um índigo/violeta sem relação nenhuma com a marca real. Texto escuro
+// (não branco) sobre o accent: âmbar é uma cor clara, branco nela
+// reprova contraste — mesmo padrão usado nos botões reais do
+// papermoon.cloud. shadow-sm dá o relevo de "pílula" que o item ativo
+// tem no Monday de verdade, em vez de só uma mancha de cor chapada.
+const ITEM_ATIVO = "bg-amber-400 text-slate-900 shadow-sm";
 const ITEM_INATIVO =
   "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
@@ -136,7 +137,7 @@ export function Sidebar() {
 
         <div className="border-sidebar-border flex h-14 shrink-0 items-center justify-between gap-2 border-b px-4">
           <div className={cn("flex items-center gap-2 overflow-hidden", !mostrarRotulos && "w-full justify-center")}>
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white dark:bg-indigo-500">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-400 text-sm font-bold text-slate-900">
               S
             </div>
             {mostrarRotulos && <span className="truncate font-semibold">Selene</span>}

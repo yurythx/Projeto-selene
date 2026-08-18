@@ -25,7 +25,9 @@ export function MobileTopBar() {
         <Menu className="size-5" />
       </button>
       <div className="flex items-center gap-2">
-        <div className="flex size-6 items-center justify-center rounded-md bg-indigo-600 text-xs font-bold text-white dark:bg-indigo-500">
+        {/* Mesma cor de marca do badge da sidebar (ver sidebar.tsx) —
+            âmbar, o accent real do papermoon.cloud, igual nos dois temas. */}
+        <div className="flex size-6 items-center justify-center rounded-md bg-amber-400 text-xs font-bold text-slate-900">
           S
         </div>
         <span className="font-semibold">Selene</span>
