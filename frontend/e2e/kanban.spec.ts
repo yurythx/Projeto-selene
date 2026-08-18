@@ -211,17 +211,22 @@ test.describe("/kanban", () => {
     await expect(itemChecklist).toHaveAttribute("data-satisfeito", "true");
 
     // Pedido explícito do usuário: item satisfeito do checklist também
-    // abre a pré-visualização, igual "Documentos anexados" — não precisa
-    // procurar o mesmo nome na outra lista. O visualizador é o PDF.js
-    // embutido (DocumentoPdfViewer, também pedido explícito no lugar do
-    // visualizador nativo do navegador) — "Página 1 de 1" só aparece se
-    // o PDF (o mock devolve um PDF mínimo mas de verdade, ver
-    // pdfDeTeste() em mock-backend.ts) foi carregado e parseado com
-    // sucesso, não é só um placeholder estático.
-    await itemChecklist.getByRole("button", { name: "Visualizar Ordem de Fornecimento (OF)" }).click();
-    const dialogPreview = page.getByRole("dialog", { name: "Ordem de Fornecimento (OF)" });
-    await expect(dialogPreview.getByText("Página 1 de 1")).toBeVisible();
-    await expect(dialogPreview.locator("canvas")).toBeVisible();
+    // abre o documento, igual "Documentos anexados" — não precisa
+    // procurar o mesmo nome na outra lista. Abre numa aba NOVA de
+    // propósito (pedido explícito: "quero o mais rápido, por mais que
+    // precise abrir outra aba" — o visualizador nativo do navegador é
+    // mais rápido que um visualizador embutido em React/JS). Verifica a
+    // REQUISIÇÃO em si (não a URL final da aba): o Chromium headless não
+    // renderiza PDF inline como um Chrome de verdade — o popup pode
+    // ficar em "about:blank" mesmo com o arquivo certo tendo sido
+    // pedido, então checar a navegação renderizada seria flaky.
+    const [popup, requisicao] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.context().waitForEvent("request", { predicate: (r) => /\/api\/processos\/.+\/documentos\/.+/.test(r.url()) }),
+      itemChecklist.getByRole("link", { name: "Visualizar Ordem de Fornecimento (OF)" }).click(),
+    ]);
+    expect(requisicao.url()).toMatch(/\/api\/processos\/.+\/documentos\/.+/);
+    await popup.close();
   });
 
   test("tentar anexar um segundo documento do mesmo tipo é rejeitado (409)", async ({ page }) => {
@@ -280,28 +285,21 @@ test.describe("/kanban", () => {
     await expect(page.getByText("Documento anexado.")).toBeVisible();
 
     // Visualizar — clicar no NOME do documento (não um ícone à parte)
-    // abre o dialog de pré-visualização com o visualizador PDF.js
-    // embutido, sem sair da página (pedido explícito).
+    // abre o arquivo numa aba NOVA (pedido explícito do usuário: "quero
+    // o mais rápido, por mais que precise abrir outra aba" — o
+    // visualizador nativo do navegador é mais rápido de exibir do que
+    // um visualizador embutido em React/JS, ao custo de sair da página;
+    // trade-off aceito explicitamente). Verifica a REQUISIÇÃO em si, não
+    // a URL renderizada da aba — ver o comentário equivalente no teste
+    // anterior sobre o Chromium headless não renderizar PDF inline.
     const listaDocumentos = page.getByTestId("documentos-anexados");
-    await listaDocumentos.getByRole("button", { name: /Visualizar/ }).click();
-    const dialogPreview = page.getByRole("dialog").filter({ has: page.getByText(/Página \d+ de \d+/) });
-    await expect(dialogPreview).toBeVisible();
-    await expect(dialogPreview.getByText("Página 1 de 1")).toBeVisible();
-    await expect(dialogPreview.locator("canvas")).toBeVisible();
-
-    // Controles de zoom — pedido explícito do usuário (visualizador com
-    // zoom/navegação, no lugar do nativo do navegador).
-    await expect(dialogPreview.getByText("100%")).toBeVisible();
-    await dialogPreview.getByRole("button", { name: "Aumentar zoom" }).click();
-    await expect(dialogPreview.getByText("121%")).toBeVisible();
-    await dialogPreview.getByRole("button", { name: "Restaurar zoom" }).click();
-    await expect(dialogPreview.getByText("100%")).toBeVisible();
-
-    // Fecha pelo X, não Escape — o pdf.js pode capturar o foco do
-    // canvas/scroll e "engolir" o Escape antes dele chegar no listener
-    // do dialog.
-    await dialogPreview.getByRole("button", { name: "Close" }).click();
-    await expect(dialogPreview).not.toBeVisible();
+    const [popup, requisicao] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.context().waitForEvent("request", { predicate: (r) => /\/api\/processos\/.+\/documentos\/.+/.test(r.url()) }),
+      listaDocumentos.getByRole("link", { name: /Visualizar/ }).click(),
+    ]);
+    expect(requisicao.url()).toMatch(/\/api\/processos\/.+\/documentos\/.+/);
+    await popup.close();
 
     // Excluir — AlertDialog próprio do app (não window.confirm nativo),
     // com mensagem específica citando o documento.

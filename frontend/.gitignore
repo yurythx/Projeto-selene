@@ -46,8 +46,3 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# assets do pdfjs-dist copiados por scripts/copy-pdfjs-assets.mjs
-# (predev/prebuild, ver package.json) — gerados, não versionados, igual
-# node_modules.
-/public/pdfjs

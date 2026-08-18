@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -27,12 +26,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -56,21 +49,6 @@ import { montarChecklist } from "@/lib/checklist";
 import { cn } from "@/lib/utils";
 import { VistoriasDialog } from "./vistorias-dialog";
 import { OcorrenciasDialog } from "./ocorrencias-dialog";
-
-// pdfjs-dist (via react-pdf) depende de APIs de browser (Worker,
-// DOMMatrix, Canvas) que não existem no servidor — ssr:false é
-// obrigatório, senão o SSR/RSC deste componente client quebra tentando
-// renderizar o visualizador no Node. Sem loading customizado aqui: o
-// próprio DocumentoPdfViewer já mostra "Carregando documento…" assim que
-// monta.
-const DocumentoPdfViewer = dynamic(
-  () => import("./documento-pdf-viewer").then((mod) => mod.DocumentoPdfViewer),
-  { ssr: false }
-);
-
-function ehPdf(nomeArquivo: string): boolean {
-  return nomeArquivo.toLowerCase().endsWith(".pdf");
-}
 
 const ESTADO_FISCALIZACAO_LABEL: Record<string, string> = {
   A_EXECUTAR_CONFERIR: "A executar / conferir",
@@ -129,7 +107,6 @@ export function ProcessoPage({
   const [tipoSelecionado, setTipoSelecionado] = useState<string>("");
   const [vistoriasOpen, setVistoriasOpen] = useState(false);
   const [ocorrenciasOpen, setOcorrenciasOpen] = useState(false);
-  const [documentoPreview, setDocumentoPreview] = useState<DocumentoAnexo | null>(null);
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<DocumentoAnexo | null>(null);
 
   const processoQuery = useQuery({
@@ -366,20 +343,21 @@ export function ProcessoPage({
                       ) : (
                         <XCircleIcon className="text-destructive size-4 shrink-0" />
                       )}
-                      {/* Item satisfeito é clicável — abre a mesma
-                          pré-visualização de "Documentos anexados", sem
+                      {/* Item satisfeito é clicável — abre o documento
+                          numa aba nova, igual "Documentos anexados", sem
                           precisar procurar o mesmo nome na outra lista
                           (pedido explícito do usuário). Item pendente não
                           tem documento nenhum ainda, então fica só texto. */}
                       {item.satisfeito && item.documento ? (
-                        <button
-                          type="button"
-                          onClick={() => setDocumentoPreview(item.documento!)}
+                        <a
+                          href={`/api/processos/${processoId}/documentos/${item.documento.ID}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           aria-label={`Visualizar ${item.nome}`}
                           className="hover:text-primary text-left underline-offset-2 hover:underline"
                         >
                           {item.nome}
-                        </button>
+                        </a>
                       ) : (
                         <span className={cn(!item.satisfeito && "text-muted-foreground")}>{item.nome}</span>
                       )}
@@ -401,9 +379,10 @@ export function ProcessoPage({
                 <ul className="divide-border divide-y" data-testid="documentos-anexados">
                   {documentos.map((doc) => (
                     <li key={doc.ID} className="flex items-center justify-between gap-2 py-2 text-sm">
-                      <button
-                        type="button"
-                        onClick={() => setDocumentoPreview(doc)}
+                      <a
+                        href={`/api/processos/${processoId}/documentos/${doc.ID}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         aria-label={`Visualizar ${doc.TipoDocumento?.Nome ?? doc.NomeArquivo}`}
                         className="group flex min-w-0 items-center gap-2 text-left"
                       >
@@ -411,7 +390,7 @@ export function ProcessoPage({
                         <span className="truncate underline-offset-2 group-hover:text-primary group-hover:underline">
                           {doc.TipoDocumento?.Nome}
                         </span>
-                      </button>
+                      </a>
                       <span className="flex shrink-0 items-center gap-1">
                         <span className="text-muted-foreground mr-1 truncate text-xs">{doc.NomeArquivo}</span>
                         {isFiscal && (
@@ -567,34 +546,17 @@ export function ProcessoPage({
         onOpenChange={setOcorrenciasOpen}
       />
 
-      {/* Pré-visualização rápida — "conferência" sem sair da tela (pedido
-          explícito). PDF usa o visualizador embutido PDF.js
-          (DocumentoPdfViewer — zoom e navegação de página consistentes
-          entre navegadores, escolhido explicitamente pelo usuário no
-          lugar do visualizador nativo do browser). Imagem continua num
-          <iframe> simples apontando pro proxy de download da rota BFF —
-          PDF.js não se aplica a imagem, e o navegador já embrulha uma
-          imagem servida sozinha num frame sem esforço nenhum. */}
-      <Dialog open={documentoPreview != null} onOpenChange={(open) => !open && setDocumentoPreview(null)}>
-        <DialogContent className="flex h-[85vh] flex-col sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{documentoPreview?.TipoDocumento?.Nome ?? documentoPreview?.NomeArquivo}</DialogTitle>
-          </DialogHeader>
-          {documentoPreview && ehPdf(documentoPreview.NomeArquivo ?? "") && (
-            <DocumentoPdfViewer
-              url={`/api/processos/${processoId}/documentos/${documentoPreview.ID}`}
-              nomeArquivo={documentoPreview.NomeArquivo ?? "documento.pdf"}
-            />
-          )}
-          {documentoPreview && !ehPdf(documentoPreview.NomeArquivo ?? "") && (
-            <iframe
-              src={`/api/processos/${processoId}/documentos/${documentoPreview.ID}`}
-              title={documentoPreview.NomeArquivo}
-              className="bg-muted/30 min-h-0 flex-1 rounded-md border"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Pré-visualização em aba nova, de propósito — pedido explícito do
+          usuário: "quero o mais rápido, por mais que precise abrir outra
+          aba". Abrir a URL do arquivo direto faz o navegador usar seu
+          próprio visualizador nativo (Chrome/Firefox/Edge/Safari têm o
+          deles, geralmente acelerado por GPU) sem baixar/inicializar
+          nenhuma biblioteca de visualização deste app — mais rápido pra
+          exibir do que um visualizador embutido em React, ao custo de
+          perder a consistência de UI entre navegadores (trade-off aceito
+          explicitamente). Cache HTTP do backend (ETag + immutable, ver
+          DocumentoHandler.Baixar) e o proxy da rota BFF continuam
+          valendo do mesmo jeito nesse fluxo. */}
 
       <AlertDialog
         open={documentoParaExcluir != null}

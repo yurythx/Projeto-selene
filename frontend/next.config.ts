@@ -18,21 +18,20 @@ const nextConfig: NextConfig = {
           // src/proxy.ts (guia oficial do Next.js, "Adding a nonce with
           // Proxy"), a única camada que vê cada requisição individual.
           //
-          // SAMEORIGIN, não DENY: a pré-visualização de documento anexo
-          // (components/kanban/processo-page.tsx) embute
-          // /api/processos/{id}/documentos/{docId} num <iframe> DENTRO
-          // do próprio app — como este header cobre TODA rota
-          // (source: "/(.*)"), incluindo as de API, "DENY" bloqueava até
-          // o app se auto-enquadrar, deixando a pré-visualização em
-          // branco sem erro nenhum no console (achado real, não só
-          // teórico). SAMEORIGIN continua barrando qualquer site externo
-          // de enquadrar o app (a proteção contra clickjacking que este
-          // header existe pra dar), só permite o caso same-origin que
-          // agora é legítimo. Páginas (não-API) têm a proteção
-          // equivalente e mais forte via `frame-ancestors 'none'` na CSP
-          // montada em proxy.ts — só as rotas de API (fora do matcher de
-          // proxy.ts) dependem deste header aqui.
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // DENY: nenhuma rota deste app precisa ser enquadrada, nem por
+          // ele mesmo. A pré-visualização de documento anexo
+          // (components/kanban/processo-page.tsx) chegou a embutir
+          // /api/processos/{id}/documentos/{docId} num <iframe> — nesse
+          // meio-tempo isto foi SAMEORIGIN, senão a pré-visualização
+          // ficava em branco sem erro nenhum no console (achado real,
+          // não só teórico). Depois a pré-visualização passou a abrir o
+          // documento numa aba nova (target="_blank", mais rápido que
+          // um visualizador embutido — pedido explícito do usuário), e
+          // esse caso same-origin deixou de existir — DENY voltou a ser
+          // o valor correto. Páginas (não-API) têm a proteção
+          // equivalente via `frame-ancestors 'none'` na CSP montada em
+          // proxy.ts.
+          { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // Nenhuma dessas APIs é usada pelo app — nega tudo por padrão.

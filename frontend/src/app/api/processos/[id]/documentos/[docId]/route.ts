@@ -5,12 +5,15 @@ import { assertOrigemSegura } from "@/lib/verify-origin";
 import { baixarDocumentoAnexo, excluirDocumento, ApiError } from "@/lib/api/client";
 
 /**
- * Proxy do conteúdo de um documento anexo — consumido via <iframe>/<img>
- * na pré-visualização embutida da página do processo (ver
- * components/kanban/processo-page.tsx). Repassa o Content-Type e o
- * Content-Disposition ("inline", ver o handler Go) tal qual vieram do
- * backend, sem reescrever — diferente de respostaDocumentoGerado (que é
- * específica dos 4 geradores de documento, com a lógica PDF-vs-docx).
+ * Proxy do conteúdo de um documento anexo — o link "Visualizar" na
+ * página do processo (ver components/kanban/processo-page.tsx) aponta
+ * direto pra cá com target="_blank", abrindo numa aba nova (pedido
+ * explícito do usuário: "quero o mais rápido, por mais que precise abrir
+ * outra aba" — o visualizador nativo do navegador é mais rápido de
+ * exibir do que um visualizador embutido em JS). Repassa o Content-Type
+ * e o Content-Disposition ("inline", ver o handler Go) tal qual vieram
+ * do backend, sem reescrever — diferente de respostaDocumentoGerado (que
+ * é específica dos 4 geradores de documento, com a lógica PDF-vs-docx).
  *
  * Também repassa o cache condicional de ponta a ponta (otimização pedida
  * pelo usuário): o If-None-Match que o navegador manda automaticamente

@@ -135,13 +135,5 @@ export default await auth((req) => {
 });
 
 export const config = {
-  // pdfjs: assets estáticos do visualizador de PDF embutido (worker,
-  // cmaps, fontes — ver scripts/copy-pdfjs-assets.mjs e
-  // components/kanban/documento-pdf-viewer.tsx), servidos de
-  // public/pdfjs/. São biblioteca pública, não dado de usuário — sem
-  // motivo pra passar pelo gate de sessão nem pela montagem de CSP a
-  // cada requisição (otimização: um PDF chega a pedir dezenas desses
-  // arquivos — cmaps individuais — sem essa exclusão, cada um decodifica
-  // o cookie de sessão e resolve a config de Keycloak à toa).
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|pdfjs/).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };
