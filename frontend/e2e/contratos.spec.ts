@@ -36,6 +36,33 @@ test.describe("/contratos", () => {
     await expect(page.getByText("Nova Fornecedora Ltda")).toBeVisible();
   });
 
+  test("pagina a listagem quando passa de uma página", async ({ page, request }) => {
+    // 1 contrato já semeado ("1/2026") + 20 novos = 21, tamanho de
+    // página 20 (ver TAMANHO_PAGINA em contratos/page.tsx) — fecha
+    // exatamente em 2 páginas, sem depender de um número mágico maior.
+    await request.post(`${MOCK_BACKEND_URL}/__e2e__/seed-muitos-contratos`, { data: { quantidade: 20 } });
+
+    await page.goto("/contratos");
+    await expect(page.getByText("21 contratos cadastrados.")).toBeVisible();
+    await expect(page.getByText("Página 1 de 2")).toBeVisible();
+
+    const primeiraLinha = await page.getByRole("row").nth(1).innerText();
+
+    await page.getByRole("button", { name: "Próxima" }).click();
+    await expect(page).toHaveURL(/pagina=2/);
+    await expect(page.getByText("Página 2 de 2")).toBeVisible();
+
+    // Página 2 mostra conteúdo diferente da página 1 — prova que o
+    // "pagina" da URL realmente troca a fatia de dados vinda do
+    // backend, não só o número no rótulo.
+    const segundaLinha = await page.getByRole("row").nth(1).innerText();
+    expect(segundaLinha).not.toBe(primeiraLinha);
+
+    await page.getByRole("button", { name: "Anterior" }).click();
+    await expect(page).toHaveURL(/pagina=1/);
+    await expect(page.getByText("Página 1 de 2")).toBeVisible();
+  });
+
   test("abre o detalhe, edita e encerra o contrato", async ({ page }) => {
     await page.goto("/contratos");
     await page.getByRole("link", { name: "1/2026" }).click();

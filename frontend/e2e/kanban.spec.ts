@@ -338,6 +338,33 @@ test.describe("/kanban", () => {
     await expect(page.getByText("1/2026").first()).toBeVisible();
   });
 
+  test("coluna com mais de uma página mostra 'Carregar mais' e busca o resto ao clicar", async ({
+    page,
+    request,
+  }) => {
+    // Etapa 1 já tem 1 processo semeado (o do resto da suíte) — soma 100
+    // pra fechar exatamente no tamanho de página (100), deixando 1
+    // "restante" pra exercitar o botão sem depender de um número mágico
+    // batendo por acaso.
+    await request.post(`${MOCK_BACKEND_URL}/__e2e__/seed-muitos-processos`, {
+      data: { quantidade: 100, etapa_id: 1 },
+    });
+
+    await page.goto("/kanban");
+
+    const coluna = page.getByTestId("kanban-coluna-1");
+    await expect(coluna.getByText("100", { exact: true })).toBeVisible(); // badge de contagem da coluna
+    const botaoCarregarMais = coluna.getByRole("button", { name: /Carregar mais/ });
+    await expect(botaoCarregarMais).toContainText("1 restantes");
+
+    await botaoCarregarMais.click();
+
+    // Depois de carregar a página 2 (o último processo, "restante"), o
+    // botão some — não sobra mais nada pra carregar.
+    await expect(botaoCarregarMais).not.toBeVisible();
+    await expect(coluna.getByText("101", { exact: true })).toBeVisible();
+  });
+
   test("registra uma vistoria de campo e anexa uma foto", async ({ page }) => {
     await page.goto("/kanban");
     await page.getByText("1/2026").first().click();

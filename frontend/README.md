@@ -182,12 +182,12 @@ Adequação às IN SCL 01/2019 e 04/2021 (ver `backend/README.md` para a Matriz 
 - [x] Defesa em profundidade contra CSRF nos 27 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
 - [x] Security headers: CSP com nonce via `src/proxy.ts` (por requisição); X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy via `next.config.ts` (estáticos, não dependem de nonce)
 - [x] `loading.tsx` (streaming) e `error.tsx`/`global-error.tsx` (boundary de erro amigável) nas rotas principais
-- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 51 testes unitários/componente + 40 E2E (Playwright)
+- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 51 testes unitários/componente + 42 E2E (Playwright)
 - [x] CI (lint + testes unitários + testes E2E + build + imagem Docker), mesmo pipeline do backend
 - [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root
 - [x] Tipos gerados a partir do OpenAPI do backend (`openapi-typescript`) — sem duplicar contratos de API à mão
 - [x] CSP com nonce em `script-src` (`'nonce-x' 'strict-dynamic'`, sem `'unsafe-inline'`) — gerado por requisição em `src/proxy.ts`, viável porque toda página já é dinamicamente renderizada (confirmado no output de `next build`: nenhuma rota estática). `style-src` mantém `'unsafe-inline'` de propósito — nonce não cobre o atributo `style="..."` inline que o base-ui usa pra posicionar Select/Dialog/Popover; confirmado empiricamente (`e2e/csp.spec.ts`, não só por dedução) que apertar sem isso quebra esses componentes.
-- [ ] Paginação de verdade na listagem de contratos e nas colunas do Kanban (hoje busca até 100 registros de uma vez, sem UI de "próxima página")
+- [x] Paginação de verdade na listagem de contratos (Anterior/Próxima dirigido pela URL, `components/paginacao.tsx`) e nas colunas do Kanban (botão "Carregar mais" por coluna, acumula páginas de 100 em 100 — `kanban-board.tsx`)
 - [ ] Rate limiting nos Route Handlers do BFF — hoje só existe no backend Go (que já rate-limita as rotas de escrita por usuário); redundante mas não coberto no lado do Next
 
 ## Limitações conhecidas

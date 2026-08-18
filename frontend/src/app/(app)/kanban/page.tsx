@@ -44,7 +44,7 @@ export default async function KanbanPage() {
 
       <KanbanBoard
         etapas={etapas}
-        colunasIniciais={colunas.map((c) => c.dados)}
+        colunasIniciais={colunas}
         contratosAtivos={contratosAtivos}
         radarItens={radarItens}
         isFiscal={Boolean(session?.user?.isFiscal)}

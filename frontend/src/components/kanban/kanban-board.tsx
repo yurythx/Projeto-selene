@@ -27,6 +27,7 @@ import type {
   Contrato,
   ProcessoPagamento,
   ItemRadar,
+  ResultadoPaginado,
 } from "@/lib/api/client";
 import { itensDoProcesso, nivelMaisCritico } from "@/lib/radar";
 import { RadarNivelBadge } from "@/components/radar/radar-badge";
@@ -153,6 +154,25 @@ function ProcessoCard({
  * ocorrência aberta bloqueando, o card simplesmente não se move e o erro
  * aparece num toast, exatamente como já acontecia pelo botão.
  */
+/** Estado local de uma coluna — os processos carregados até agora (pode ser mais de uma página) mais os metadados de paginação que guiam o botão "Carregar mais". */
+interface EstadoColuna {
+  processos: ProcessoPagamento[];
+  pagina: number;
+  total: number;
+  tamanhoPagina: number;
+  carregandoMais: boolean;
+}
+
+function colunaInicial(resultado: ResultadoPaginado<ProcessoPagamento>): EstadoColuna {
+  return {
+    processos: resultado.dados,
+    pagina: resultado.pagina ?? 1,
+    total: resultado.total ?? resultado.dados.length,
+    tamanhoPagina: resultado.tamanho_pagina ?? resultado.dados.length,
+    carregandoMais: false,
+  };
+}
+
 export function KanbanBoard({
   etapas,
   colunasIniciais,
@@ -161,7 +181,7 @@ export function KanbanBoard({
   isFiscal,
 }: {
   etapas: KanbanEtapa[];
-  colunasIniciais: ProcessoPagamento[][];
+  colunasIniciais: ResultadoPaginado<ProcessoPagamento>[];
   contratosAtivos: Contrato[];
   radarItens: ItemRadar[];
   isFiscal: boolean;
@@ -179,14 +199,72 @@ export function KanbanBoard({
     localStorage.setItem(CHAVE_VISUALIZACAO, nova);
   }
 
+  // Paginação real por coluna (pedido explícito do usuário) — cada
+  // coluna busca até 100 processos de cada vez (o tamanho de página já
+  // usado antes desta mudança) e ganha um botão "Carregar mais" quando
+  // sobra mais no backend. Estado próprio (não só um useMemo em cima da
+  // prop) porque "carregar mais" MUTA a lista carregada — precisa
+  // acumular entre cliques, não recalcular do zero a cada render.
+  const [colunas, setColunas] = useState<EstadoColuna[]>(() => colunasIniciais.map(colunaInicial));
+
+  // Ressincroniza quando o Server Component acima refaz o fetch (ex:
+  // router.refresh() depois de arrastar um card) — colunasIniciais muda
+  // de identidade, e sem isto o estado local ficaria preso na primeira
+  // carga pra sempre (useState só roda o inicializador uma vez). Ajustar
+  // o state DURANTE o render (não num useEffect) é o padrão documentado
+  // do próprio React pra "resetar state quando uma prop muda"
+  // (react.dev/reference/react/useState#storing-information-from-previous-renders)
+  // — evita o frame extra com dado velho que um useEffect teria. Reset
+  // pra página 1 em cada coluna é o comportamento certo aqui: depois de
+  // uma mudança real nos dados, não dá pra saber se as páginas 2+ que já
+  // tinham sido carregadas continuam válidas.
+  const [colunasIniciaisAnterior, setColunasIniciaisAnterior] = useState(colunasIniciais);
+  if (colunasIniciais !== colunasIniciaisAnterior) {
+    setColunasIniciaisAnterior(colunasIniciais);
+    setColunas(colunasIniciais.map(colunaInicial));
+  }
+
+  async function carregarMais(etapaId: number, indice: number) {
+    const coluna = colunas[indice];
+    if (!coluna || coluna.carregandoMais) return;
+
+    setColunas((prev) => prev.map((c, i) => (i === indice ? { ...c, carregandoMais: true } : c)));
+    try {
+      const proximaPagina = coluna.pagina + 1;
+      const resultado = await fetchJSON<ResultadoPaginado<ProcessoPagamento>>(
+        `/api/processos?etapa=${etapaId}&pagina=${proximaPagina}&tamanho=${coluna.tamanhoPagina}`
+      );
+      setColunas((prev) =>
+        prev.map((c, i) =>
+          i === indice
+            ? {
+                ...c,
+                processos: [...c.processos, ...resultado.dados],
+                pagina: resultado.pagina ?? proximaPagina,
+                total: resultado.total ?? c.total,
+                carregandoMais: false,
+              }
+            : c
+        )
+      );
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : "Não foi possível carregar mais processos.");
+      setColunas((prev) => prev.map((c, i) => (i === indice ? { ...c, carregandoMais: false } : c)));
+    }
+  }
+
   // Filtrado por coluna (visão Kanban, contagem no cabeçalho reflete o
   // filtro) e achatado (visão Lista) a partir do MESMO filtro — trocar de
-  // modo não perde busca/filtro em andamento.
+  // modo não perde busca/filtro em andamento. Filtra só o que já foi
+  // CARREGADO (busca é client-side) — "Carregar mais" continua visível
+  // nesse caso, com um aviso (ver o JSX abaixo) de que a busca pode não
+  // cobrir processos ainda não carregados.
   const colunasFiltradas = useMemo(
-    () => colunasIniciais.map((coluna) => filtrarProcessos(coluna, filtro)),
-    [colunasIniciais, filtro]
+    () => colunas.map((coluna) => filtrarProcessos(coluna.processos, filtro)),
+    [colunas, filtro]
   );
   const todosProcessosFiltrados = useMemo(() => colunasFiltradas.flat(), [colunasFiltradas]);
+  const filtroAtivo = Boolean(filtro.busca || filtro.tipoObjeto);
 
   const sensors = useSensors(
     // distance: 8 — um clique simples (sem mover o ponteiro) não deve
@@ -253,6 +331,21 @@ export function KanbanBoard({
     ? etapaSeguinte.get(activeProcesso.EtapaAtualID)
     : undefined;
 
+  // Visão Lista achata todas as colunas numa tabela só — não tem "por
+  // coluna" pra oferecer um botão em cada uma (ver o board acima), então
+  // um botão só carrega a próxima página de QUALQUER coluna que ainda
+  // tenha mais, em paralelo.
+  const indicesComMaisPaginas = colunas
+    .map((c, i) => (c.processos.length < c.total ? i : -1))
+    .filter((i) => i >= 0);
+  const carregandoMaisNaLista = indicesComMaisPaginas.some((i) => colunas[i]?.carregandoMais);
+
+  function carregarMaisNaLista() {
+    for (const indice of indicesComMaisPaginas) {
+      carregarMais(etapas[indice].ID!, indice);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {isFiscal && (
@@ -271,12 +364,30 @@ export function KanbanBoard({
       />
 
       {visualizacao === "lista" ? (
-        <ProcessosLista
-          processos={todosProcessosFiltrados}
-          etapas={etapas}
-          radarItens={radarItens}
-          onOpen={(processo) => router.push(`/kanban/${processo.ID}`)}
-        />
+        <div className="space-y-2">
+          <ProcessosLista
+            processos={todosProcessosFiltrados}
+            etapas={etapas}
+            radarItens={radarItens}
+            onOpen={(processo) => router.push(`/kanban/${processo.ID}`)}
+          />
+          {indicesComMaisPaginas.length > 0 && (
+            <div className="flex flex-col items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={carregandoMaisNaLista}
+                onClick={carregarMaisNaLista}
+              >
+                {carregandoMaisNaLista ? "Carregando..." : "Carregar mais processos"}
+              </Button>
+              {filtroAtivo && (
+                <p className="text-muted-foreground text-xs">A busca só cobre os processos já carregados.</p>
+              )}
+            </div>
+          )}
+        </div>
       ) : (
       <DndContext
         sensors={sensors}
@@ -288,6 +399,8 @@ export function KanbanBoard({
           {etapas.map((etapa, i) => {
             const cor = corDaEtapa(i);
             const processos = colunasFiltradas[i] ?? [];
+            const colunaEstado = colunas[i];
+            const temMaisPaginas = Boolean(colunaEstado && colunaEstado.processos.length < colunaEstado.total);
             const arrastandoAlgo = activeProcesso != null;
             const ehDestinoValido = arrastandoAlgo && etapa.ID === proximaEtapaValidaId;
             const ehOrigem = arrastandoAlgo && etapa.ID === activeProcesso?.EtapaAtualID;
@@ -332,6 +445,32 @@ export function KanbanBoard({
                     </p>
                   )}
                 </div>
+
+                {temMaisPaginas && (
+                  <div className="space-y-1 px-2 pb-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="w-full"
+                      disabled={colunaEstado.carregandoMais}
+                      onClick={() => carregarMais(etapa.ID!, i)}
+                    >
+                      {colunaEstado.carregandoMais
+                        ? "Carregando..."
+                        : `Carregar mais (${colunaEstado.total - colunaEstado.processos.length} restantes)`}
+                    </Button>
+                    {/* Busca/filtro é aplicado só sobre o que já foi
+                        carregado (client-side) — avisa que pode faltar
+                        processo em vez de deixar parecer que a busca já
+                        cobriu a coluna inteira. */}
+                    {filtroAtivo && (
+                      <p className="text-muted-foreground px-1 text-center text-[11px]">
+                        A busca só cobre os processos já carregados.
+                      </p>
+                    )}
+                  </div>
+                )}
               </KanbanColumn>
             );
           })}

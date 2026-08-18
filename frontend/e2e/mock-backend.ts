@@ -352,8 +352,13 @@ function json(res: import("node:http").ServerResponse, status: number, body: unk
   res.end(payload);
 }
 
-function paginado<T>(dados: T[]) {
-  return { total: dados.length, pagina: 1, tamanho_pagina: 100, dados };
+// Pagina de verdade (fatia por pagina/tamanho, total = tamanho da lista
+// COMPLETA antes de fatiar) — precisa ser um paginador real, não só um
+// wrapper que devolve tudo de uma vez, pra exercitar o botão "Carregar
+// mais" do Kanban (ver kanban-board.tsx) nos testes.
+function paginado<T>(dados: T[], pagina = 1, tamanho = 100) {
+  const inicio = (pagina - 1) * tamanho;
+  return { total: dados.length, pagina, tamanho_pagina: tamanho, dados: dados.slice(inicio, inicio + tamanho) };
 }
 
 const port = Number(process.env.MOCK_BACKEND_PORT ?? 4010);
@@ -389,6 +394,59 @@ const server = createServer((req, res) => {
       return json(res, 204, null);
     }
 
+    // Semeia N processos "a mais" numa etapa (default: Etapa 1) — só pra
+    // exercitar o botão "Carregar mais" da paginação real do Kanban
+    // (ver kanban-board.tsx) sem precisar criar cada um clicando na UI
+    // (o tamanho de página real, 100, tornaria isso impraticável).
+    if (pathname === "/__e2e__/seed-muitos-processos" && req.method === "POST") {
+      const corpo = bodyAsJSON();
+      const quantidade: number = corpo.quantidade ?? 100;
+      const etapaId: number = corpo.etapa_id ?? 1;
+      const contrato = contratos[0];
+      for (let i = 0; i < quantidade; i++) {
+        processos.push({
+          ID: nextId("processo-seed"),
+          ContratoID: contrato.ID,
+          Contrato: contrato,
+          MesReferencia: `${String((i % 12) + 1).padStart(2, "0")}/2030`,
+          EtapaAtualID: etapaId,
+          EtapaAtual: etapas[etapaId - 1],
+          Status: "Ativo",
+          CreatedAt: new Date().toISOString(),
+          UpdatedAt: new Date().toISOString(),
+        });
+      }
+      return json(res, 204, null);
+    }
+
+    // Semeia N contratos "a mais" — mesma ideia acima, pra exercitar a
+    // paginação real de /contratos (Paginacao, ver contratos/page.tsx).
+    if (pathname === "/__e2e__/seed-muitos-contratos" && req.method === "POST") {
+      const corpo = bodyAsJSON();
+      const quantidade: number = corpo.quantidade ?? 20;
+      const fiscal = usuarios[0];
+      for (let i = 0; i < quantidade; i++) {
+        const sufixo = String(i + 1).padStart(3, "0");
+        contratos.push({
+          ID: nextId("contrato-seed"),
+          NumeroContrato: `SEED-${sufixo}/2030`,
+          PortariaNomeacao: "",
+          DataAssinatura: "2030-01-01",
+          ContratadaNome: `Fornecedora Semeada ${sufixo}`,
+          ContratadaCNPJ: "00.000.000/0001-00",
+          ContratadaEmail: "",
+          FiscalID: fiscal.ID,
+          Fiscal: fiscal,
+          TipoObjeto: "CONSUMO",
+          Ativo: true,
+          DataVigenciaFim: null,
+          CreatedAt: new Date().toISOString(),
+          UpdatedAt: new Date().toISOString(),
+        });
+      }
+      return json(res, 204, null);
+    }
+
     if (pathname === "/health") return json(res, 200, { status: "ok" });
 
     // Aplicado depois de reset/health (endpoints de controle/infra, não
@@ -409,7 +467,21 @@ const server = createServer((req, res) => {
     }
 
     if (pathname === "/api/v1/contratos" && req.method === "GET") {
-      return json(res, 200, paginado(contratos));
+      const busca = (searchParams.get("busca") ?? "").toLowerCase();
+      const tipoObjeto = searchParams.get("tipo_objeto") ?? "";
+      const situacao = searchParams.get("situacao") ?? "";
+      const pagina = Number(searchParams.get("pagina")) || 1;
+      const tamanho = Number(searchParams.get("tamanho")) || 20;
+
+      const filtrados = contratos.filter((c) => {
+        if (busca && !`${c.NumeroContrato} ${c.ContratadaNome}`.toLowerCase().includes(busca)) return false;
+        if (tipoObjeto && c.TipoObjeto !== tipoObjeto) return false;
+        if (situacao === "ativo" && !c.Ativo) return false;
+        if (situacao === "encerrado" && c.Ativo) return false;
+        return true;
+      });
+
+      return json(res, 200, paginado(filtrados, pagina, tamanho));
     }
     if (pathname === "/api/v1/contratos" && req.method === "POST") {
       const corpo = bodyAsJSON();
@@ -463,7 +535,9 @@ const server = createServer((req, res) => {
 
     if (pathname === "/api/v1/processos" && req.method === "GET") {
       const etapaId = Number(searchParams.get("etapa"));
-      return json(res, 200, paginado(processos.filter((p) => p.EtapaAtualID === etapaId)));
+      const pagina = Number(searchParams.get("pagina")) || 1;
+      const tamanho = Number(searchParams.get("tamanho")) || 100;
+      return json(res, 200, paginado(processos.filter((p) => p.EtapaAtualID === etapaId), pagina, tamanho));
     }
     if (pathname === "/api/v1/processos" && req.method === "POST") {
       const corpo = bodyAsJSON();
