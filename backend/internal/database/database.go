@@ -7,6 +7,8 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -15,6 +17,7 @@ import (
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 //go:embed migrations/*.sql
@@ -26,7 +29,27 @@ var migrationsFS embed.FS
 // árvore de trace). Não realiza migrations — chame Migrate separadamente
 // após validar a conexão.
 func Connect(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// Mesmo logger padrão do GORM (log.Default, SlowThreshold 200ms,
+	// nível Warn, saída colorida), só com IgnoreRecordNotFoundError=true
+	// — sem essa flag, TODO gorm.ErrRecordNotFound (inclusive os
+	// esperados, como "nenhuma configuração de Keycloak salva ainda" em
+	// KeycloakConfigRepository.Buscar, ou qualquer outro FindByID usado
+	// só pra checar existência) sai no log como se fosse um erro de
+	// verdade — achado real observado nos logs de produção do
+	// selene-prod, não só teórico: poluía o log a cada requisição do
+	// endpoint interno de Keycloak, mascarando erros de banco genuínos
+	// no meio do ruído.
+	gormLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             200 * time.Millisecond,
+			LogLevel:                  logger.Warn,
+			IgnoreRecordNotFoundError: true,
+			Colorful:                  true,
+		},
+	)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormLogger})
 	if err != nil {
 		return nil, fmt.Errorf("database: falha ao conectar ao Postgres: %w", err)
 	}
