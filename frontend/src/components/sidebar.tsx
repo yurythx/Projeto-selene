@@ -48,9 +48,12 @@ const NAV_ITEMS = [
 // um índigo/violeta sem relação nenhuma com a marca real. Texto escuro
 // (não branco) sobre o accent: âmbar é uma cor clara, branco nela
 // reprova contraste — mesmo padrão usado nos botões reais do
-// papermoon.cloud. shadow-sm dá o relevo de "pílula" que o item ativo
-// tem no Monday de verdade, em vez de só uma mancha de cor chapada.
-const ITEM_ATIVO = "bg-amber-400 text-slate-900 shadow-sm";
+// papermoon.cloud. shadow-lg shadow-amber-400/30 é o halo/glow colorido
+// visto de verdade no CTA principal deles (`shadow-lg
+// shadow-glow-accent`) — shadow-sm sozinho (usado antes) só dava um
+// relevo neutro de "pílula", sem o brilho de marca que salta aos olhos
+// no site real.
+const ITEM_ATIVO = "bg-amber-400 text-slate-900 shadow-lg shadow-amber-400/30";
 const ITEM_INATIVO =
   "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground";
 
@@ -145,7 +148,12 @@ export function Sidebar() {
             de papermoon.cloud (`h-16`, confirmado no HTML deles). */}
         <div className="border-sidebar-border flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4">
           <div className={cn("flex items-center gap-2 overflow-hidden", !mostrarRotulos && "w-full justify-center")}>
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-400 text-sm font-bold text-slate-900">
+            {/* Gradiente + glow + anel interno — mesma "textura de marca"
+                da marca-d'água real de papermoon.cloud (o "P" deles tem
+                gradiente diagonal, halo e um stroke sutil, não é uma cor
+                chapada única). Não copiamos o desenho deles (é a marca
+                deles), só a LINGUAGEM visual do selo. */}
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-300 to-amber-500 text-sm font-bold text-slate-900 shadow-lg shadow-amber-400/40 ring-1 ring-white/25">
               S
             </div>
             {/* text-base font-bold tracking-tight — mesmo tratamento da

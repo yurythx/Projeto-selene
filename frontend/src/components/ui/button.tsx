@@ -8,7 +8,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // shadow-*/30 → glow âmbar por baixo do botão, igual ao halo real
+        // do CTA "Começar agora" de papermoon.cloud (`shadow-lg
+        // shadow-glow-accent`, confirmado no HTML deles) — sem essa
+        // sombra colorida, um botão-CTA plano não carrega o mesmo brilho
+        // de marca que o resto do re-tema já trouxe pras cores.
+        default: "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/80 hover:shadow-primary/35",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
