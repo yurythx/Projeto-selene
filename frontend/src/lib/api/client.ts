@@ -331,9 +331,11 @@ export function excluirDocumento(accessToken: string, processoId: string, docume
 
 /**
  * Baixa o conteúdo de um documento anexo (PDF ou imagem) — Content-
- * Disposition "inline" (ver o comentário no handler Go), pensado pra
- * pré-visualização embutida na página do processo. Não passa por
- * apiFetch — resposta binária, mesmo padrão de baixarRelatorio.
+ * Disposition "inline" (ver o comentário no handler Go): o link
+ * "Visualizar" da página do processo abre esta URL (via a rota BFF)
+ * numa aba nova, deixando o navegador renderizar com seu próprio
+ * visualizador nativo. Não passa por apiFetch — resposta binária, mesmo
+ * padrão de baixarRelatorio.
  *
  * ifNoneMatch repassa o header condicional do navegador (ver a rota BFF)
  * pro backend — é o que permite o Go responder 304 sem reler/retransmitir

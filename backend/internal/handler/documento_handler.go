@@ -148,9 +148,11 @@ func documentoIDsFromParams(c *gin.Context) (processoID, documentoID uuid.UUID, 
 
 // Baixar trata GET /api/v1/processos/:id/documentos/:docId/download —
 // serve o arquivo com Content-Disposition "inline" (não "attachment"),
-// de propósito: alimenta a pré-visualização embutida na página do
-// processo (iframe/img), não força um download direto — o navegador
-// ainda pode salvar via "Salvar como" se quiser.
+// de propósito: o frontend abre esta URL numa aba nova (target="_blank",
+// ver processo-page.tsx) pra pré-visualização — "inline" faz o
+// navegador renderizar com seu próprio visualizador nativo em vez de
+// forçar um download direto (o usuário ainda pode salvar via "Salvar
+// como" se quiser).
 //
 // Otimização pedida pelo usuário ("a visualização de documento é tão
 // lenta pra aparecer"): usa http.ServeContent sobre o *os.File aberto
@@ -197,12 +199,12 @@ func (h *DocumentoHandler) Baixar(c *gin.Context) {
 	var buf [512]byte
 	n, err := arquivo.Read(buf[:])
 	if err != nil && err != io.EOF {
-		respondError(c, fmt.Errorf("service: ler cabeçalho do arquivo pra detectar content-type: %w", err))
+		respondError(c, fmt.Errorf("handler: ler cabeçalho do arquivo pra detectar content-type: %w", err))
 		return
 	}
 	c.Header("Content-Type", http.DetectContentType(buf[:n]))
 	if _, err := arquivo.Seek(0, io.SeekStart); err != nil {
-		respondError(c, fmt.Errorf("service: rebobinar arquivo do documento anexo: %w", err))
+		respondError(c, fmt.Errorf("handler: rebobinar arquivo do documento anexo: %w", err))
 		return
 	}
 

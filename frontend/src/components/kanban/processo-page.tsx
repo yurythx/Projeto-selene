@@ -546,18 +546,6 @@ export function ProcessoPage({
         onOpenChange={setOcorrenciasOpen}
       />
 
-      {/* Pré-visualização em aba nova, de propósito — pedido explícito do
-          usuário: "quero o mais rápido, por mais que precise abrir outra
-          aba". Abrir a URL do arquivo direto faz o navegador usar seu
-          próprio visualizador nativo (Chrome/Firefox/Edge/Safari têm o
-          deles, geralmente acelerado por GPU) sem baixar/inicializar
-          nenhuma biblioteca de visualização deste app — mais rápido pra
-          exibir do que um visualizador embutido em React, ao custo de
-          perder a consistência de UI entre navegadores (trade-off aceito
-          explicitamente). Cache HTTP do backend (ETag + immutable, ver
-          DocumentoHandler.Baixar) e o proxy da rota BFF continuam
-          valendo do mesmo jeito nesse fluxo. */}
-
       <AlertDialog
         open={documentoParaExcluir != null}
         onOpenChange={(open) => !open && setDocumentoParaExcluir(null)}

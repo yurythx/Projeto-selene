@@ -46,16 +46,24 @@ export default async function ModelosDocumentosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Modelos de Documentos</h1>
-          <p className="text-muted-foreground text-sm">
-            {modelos.length} categoria{modelos.length === 1 ? "" : "s"} cadastrada
-            {modelos.length === 1 ? "" : "s"} — .docx de referência, substituível a
-            qualquer momento.
-          </p>
+      <div>
+        {/* Mesmo padrão de configuracoes/keycloak/page.tsx — as duas são
+            filhas do hub /configuracoes (sidebar aponta pro hub, não
+            direto pra cá), consistente ter a mesma navegação de volta. */}
+        <Link href="/configuracoes" className="text-muted-foreground text-sm hover:underline">
+          ← Configurações
+        </Link>
+        <div className="mt-1 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Modelos de Documentos</h1>
+            <p className="text-muted-foreground text-sm">
+              {modelos.length} categoria{modelos.length === 1 ? "" : "s"} cadastrada
+              {modelos.length === 1 ? "" : "s"} — .docx de referência, substituível a
+              qualquer momento.
+            </p>
+          </div>
+          <CriarModeloDocumentoDialog />
         </div>
-        <CriarModeloDocumentoDialog />
       </div>
 
       <div className="overflow-x-auto rounded-lg border shadow-sm">

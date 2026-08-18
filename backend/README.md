@@ -59,6 +59,8 @@ Dois emissores de token, tratados de forma idêntica pelo resto da API a partir 
 
 `models.User.KeycloakID` é `*string` (nullable) e `PasswordHash` também — exatamente um dos dois é preenchido por usuário, nunca os dois.
 
+**Configuração de Keycloak editável em runtime**: `KEYCLOAK_JWKS_URL`/`KEYCLOAK_ISSUER`/`KEYCLOAK_AUDIENCE` são só o valor de *boot* — um admin pode salvar Client ID/Secret/Issuer/Audience pela tela Configurações → Keycloak/SSO do frontend (`PUT /admin/config/keycloak`), persistidos na tabela `keycloak_config` (singleton, migration `000012`). A troca é aplicada IMEDIATAMENTE a este backend via `middleware.AuthMiddlewareState.Reload` (sem reiniciar o processo) — o novo issuer é testado (fetch do JWKS) *antes* de salvar; se não responder, nada muda (fail-closed). `GET /internal/keycloak-config` (gated por `INTERNAL_API_SECRET`, não por JWT) expõe a config completa — incluindo o Client Secret em texto puro — só pro frontend Next.js montar o provider Keycloak do NextAuth em runtime; nunca alcançável com um token de usuário comum. Ver `internal/service/keycloak_config_service.go` e `internal/middleware/auth.go`.
+
 ---
 
 ## Rodando localmente
@@ -141,9 +143,10 @@ Ver `.env.example` para a lista completa com comentários. Resumo:
 | `TRUSTED_PROXIES` | não (default: nenhum) | IPs/CIDRs confiáveis para resolver `X-Forwarded-For`. |
 | `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | **sim** | Credenciais do Postgres. |
 | `DB_PORT`, `DB_SSLMODE` | não (defaults `5432`/`disable`) | |
-| `KEYCLOAK_JWKS_URL` | **sim** | Endpoint JWKS do realm Keycloak. |
-| `KEYCLOAK_ISSUER` | **sim** | Valor exato esperado no claim `iss` do JWT. |
+| `KEYCLOAK_JWKS_URL` | **sim** | Endpoint JWKS do realm Keycloak — só o valor de BOOT; um admin pode substituir em runtime por Configurações → Keycloak/SSO (ver abaixo). |
+| `KEYCLOAK_ISSUER` | **sim** | Valor exato esperado no claim `iss` do JWT — mesma ressalva acima. |
 | `KEYCLOAK_AUDIENCE` | não | Valor esperado no claim `aud`; vazio = não valida. |
+| `INTERNAL_API_SECRET` | **sim** | Segredo compartilhado com o frontend (mesmo valor nos dois) que autentica `GET /internal/keycloak-config` — a única rota server-to-server sem JWT de usuário desta API. Ver abaixo. |
 | `STORAGE_DIR` | não (default `./storage`) | Onde os documentos anexos são gravados. |
 | `SMTP_*` | não | Envio real do pacote à empresa contratada (Etapa 3, com anexos MIME de verdade); sem isso, só loga. |
 | `LOG_LEVEL` | não (default `info`) | `debug`/`info`/`warn`/`error`. |
@@ -248,6 +251,10 @@ Adequação estrita a duas Instruções Normativas da Prefeitura de Rondonópoli
 - [x] Revisão de segurança manual das áreas sensíveis (auth, upload, SMTP, rate limit) — achou e corrigiu um path traversal real (ver `git log`, commit "fix: corrige path traversal...")
 - [x] Tracing distribuído (OpenTelemetry — HTTP via `otelgin`, GORM via `otelgorm`, spans manuais no `KanbanService.AvancarEtapa`), validado no Jaeger
 - [x] Rate limiting compartilhado entre réplicas (Redis, GCRA via `go-redis/redis_rate`, fail-open se o Redis cair) — cai para o limiter em memória se `REDIS_ADDR` não estiver configurado
+- [x] No máximo um documento anexado de cada tipo por processo (índice único com backfill seguro, migration `000011`) — reenviar um tipo já anexado exige excluir o anterior primeiro
+- [x] Checklist de avanço de etapa cumulativo entre etapas (`RequisitosAcumulados`) — um documento obrigatório de uma etapa anterior, se excluído, volta a bloquear o avanço em qualquer etapa seguinte, não só a original; upload também rejeita (400) um tipo que ainda não faz parte do checklist até a etapa atual
+- [x] Configuração de Keycloak editável em runtime (Configurações → Keycloak/SSO no frontend) — `AuthMiddlewareState.Reload` troca a validação de token ativa sem reiniciar o processo; novo issuer/JWKS testado antes de persistir (fail-closed)
+- [x] Cache HTTP agressivo em documentos anexados (`ETag` do hash SHA-256 + `Cache-Control: immutable`, streaming direto do disco via `http.ServeContent`) — documentos são imutáveis por ID, então reabrir o mesmo arquivo não retransmite nada
 - [ ] `security-review` automatizado no CI (hoje depende de diff contra `origin/HEAD`, que só existe depois do primeiro push)
 
 ---

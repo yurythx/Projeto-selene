@@ -61,10 +61,11 @@ Preencha `AUTH_KEYCLOAK_ID`, `AUTH_KEYCLOAK_SECRET` e `AUTH_KEYCLOAK_ISSUER` em 
 
 ## Variáveis de ambiente
 
-Ver [`.env.example`](.env.example) para a lista completa e comentada. Duas merecem destaque:
+Ver [`.env.example`](.env.example) para a lista completa e comentada. Três merecem destaque:
 
 - `API_URL` — URL do backend Go. **Sem** prefixo `NEXT_PUBLIC_` de propósito: variáveis `NEXT_PUBLIC_*` são fixadas no bundle em **build time**, o que quebraria a injeção de env em runtime do docker-compose. `API_URL` só é lida server-side (Server Components, Route Handlers), então não precisa (e não deve) ir pro bundle do browser.
 - `AUTH_TRUST_HOST` — precisa ser `true` em produção (`NODE_ENV=production`, como na imagem Docker) sempre que o app roda atrás de mapeamento de porta ou proxy reverso — o que é sempre o caso em deploy real. Sem isso, o Auth.js rejeita a requisição com `UntrustedHost`.
+- `INTERNAL_API_SECRET` — segredo compartilhado com o backend (mesmo valor nos dois lados) que autentica `GET /internal/keycloak-config`. `AUTH_KEYCLOAK_ID`/`SECRET`/`ISSUER` acima são só o valor de *fallback*: um admin pode salvar uma configuração de Keycloak diferente em runtime pela tela Configurações → Keycloak/SSO (persistida no backend), e `src/auth.ts` busca a config ATIVA a cada requisição de autenticação via `lib/keycloak-config.ts` (cache de 60s) em vez de fixá-la uma vez no boot — por isso `NextAuth()` é chamado na forma "preguiçosa" (`async () => ({...})`), não com um objeto literal. Ver os comentários em `src/auth.ts` e `src/proxy.ts` (a forma preguiçosa exige um `await` extra no wrapper de middleware, achado real ao migrar).
 
 ## Testes
 
@@ -170,16 +171,18 @@ Adequação às IN SCL 01/2019 e 04/2021 (ver `backend/README.md` para a Matriz 
 - **Ocorrências** (`components/kanban/ocorrencias-dialog.tsx`) — dialog aninhado no drawer do Kanban, mesmo padrão de Vistorias. Registrar uma ocorrência **bloqueia de verdade** (não só visualmente) o botão "Avançar etapa" — o drawer refaz `GET /processos/:id` ao abrir (`processo-dialog.tsx`, query `["processo", processo.ID]`) pra ler `allowed_actions`, que substituiu os booleanos `podeAvancar`/`podeConcluir` hoje calculados a partir só de `EtapaAtualID`/`Status` como fallback (enquanto essa query não resolveu).
 - **Empenho e Designações** (`components/contratos/empenhos-card.tsx`, `designacoes-card.tsx`) — cards na página de detalhe do contrato. Ambos têm CRUD completo agora: Empenho (criar, registrar reforço/anulação, saldo ao vivo) e Designações ("Nova designação" — seleciona servidor via `GET /servidores`, projeção mínima ID/Nome/Email aberta a qualquer autenticado, e papel FISCAL/FISCAL_SUPLENTE/GESTOR/FISCAL_SETORIAL; uma nova designação do mesmo papel revoga a anterior automaticamente no backend).
 - **Mão de obra terceirizada** (`novo-contrato-dialog.tsx`, `editar-contrato-dialog.tsx`) — switch "Mão de obra terceirizada" no formulário de contrato, ligado a `Contrato.ExigeFiscalizacaoTerceirizacao`; quando ativo, acrescenta os documentos trabalhistas do Art.9º-XXXII da IN04 ao checklist da Etapa 5 (ver `backend/README.md`). Um badge "Mão de obra terceirizada" aparece no cabeçalho de `/contratos/[id]` quando o contrato está marcado.
+- **Configurações** (`/configuracoes`) — hub admin-only com cards pras telas administrativas que não cabem em nenhuma área de negócio: Modelos de Documentos e Keycloak/SSO (editável em runtime, ver a seção Variáveis de ambiente acima). A sidebar aponta pro hub, não direto pra nenhuma das duas.
+- **Pré-visualização de documento anexo** (`components/kanban/processo-page.tsx`) — o nome do documento (na lista "Documentos anexados" e nos itens satisfeitos do checklist) abre o arquivo numa aba nova (`target="_blank"`), de propósito: um visualizador nativo do navegador é mais rápido de exibir do que qualquer visualizador embutido em JS, decisão tomada depois de testar um visualizador PDF.js embutido e comparar. O backend serve com cache HTTP agressivo (ver `backend/README.md`) — reabrir o mesmo documento não retransmite nada.
 
 ## Checklist de produção
 
 - [x] Autenticação via Auth.js v5 + Keycloak, access token nunca exposto ao browser (fica só no cookie de sessão criptografado; `getAccessToken()` lê direto via `next-auth/jwt`, nunca pelo endpoint público `/api/auth/session`)
 - [x] Arquitetura BFF: browser nunca chama o backend Go direto, só os Route Handlers do próprio Next
 - [x] `fiscal_id`/autorização sempre resolvidos server-side a partir da sessão — nunca aceitos do corpo da requisição do client
-- [x] Defesa em profundidade contra CSRF nos 22 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
+- [x] Defesa em profundidade contra CSRF nos 27 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
 - [x] Security headers: CSP com nonce via `src/proxy.ts` (por requisição); X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy via `next.config.ts` (estáticos, não dependem de nonce)
 - [x] `loading.tsx` (streaming) e `error.tsx`/`global-error.tsx` (boundary de erro amigável) nas rotas principais
-- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes unitários/componente + 23 E2E (Playwright)
+- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 51 testes unitários/componente + 40 E2E (Playwright)
 - [x] CI (lint + testes unitários + testes E2E + build + imagem Docker), mesmo pipeline do backend
 - [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root
 - [x] Tipos gerados a partir do OpenAPI do backend (`openapi-typescript`) — sem duplicar contratos de API à mão

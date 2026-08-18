@@ -25,7 +25,8 @@ git clone https://github.com/yurythx/Projeto-selene.git
 cd Projeto-selene
 cp .env.production.example .env.production
 # edite .env.production: DB_PASSWORD, REDIS_PASSWORD, AUTH_SECRET,
-# AUTH_KEYCLOAK_SECRET (ver seção 2 abaixo pra pegar esse valor)
+# INTERNAL_API_SECRET, AUTH_KEYCLOAK_SECRET (ver seção 2 abaixo pra pegar
+# esse valor)
 ```
 
 Gerar os segredos:
@@ -35,6 +36,14 @@ openssl rand -base64 24
 
 # AUTH_SECRET — especificamente pro Auth.js
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+
+# INTERNAL_API_SECRET — MESMO valor nos dois serviços (backend e
+# frontend leem a mesma variável do .env.production compartilhado, então
+# um valor só já basta). Autentica a única chamada server-to-server sem
+# JWT de usuário desta API (GET /internal/keycloak-config, ver
+# backend/README.md e frontend/README.md) — obrigatório, o backend não
+# sobe sem isso definido.
+openssl rand -hex 32
 ```
 
 ## 2. Atualizar o client do Keycloak

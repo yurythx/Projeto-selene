@@ -1084,7 +1084,7 @@ export interface paths {
         };
         /**
          * Baixa/pré-visualiza o conteúdo de um documento anexo
-         * @description Content-Disposition "inline" (não "attachment") — pensado pra pré-visualização embutida (iframe/img) na página do processo, não força download direto. Content-Type detectado do conteúdo real do arquivo (não confia só na extensão do nome).
+         * @description Content-Disposition "inline" (não "attachment") — o frontend abre esta URL numa aba nova (target="_blank") pra pré-visualização, deixando o navegador usar seu próprio visualizador nativo em vez de forçar um download direto. Content-Type detectado do conteúdo real do arquivo (não confia só na extensão do nome). Cache agressivo: `ETag` (hash SHA-256 do conteúdo) + `Cache-Control: immutable` — documentos são imutáveis pelo próprio ID.
          */
         get: {
             parameters: {
