@@ -15,12 +15,19 @@ export function MobileTopBar() {
   const { setMobileOpen } = useSidebarContext();
 
   return (
-    <header className="bg-sidebar text-sidebar-foreground border-sidebar-border sticky top-0 z-30 flex h-14 items-center gap-3 border-b px-4 shadow-sm md:hidden">
+    // h-16 (era h-14) — mesma altura do header real de papermoon.cloud.
+    // bg-sidebar/90 + backdrop-blur — não cor chapada: o header deles
+    // (fixed, sobre o conteúdo) e os painéis internos (ex.: o card de
+    // formulário, `bg-surface-1/60 backdrop-blur-sm`) usam esse mesmo
+    // vidro fosco translúcido como assinatura visual, confirmado no CSS
+    // compilado deles. supports-[...] cobre navegador sem suporte a
+    // backdrop-filter (fica sólido, sem o vidro, mas legível).
+    <header className="bg-sidebar/90 text-sidebar-foreground border-sidebar-border sticky top-0 z-30 flex h-16 items-center gap-3 border-b px-4 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-sidebar/75 md:hidden">
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
         aria-label="Abrir menu"
-        className="hover:bg-sidebar-accent -ml-1.5 flex size-9 items-center justify-center rounded-lg"
+        className="hover:bg-sidebar-accent -ml-1.5 flex size-9 items-center justify-center rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar active:translate-y-px"
       >
         <Menu className="size-5" />
       </button>
@@ -30,7 +37,10 @@ export function MobileTopBar() {
         <div className="flex size-6 items-center justify-center rounded-md bg-amber-400 text-xs font-bold text-slate-900">
           S
         </div>
-        <span className="font-semibold">Selene</span>
+        {/* text-base font-bold tracking-tight — mesmo tratamento da
+            wordmark aplicado em sidebar.tsx, pra consistência entre as
+            duas barras (era só font-semibold). */}
+        <span className="text-base font-bold tracking-tight">Selene</span>
       </div>
     </header>
   );

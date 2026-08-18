@@ -99,9 +99,15 @@ export function Sidebar() {
     .join("")
     .toUpperCase();
 
+  // Anel de foco em duas camadas (ring + ring-offset), mesma receita dos
+  // links reais de papermoon.cloud (`focus-visible:ring-2
+  // focus-visible:ring-border-focus focus-visible:ring-offset-2
+  // focus-visible:ring-offset-surface-0`, confirmado no HTML renderizado
+  // do header deles) — antes esses links não tinham NENHUM anel próprio,
+  // só o outline azul default do navegador.
   const itemClasse = (ativo: boolean) =>
     cn(
-      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
       !mostrarRotulos && "justify-center px-0",
       ativo ? ITEM_ATIVO : ITEM_INATIVO
     );
@@ -130,23 +136,30 @@ export function Sidebar() {
           type="button"
           onClick={alternarColapsado}
           aria-label={colapsado ? "Expandir barra lateral" : "Recolher barra lateral"}
-          className="border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-16 -right-3 z-10 hidden size-6 items-center justify-center rounded-full border shadow-sm md:flex"
+          className="border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground absolute top-16 -right-3 z-10 hidden size-6 items-center justify-center rounded-full border shadow-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar active:translate-y-px md:flex"
         >
           {colapsado ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
         </button>
 
-        <div className="border-sidebar-border flex h-14 shrink-0 items-center justify-between gap-2 border-b px-4">
+        {/* h-16 (64px), não h-14 — mesma altura de cabeçalho do header real
+            de papermoon.cloud (`h-16`, confirmado no HTML deles). */}
+        <div className="border-sidebar-border flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4">
           <div className={cn("flex items-center gap-2 overflow-hidden", !mostrarRotulos && "w-full justify-center")}>
             <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-400 text-sm font-bold text-slate-900">
               S
             </div>
-            {mostrarRotulos && <span className="truncate font-semibold">Selene</span>}
+            {/* text-base font-bold tracking-tight — mesmo tratamento da
+                wordmark "PaperMoon" no header deles (era só font-semibold,
+                sem tracking-tight nem tamanho explícito). */}
+            {mostrarRotulos && (
+              <span className="truncate text-base font-bold tracking-tight">Selene</span>
+            )}
           </div>
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
-            className="hover:bg-sidebar-accent flex size-8 shrink-0 items-center justify-center rounded-lg md:hidden"
+            className="hover:bg-sidebar-accent flex size-8 shrink-0 items-center justify-center rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar active:translate-y-px md:hidden"
           >
             <X className="size-4" />
           </button>
