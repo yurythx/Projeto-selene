@@ -12,7 +12,7 @@ const SidebarContext = createContext<SidebarContextValue | null>(null);
 
 /**
  * Compartilha o estado "drawer mobile aberto" entre o botão de hambúrguer
- * (MobileTopBar, que fica na coluna de conteúdo) e a própria `<aside>`
+ * (TopBar, que fica na coluna de conteúdo) e a própria `<aside>`
  * (Sidebar, fora dessa coluna) — os dois vivem em subárvores irmãs no
  * layout (ver app/(app)/layout.tsx), então um Context é mais simples que
  * subir o estado pra um Server Component (que não pode ter estado) ou

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import {
   LayoutDashboard,
   KanbanSquare,
@@ -12,24 +12,11 @@ import {
   Building2,
   ShieldCheck,
   Settings,
-  LogOut,
   X,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { useMontado } from "@/lib/use-montado";
 import { useSidebarContext } from "@/components/sidebar-context";
 
@@ -73,11 +60,17 @@ function lerColapsadoSalvo(): boolean {
  *   usado em kanban-board.tsx pra visualização Kanban/Lista, evita
  *   mismatch de hidratação).
  * - Mobile (< md): vira um drawer fora do fluxo (`fixed`), escondido por
- *   padrão (`-translate-x-full`) e aberto pelo hambúrguer em
- *   MobileTopBar — os dois compartilham o estado via SidebarProvider
- *   (ver sidebar-context.tsx). Sempre em largura total quando aberta,
+ *   padrão (`-translate-x-full`) e aberto pelo hambúrguer da TopBar — os
+ *   dois compartilham o estado via SidebarProvider (ver
+ *   sidebar-context.tsx). Sempre em largura total quando aberta,
  *   independente da preferência de colapso do desktop (64px não faz
  *   sentido num drawer que já é overlay, não ocupa espaço permanente).
+ *
+ * Só o MENU mora aqui — tema e usuário logado moraram no rodapé desta
+ * sidebar até uma versão anterior; agora vivem na TopBar (ver
+ * top-bar.tsx), que é persistente em qualquer largura de tela, não só
+ * mobile. Pedido explícito do usuário: duas barras com responsabilidades
+ * separadas.
  */
 export function Sidebar() {
   const pathname = usePathname();
@@ -93,14 +86,6 @@ export function Sidebar() {
     setColapsadoEscolhido(novo);
     localStorage.setItem(CHAVE_COLAPSADO, novo ? "1" : "0");
   }
-
-  const iniciais = (session?.user?.name ?? session?.user?.email ?? "?")
-    .trim()
-    .split(/\s+/)
-    .map((parte) => parte[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
 
   // Anel de foco em duas camadas (ring + ring-offset), mesma receita dos
   // links reais de papermoon.cloud (`focus-visible:ring-2
@@ -232,60 +217,6 @@ export function Sidebar() {
             </>
           )}
         </nav>
-
-        <div
-          className={cn(
-            "border-sidebar-border flex shrink-0 items-center border-t p-3",
-            mostrarRotulos ? "justify-between" : "flex-col gap-2"
-          )}
-        >
-          <ThemeToggle />
-          {session?.user && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full"
-                    aria-label={`Menu de ${session.user.name ?? session.user.email}`}
-                  >
-                    <Avatar className="size-8">
-                      <AvatarFallback>{iniciais}</AvatarFallback>
-                    </Avatar>
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align={mostrarRotulos ? "end" : "center"} side="top">
-                {/* DropdownMenuLabel (Menu.GroupLabel do base-ui) exige um
-                    Menu.Group ancestral — sem ele, useMenuGroupRootContext()
-                    lança "Base UI error #31: MenuGroupContext is missing" e
-                    quebra a página inteira (ErrorBoundary) toda vez que
-                    alguém abre este menu. Bug real já corrigido uma vez
-                    nesta sessão — não reintroduzir. */}
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{session.user.name}</p>
-                      <p className="text-muted-foreground text-xs leading-none">
-                        {session.user.email}
-                      </p>
-                    </div>
-                  </DropdownMenuLabel>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                {/* onClick, não onSelect — @base-ui/react/menu (não Radix):
-                    a prop que existe de verdade é onClick; onSelect é
-                    ignorado (não é um evento nativo de clique). Mesmo bug
-                    já corrigido uma vez nesta sessão — não reintroduzir. */}
-                <DropdownMenuItem onClick={() => signOut({ redirectTo: "/login" })}>
-                  <LogOut />
-                  Sair
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
       </aside>
     </>
   );
