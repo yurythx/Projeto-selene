@@ -68,4 +68,42 @@ test.describe("/configuracoes", () => {
 
     await expect(page.getByText(/precisa ser uma URL válida/)).toBeVisible();
   });
+
+  test("Diário Oficial: configura, testa a conexão, e busca contratos por nome", async ({
+    page,
+    context,
+  }) => {
+    await injetarSessao(context, ADMIN);
+    await page.goto("/configuracoes");
+
+    const linkSecao = page.getByRole("link", { name: /Diário Oficial/ });
+    await expect(linkSecao).toBeVisible();
+    await linkSecao.click();
+    await expect(page).toHaveURL(/\/configuracoes\/diario-oficial$/);
+
+    // Sem configuração salva ainda.
+    await expect(page.getByText("nenhuma ainda")).toBeVisible();
+    await expect(page.getByText("Chave de API: não configurada")).toBeVisible();
+
+    await page.getByLabel("URL base da API").fill("https://diario.exemplo.gov.br/api");
+    await page.getByLabel("Chave de API").fill("chave-super-secreta");
+    await page.getByRole("button", { name: "Salvar" }).click();
+
+    await expect(page.getByText("Configuração do Diário Oficial salva.")).toBeVisible();
+    await expect(page.getByText("Chave de API: configurada")).toBeVisible();
+    // Campo de chave é limpo depois de salvar — nunca ecoa de volta.
+    await expect(page.getByLabel("Chave de API")).toHaveValue("");
+
+    await page.getByRole("button", { name: "Testar conexão" }).click();
+    await expect(page.getByText("O servidor respondeu", { exact: true })).toBeVisible();
+
+    await page.getByRole("link", { name: "Ir para a busca →" }).click();
+    await expect(page).toHaveURL(/\/configuracoes\/diario-oficial\/buscar$/);
+
+    await page.getByLabel("Nome").fill("Fornecedora Teste Ltda");
+    await page.getByRole("button", { name: "Buscar" }).click();
+
+    await expect(page.getByText("1 resultado.")).toBeVisible();
+    await expect(page.getByText("Fornecedora Teste Ltda")).toBeVisible();
+  });
 });

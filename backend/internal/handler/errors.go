@@ -87,8 +87,16 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrTipoDocumentoNaoExigidoAinda),
 		errors.Is(err, service.ErrKeycloakClientIDObrigatorio),
 		errors.Is(err, service.ErrKeycloakSegredoObrigatorio),
-		errors.Is(err, service.ErrKeycloakIssuerInvalido):
+		errors.Is(err, service.ErrKeycloakIssuerInvalido),
+		errors.Is(err, service.ErrDiarioOficialURLInvalida),
+		errors.Is(err, service.ErrDiarioOficialChaveObrigatoria):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+	case errors.Is(err, service.ErrDiarioOficialNaoConfigurado):
+		c.JSON(http.StatusPreconditionFailed, gin.H{"error": err.Error()})
+
+	case errors.Is(err, service.ErrDiarioOficialFalhaNaBusca):
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 
 	case errors.Is(err, service.ErrCredenciaisInvalidas):
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})

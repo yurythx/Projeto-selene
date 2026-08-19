@@ -2603,6 +2603,192 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/config/diario-oficial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuração da integração com o Diário Oficial atualmente ativa
+         * @description Nunca inclui a chave de API (só `tem_chave_configurada`). ESTRUTURA GENÉRICA — a API real do Diário Oficial da cidade ainda não está definida; ver o comentário de escopo no topo de internal/service/diario_oficial_service.go pro contrato assumido de request/response.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfiguracaoDiarioOficial"];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        /**
+         * Atualiza a configuração da integração com o Diário Oficial
+         * @description Ao contrário do PUT de Keycloak, NÃO testa a conexão antes de salvar (uma API de terceiro fora do ar temporariamente não deveria invalidar a URL/chave configuradas) — use POST .../testar separadamente. `api_key` vazia numa atualização mantém a chave já salva.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AtualizarConfiguracaoDiarioOficialRequest"];
+                };
+            };
+            responses: {
+                /** @description Salvo. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfiguracaoDiarioOficial"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/diario-oficial/testar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Testa a conexão com a API do Diário Oficial configurada
+         * @description Faz uma requisição real contra a BaseURL configurada. Qualquer resposta HTTP (mesmo 404/401) conta como sucesso de conexão — não validamos o schema da API real, só que ela respondeu. Só erro de rede (DNS, timeout, conexão recusada) conta como falha.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Resultado do teste (Sucesso pode ser false — ver descrição). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ResultadoTesteConexao"];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                /** @description Nenhuma configuração de Diário Oficial foi salva ainda. */
+                412: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/diario-oficial/contratos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Busca novos contratos publicados no Diário Oficial
+         * @description Proxy autenticado pra API externa configurada — filtros por nome, CPF e data (todos opcionais, repassados como vieram). Resposta é o JSON decodificado da API externa, sem validação de schema fixo (ver o comentário de escopo no service).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    nome?: string;
+                    cpf?: string;
+                    data?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK — `resultado` é o JSON bruto devolvido pela API externa. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            resultado?: unknown;
+                        };
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                /** @description Nenhuma configuração de Diário Oficial foi salva ainda. */
+                412: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+                /** @description A API externa do Diário Oficial não respondeu ou devolveu erro. */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3134,6 +3320,30 @@ export interface components {
             /** @description Ex: "https://keycloak.prefeitura.gov.br/realms/selene" — o JWKS é derivado automaticamente (sufixo fixo do Keycloak). */
             issuer_url: string;
             audience?: string;
+        };
+        /** @description Configuração da integração com o Diário Oficial — nunca inclui a chave de API em texto puro. */
+        ConfiguracaoDiarioOficial: {
+            BaseURL?: string;
+            TemChaveConfigurada?: boolean;
+            /** Format: date-time */
+            AtualizadoEm?: string | null;
+            AtualizadoPorNome?: string;
+        };
+        AtualizarConfiguracaoDiarioOficialRequest: {
+            /** @description Ex: "https://diario.example.gov.br/api" — sem barra final. */
+            base_url: string;
+            /** @description Vazia numa atualização mantém a chave já salva. */
+            api_key?: string;
+        };
+        ResultadoTesteConexao: {
+            /** @description true se o servidor respondeu (mesmo com status de erro HTTP) — false só em falha de rede. */
+            Sucesso?: boolean;
+            StatusHTTP?: number;
+            LatenciaMS?: number;
+            /** @description Preenchido só quando Sucesso=false. */
+            Erro?: string;
+            /** @description Primeiros bytes da resposta, pra debug. */
+            TrechoCorpo?: string;
         };
     };
     responses: {

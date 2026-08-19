@@ -1439,6 +1439,112 @@ paths:
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "403": { $ref: "#/components/responses/Proibido" }
 
+  /api/v1/admin/config/diario-oficial:
+    get:
+      tags: [Configurações]
+      summary: Configuração da integração com o Diário Oficial atualmente ativa
+      description: >
+        Nunca inclui a chave de API (só `tem_chave_configurada`). ESTRUTURA
+        GENÉRICA — a API real do Diário Oficial da cidade ainda não está
+        definida; ver o comentário de escopo no topo de
+        internal/service/diario_oficial_service.go pro contrato assumido
+        de request/response.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracaoDiarioOficial" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+    put:
+      tags: [Configurações]
+      summary: Atualiza a configuração da integração com o Diário Oficial
+      description: >
+        Ao contrário do PUT de Keycloak, NÃO testa a conexão antes de
+        salvar (uma API de terceiro fora do ar temporariamente não deveria
+        invalidar a URL/chave configuradas) — use POST .../testar
+        separadamente. `api_key` vazia numa atualização mantém a chave já
+        salva.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AtualizarConfiguracaoDiarioOficialRequest" }
+      responses:
+        "200":
+          description: Salvo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracaoDiarioOficial" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+
+  /api/v1/admin/config/diario-oficial/testar:
+    post:
+      tags: [Configurações]
+      summary: Testa a conexão com a API do Diário Oficial configurada
+      description: >
+        Faz uma requisição real contra a BaseURL configurada. Qualquer
+        resposta HTTP (mesmo 404/401) conta como sucesso de conexão — não
+        validamos o schema da API real, só que ela respondeu. Só erro de
+        rede (DNS, timeout, conexão recusada) conta como falha.
+      responses:
+        "200":
+          description: Resultado do teste (Sucesso pode ser false — ver descrição).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultadoTesteConexao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "412":
+          description: Nenhuma configuração de Diário Oficial foi salva ainda.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroSimples" }
+
+  /api/v1/admin/diario-oficial/contratos:
+    get:
+      tags: [Configurações]
+      summary: Busca novos contratos publicados no Diário Oficial
+      description: >
+        Proxy autenticado pra API externa configurada — filtros por nome,
+        CPF e data (todos opcionais, repassados como vieram). Resposta é o
+        JSON decodificado da API externa, sem validação de schema fixo
+        (ver o comentário de escopo no service).
+      parameters:
+        - name: nome
+          in: query
+          schema: { type: string }
+        - name: cpf
+          in: query
+          schema: { type: string }
+        - name: data
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK — `resultado` é o JSON bruto devolvido pela API externa.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resultado: {}
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "412":
+          description: Nenhuma configuração de Diário Oficial foi salva ainda.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroSimples" }
+        "502":
+          description: A API externa do Diário Oficial não respondeu ou devolveu erro.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroSimples" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1933,3 +2039,28 @@ components:
         client_secret: { type: string, description: "Vazio numa atualização mantém o segredo já salvo." }
         issuer_url: { type: string, description: 'Ex: "https://keycloak.prefeitura.gov.br/realms/selene" — o JWKS é derivado automaticamente (sufixo fixo do Keycloak).' }
         audience: { type: string }
+
+    ConfiguracaoDiarioOficial:
+      type: object
+      description: Configuração da integração com o Diário Oficial — nunca inclui a chave de API em texto puro.
+      properties:
+        BaseURL: { type: string }
+        TemChaveConfigurada: { type: boolean }
+        AtualizadoEm: { type: string, format: date-time, nullable: true }
+        AtualizadoPorNome: { type: string }
+
+    AtualizarConfiguracaoDiarioOficialRequest:
+      type: object
+      required: [base_url]
+      properties:
+        base_url: { type: string, description: 'Ex: "https://diario.example.gov.br/api" — sem barra final.' }
+        api_key: { type: string, description: "Vazia numa atualização mantém a chave já salva." }
+
+    ResultadoTesteConexao:
+      type: object
+      properties:
+        Sucesso: { type: boolean, description: "true se o servidor respondeu (mesmo com status de erro HTTP) — false só em falha de rede." }
+        StatusHTTP: { type: integer }
+        LatenciaMS: { type: integer }
+        Erro: { type: string, description: "Preenchido só quando Sucesso=false." }
+        TrechoCorpo: { type: string, description: "Primeiros bytes da resposta, pra debug." }

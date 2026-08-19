@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileTextIcon, KeyRoundIcon, ChevronRightIcon } from "lucide-react";
+import { FileTextIcon, KeyRoundIcon, NewspaperIcon, ChevronRightIcon } from "lucide-react";
 import { auth } from "@/auth";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -15,6 +15,12 @@ const SECOES = [
     titulo: "Keycloak / SSO",
     descricao: "Client ID, Client Secret e Issuer do login institucional — editável em runtime, sem reiniciar os containers.",
     Icon: KeyRoundIcon,
+  },
+  {
+    href: "/configuracoes/diario-oficial",
+    titulo: "Diário Oficial",
+    descricao: "Configure e teste a conexão com a API do Diário Oficial da cidade, e busque novos contratos publicados por nome, CPF e data.",
+    Icon: NewspaperIcon,
   },
 ];
 

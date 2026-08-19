@@ -195,3 +195,23 @@ var ErrKeycloakSegredoObrigatorio = errors.New("service: client_secret é obriga
 // ao buscar o JWKS (ver KeycloakConfigService.Salvar — a validação de
 // rede acontece ANTES de persistir, fail-closed).
 var ErrKeycloakIssuerInvalido = errors.New("service: issuer_url inválido")
+
+// ErrDiarioOficialURLInvalida é retornado quando base_url não é uma URL
+// http(s) bem formada.
+var ErrDiarioOficialURLInvalida = errors.New("service: base_url inválida")
+
+// ErrDiarioOficialChaveObrigatoria é retornado quando api_key vem vazia
+// na PRIMEIRA configuração salva — mesmo espírito de
+// ErrKeycloakSegredoObrigatorio (vazio em atualizações seguintes = manter
+// a chave atual).
+var ErrDiarioOficialChaveObrigatoria = errors.New("service: api_key é obrigatória (não há uma configuração anterior pra manter a chave atual)")
+
+// ErrDiarioOficialNaoConfigurado é retornado por TestarConexao/
+// BuscarContratos quando nenhum admin salvou uma configuração ainda.
+var ErrDiarioOficialNaoConfigurado = errors.New("service: integração com o diário oficial ainda não foi configurada")
+
+// ErrDiarioOficialFalhaNaBusca é retornado quando a API externa do
+// Diário Oficial não responde, responde com erro, ou devolve algo que
+// não é JSON válido — engloba o erro original via %w em cada call site
+// (DiarioOficialService.BuscarContratos), não é usado sozinho.
+var ErrDiarioOficialFalhaNaBusca = errors.New("service: falha ao consultar a API do diário oficial")

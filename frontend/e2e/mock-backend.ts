@@ -254,6 +254,7 @@ function resetState() {
     "novo.local@example.com": "temporaria123",
   };
   keycloakConfig = null;
+  diarioOficialConfig = null;
 }
 
 // Configurações → Keycloak/SSO — null = nenhum admin salvou nada ainda
@@ -267,6 +268,16 @@ interface KeycloakConfigMock {
   AtualizadoPorNome: string;
 }
 let keycloakConfig: KeycloakConfigMock | null = null;
+
+// Configurações → Diário Oficial — mesmo espírito de KeycloakConfigMock
+// (null = nada salvo ainda). Estrutura genérica (ver o comentário de
+// escopo em backend/internal/service/diario_oficial_service.go).
+interface DiarioOficialConfigMock {
+  BaseURL: string;
+  AtualizadoEm: string;
+  AtualizadoPorNome: string;
+}
+let diarioOficialConfig: DiarioOficialConfigMock | null = null;
 
 // Mesma tabela De/Para do backend (ver
 // internal/service/fiscalizacao_service.go) — reimplementada aqui em
@@ -1016,6 +1027,58 @@ const server = createServer((req, res) => {
         Origem: "banco_de_dados",
         AtualizadoEm: keycloakConfig.AtualizadoEm,
         AtualizadoPorNome: keycloakConfig.AtualizadoPorNome,
+      });
+    }
+
+    if (pathname === "/api/v1/admin/config/diario-oficial" && req.method === "GET") {
+      if (!diarioOficialConfig) {
+        return json(res, 200, { BaseURL: "", TemChaveConfigurada: false });
+      }
+      return json(res, 200, {
+        BaseURL: diarioOficialConfig.BaseURL,
+        TemChaveConfigurada: true,
+        AtualizadoEm: diarioOficialConfig.AtualizadoEm,
+        AtualizadoPorNome: diarioOficialConfig.AtualizadoPorNome,
+      });
+    }
+    if (pathname === "/api/v1/admin/config/diario-oficial" && req.method === "PUT") {
+      const corpo = bodyAsJSON();
+      if (!corpo.base_url || !corpo.base_url.startsWith("http")) {
+        return json(res, 400, { error: "base_url inválida" });
+      }
+      diarioOficialConfig = {
+        BaseURL: corpo.base_url,
+        AtualizadoEm: new Date().toISOString(),
+        AtualizadoPorNome: "Admin Teste",
+      };
+      return json(res, 200, {
+        BaseURL: diarioOficialConfig.BaseURL,
+        TemChaveConfigurada: true,
+        AtualizadoEm: diarioOficialConfig.AtualizadoEm,
+        AtualizadoPorNome: diarioOficialConfig.AtualizadoPorNome,
+      });
+    }
+    if (pathname === "/api/v1/admin/config/diario-oficial/testar" && req.method === "POST") {
+      if (!diarioOficialConfig) {
+        return json(res, 412, { error: "integração com o diário oficial ainda não foi configurada" });
+      }
+      // Mock sempre "conecta" com sucesso — o e2e cobre o roundtrip do
+      // frontend (chamar, mostrar o resultado), não o comportamento real
+      // de rede (isso é coberto pelos testes Go de
+      // DiarioOficialService.TestarConexao contra um httptest.Server).
+      return json(res, 200, { Sucesso: true, StatusHTTP: 200, LatenciaMS: 12, TrechoCorpo: "{}" });
+    }
+    if (pathname === "/api/v1/admin/diario-oficial/contratos" && req.method === "GET") {
+      if (!diarioOficialConfig) {
+        return json(res, 412, { error: "integração com o diário oficial ainda não foi configurada" });
+      }
+      const nome = searchParams.get("nome") ?? "";
+      return json(res, 200, {
+        resultado: {
+          resultados: nome
+            ? [{ contratada_nome: nome, contratada_cnpj: "11.111.111/0001-11", data_publicacao: "2026-08-18" }]
+            : [],
+        },
       });
     }
 

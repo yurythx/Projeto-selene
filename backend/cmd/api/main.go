@@ -107,6 +107,7 @@ func main() {
 	modeloDocumentoRepo := repository.NewModeloDocumentoRepository(db)
 	modeloDocumentoVersaoRepo := repository.NewModeloDocumentoVersaoRepository(db)
 	keycloakConfigRepo := repository.NewKeycloakConfigRepository(db)
+	diarioOficialConfigRepo := repository.NewDiarioOficialConfigRepository(db)
 
 	// Chave RSA do login local (usuário/senha) — gerada uma vez por
 	// processo, ver a "LIMITAÇÃO CONHECIDA" documentada em
@@ -192,6 +193,7 @@ func main() {
 	}
 
 	keycloakConfigService := service.NewKeycloakConfigService(keycloakConfigRepo, authState, fallbackAuthConfig)
+	diarioOficialService := service.NewDiarioOficialService(diarioOficialConfigRepo)
 
 	// Rate limiter: Redis compartilhado se REDIS_ADDR estiver configurado
 	// (vale entre réplicas), senão cai para o limiter em memória (mesmo
@@ -227,6 +229,7 @@ func main() {
 	ocorrenciaHandler := handler.NewOcorrenciaHandler(ocorrenciaService)
 	modeloDocumentoHandler := handler.NewModeloDocumentoHandler(modeloDocumentoService)
 	keycloakConfigHandler := handler.NewKeycloakConfigHandler(keycloakConfigService, cfg.InternalAPISecret)
+	diarioOficialHandler := handler.NewDiarioOficialHandler(diarioOficialService)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -400,6 +403,16 @@ func main() {
 			// editar variáveis de ambiente e reiniciar os containers.
 			admin.GET("/config/keycloak", keycloakConfigHandler.Buscar)
 			admin.PUT("/config/keycloak", keycloakConfigHandler.Atualizar)
+
+			// Configurações — Diário Oficial: estrutura genérica (config
+			// + teste de conexão + busca), decisão de escopo confirmada
+			// com o usuário — a API real da cidade ainda não está
+			// definida (ver o comentário no topo de
+			// internal/service/diario_oficial_service.go).
+			admin.GET("/config/diario-oficial", diarioOficialHandler.Buscar)
+			admin.PUT("/config/diario-oficial", diarioOficialHandler.Atualizar)
+			admin.POST("/config/diario-oficial/testar", diarioOficialHandler.TestarConexao)
+			admin.GET("/diario-oficial/contratos", diarioOficialHandler.BuscarContratos)
 		}
 	}
 

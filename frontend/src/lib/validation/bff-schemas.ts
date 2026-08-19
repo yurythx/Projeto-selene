@@ -193,3 +193,21 @@ export const atualizarKeycloakConfigSchema = z.object({
   issuer_url: z.string().trim().url("precisa ser uma URL válida (ex: https://keycloak.exemplo.gov.br/realms/selene)"),
   audience: z.string().trim().max(255).optional(),
 });
+
+// Configurações: Diário Oficial (estrutura genérica — ver o comentário
+// de escopo em backend/internal/service/diario_oficial_service.go).
+// api_key vazia numa atualização mantém a chave já salva.
+export const atualizarDiarioOficialConfigSchema = z.object({
+  base_url: z.string().trim().url("precisa ser uma URL válida (ex: https://diario.example.gov.br/api)"),
+  api_key: z.string().trim().max(500).optional(),
+});
+
+// Busca de contratos no Diário Oficial — os 3 filtros pedidos pelo
+// usuário, todos opcionais (a API externa decide o que fazer com uma
+// busca vazia). Sem validação de formato rígida pra cpf/data: não
+// sabemos o formato exato que a API real vai exigir ainda.
+export const buscarContratosDiarioOficialSchema = z.object({
+  nome: z.string().trim().max(255).optional(),
+  cpf: z.string().trim().max(20).optional(),
+  data: z.string().trim().max(20).optional(),
+});

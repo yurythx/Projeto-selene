@@ -45,6 +45,11 @@ export type GatilhoModeloDocumento =
 export type ConfiguracaoKeycloak = components["schemas"]["ConfiguracaoKeycloak"];
 export type AtualizarConfiguracaoKeycloakRequest = components["schemas"]["AtualizarConfiguracaoKeycloakRequest"];
 
+export type ConfiguracaoDiarioOficial = components["schemas"]["ConfiguracaoDiarioOficial"];
+export type AtualizarConfiguracaoDiarioOficialRequest =
+  components["schemas"]["AtualizarConfiguracaoDiarioOficialRequest"];
+export type ResultadoTesteConexao = components["schemas"]["ResultadoTesteConexao"];
+
 /** Corpo de POST /processos/{id}/vistorias. */
 export interface NovaVistoriaRequest {
   latitude?: number | null;
@@ -523,6 +528,48 @@ export function atualizarConfiguracaoKeycloak(accessToken: string, dados: Atuali
     method: "PUT",
     body: JSON.stringify(dados),
   });
+}
+
+// --- Configurações: Diário Oficial ---
+//
+// ESTRUTURA GENÉRICA — a API real do Diário Oficial da cidade ainda não
+// está definida (decisão de escopo confirmada com o usuário). Ver o
+// comentário no topo de backend/internal/service/diario_oficial_service.go
+// pro contrato assumido de request/response.
+
+export function buscarConfiguracaoDiarioOficial(accessToken: string) {
+  return apiFetch<ConfiguracaoDiarioOficial>("/api/v1/admin/config/diario-oficial", accessToken);
+}
+
+export function atualizarConfiguracaoDiarioOficial(
+  accessToken: string,
+  dados: AtualizarConfiguracaoDiarioOficialRequest
+) {
+  return apiFetch<ConfiguracaoDiarioOficial>("/api/v1/admin/config/diario-oficial", accessToken, {
+    method: "PUT",
+    body: JSON.stringify(dados),
+  });
+}
+
+export function testarConexaoDiarioOficial(accessToken: string) {
+  return apiFetch<ResultadoTesteConexao>("/api/v1/admin/config/diario-oficial/testar", accessToken, {
+    method: "POST",
+  });
+}
+
+export function buscarContratosDiarioOficial(
+  accessToken: string,
+  filtro: { nome?: string; cpf?: string; data?: string }
+) {
+  const params = new URLSearchParams();
+  if (filtro.nome) params.set("nome", filtro.nome);
+  if (filtro.cpf) params.set("cpf", filtro.cpf);
+  if (filtro.data) params.set("data", filtro.data);
+  const query = params.toString();
+  return apiFetch<{ resultado: unknown }>(
+    `/api/v1/admin/diario-oficial/contratos${query ? `?${query}` : ""}`,
+    accessToken
+  );
 }
 
 /**
