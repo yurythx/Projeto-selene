@@ -2,9 +2,10 @@ import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import {
   listarEtapas,
-  listarTiposDocumento,
   listarProcessos,
   listarContratos,
+  listarRadar,
+  requireApi,
 } from "@/lib/api/client";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
 
@@ -16,16 +17,18 @@ export default async function KanbanPage() {
     return null;
   }
 
-  const [etapas, tiposDocumento, contratos] = await Promise.all([
-    listarEtapas(accessToken),
-    listarTiposDocumento(accessToken),
-    // tamanho máximo permitido pela API — ver limitação documentada no
-    // NovoProcessoDialog sobre contratos além da primeira página.
-    listarContratos(accessToken, 1, 100),
-  ]);
+  const [etapas, contratos, radarItens] = await requireApi(
+    Promise.all([
+      listarEtapas(accessToken),
+      // tamanho máximo permitido pela API — ver limitação documentada no
+      // NovoProcessoDialog sobre contratos além da primeira página.
+      listarContratos(accessToken, 1, 100),
+      listarRadar(accessToken),
+    ])
+  );
 
-  const colunas = await Promise.all(
-    etapas.map((etapa) => listarProcessos(accessToken, etapa.ID!))
+  const colunas = await requireApi(
+    Promise.all(etapas.map((etapa) => listarProcessos(accessToken, etapa.ID!)))
   );
 
   const contratosAtivos = contratos.dados.filter((c) => c.Ativo);
@@ -41,9 +44,9 @@ export default async function KanbanPage() {
 
       <KanbanBoard
         etapas={etapas}
-        colunasIniciais={colunas.map((c) => c.dados)}
-        tiposDocumento={tiposDocumento}
+        colunasIniciais={colunas}
         contratosAtivos={contratosAtivos}
+        radarItens={radarItens}
         isFiscal={Boolean(session?.user?.isFiscal)}
       />
     </div>

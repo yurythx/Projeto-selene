@@ -6,9 +6,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -56,6 +59,14 @@ func (s *DocumentoService) Upload(
 	nomeArquivo string,
 	conteudo []byte,
 	enviadoPorID uuid.UUID,
+	// dataValidade alimenta o Radar de Alertas (Fase 1 do roadmap) —
+	// nil quando o cliente não informou (ex: tipo de documento que não
+	// vence) ou quando optou por não preencher. Não é exigido mesmo
+	// quando TipoDocumento.ExigeValidade=true: sem essa data o
+	// documento simplesmente não aparece no radar de certidões, o que é
+	// preferível a travar o upload por um dado que o fiscal pode não ter
+	// em mãos naquele momento.
+	dataValidade *time.Time,
 ) (*models.DocumentoAnexo, error) {
 	// nomeArquivo vem direto do multipart do cliente (Content-Disposition
 	// da requisição) — NUNCA confiável. Sem sanitizar, um filename como
@@ -64,11 +75,37 @@ func (s *DocumentoService) Upload(
 	// nível de "../", não protege contra vários.
 	nomeArquivo = sanitizarNomeArquivo(nomeArquivo)
 
-	if _, err := s.processoRepo.FindByID(ctx, processoID); err != nil {
+	processo, err := s.processoRepo.FindByID(ctx, processoID)
+	if err != nil {
 		return nil, err
 	}
-	if _, err := s.tipoDocRepo.FindByID(ctx, tipoDocumentoID); err != nil {
+	tipoDoc, err := s.tipoDocRepo.FindByID(ctx, tipoDocumentoID)
+	if err != nil {
 		return nil, err
+	}
+
+	// processo.Contrato só vem nil nos dublês de teste que não preload
+	// (FindByID real sempre traz o Contrato) — nesse caso não há como
+	// avaliar a restrição, então não bloqueia (fail-open) em vez de
+	// derrubar um nil pointer.
+	if processo.Contrato != nil && !TipoDocumentoAplicavel(*tipoDoc, processo.Contrato.TipoObjeto, processo.Contrato.ExigeFiscalizacaoTerceirizacao) {
+		return nil, ErrTipoDocumentoNaoAplicavel
+	}
+
+	// Regra pedida pelo usuário: só é possível anexar um tipo de documento
+	// que já faz parte do checklist até a etapa atual do processo (etapas
+	// 1..EtapaAtualID, cumulativo — RequisitosAcumulados) — evita, por
+	// exemplo, anexar uma CND (só exigida na Etapa 5) enquanto o processo
+	// ainda está na Etapa 1. Documentos de etapas já concluídas continuam
+	// permitidos (a regra é cumulativa, não "só a etapa atual isolada"):
+	// reenviar um obrigatório de uma etapa anterior que foi excluído
+	// precisa continuar funcionando em qualquer etapa posterior (ver o
+	// comentário em RequisitosAcumulados).
+	if processo.Contrato != nil {
+		requeridos := RequisitosAcumulados(processo.EtapaAtualID, processo.Contrato.TipoObjeto, processo.Contrato.ExigeFiscalizacaoTerceirizacao)
+		if !slices.Contains(requeridos, tipoDoc.Nome) {
+			return nil, ErrTipoDocumentoNaoExigidoAinda
+		}
 	}
 
 	soma := sha256.Sum256(conteudo)
@@ -80,6 +117,19 @@ func (s *DocumentoService) Upload(
 	}
 	if !errors.Is(err, repository.ErrDocumentoNotFound) {
 		return nil, fmt.Errorf("service: checar duplicidade de documento: %w", err)
+	}
+
+	// Regra pedida pelo usuário: no máximo UM documento de cada tipo por
+	// processo (ex: não pode ter dois "Pré-Empenho") — diferente da
+	// checagem de hash acima (que só reaproveita quando é o MESMO
+	// arquivo). Aqui, mesmo um arquivo diferente do mesmo tipo é
+	// rejeitado: quem quiser substituir precisa excluir o anterior
+	// primeiro (ver DocumentoService.Excluir) e reenviar o correto — sem
+	// isso, o checklist ficaria ambíguo sobre qual dos dois vale.
+	if _, err := s.docRepo.FindByProcessoAndTipo(ctx, processoID, tipoDocumentoID); err == nil {
+		return nil, ErrTipoDocumentoJaAnexado
+	} else if !errors.Is(err, repository.ErrDocumentoNotFound) {
+		return nil, fmt.Errorf("service: checar documento existente do mesmo tipo: %w", err)
 	}
 
 	// 0o750: dono lê/escreve/executa, grupo só lê/executa, nenhum acesso
@@ -102,6 +152,7 @@ func (s *DocumentoService) Upload(
 		CaminhoStorage:      caminho,
 		HashArquivo:         hash,
 		EnviadoPorID:        enviadoPorID,
+		DataValidade:        dataValidade,
 	}
 	if err := s.docRepo.Create(ctx, documento); err != nil {
 		return nil, fmt.Errorf("service: registrar documento anexo: %w", err)
@@ -117,6 +168,78 @@ func (s *DocumentoService) Listar(ctx context.Context, processoID uuid.UUID) ([]
 		return nil, fmt.Errorf("service: listar documentos do processo: %w", err)
 	}
 	return documentos, nil
+}
+
+// Baixar abre (sem ler inteiro pra memória) o arquivo em disco de um
+// documento anexo específico — usado tanto pra download quanto pra
+// pré-visualização inline na página do processo (ver
+// DocumentoHandler.Baixar, que usa http.ServeContent sobre o
+// io.ReadSeeker devolvido aqui pra transmitir direto do disco pro socket,
+// com suporte a range/condicional-GET). Otimização pedida pelo usuário
+// ("a visualização de documento é tão lenta"): antes, esta função lia o
+// arquivo inteiro pra um []byte antes de sequer começar a responder —
+// pra um PDF grande, isso significa alocar toda a memória do arquivo E
+// só começar a mandar o primeiro byte pro cliente depois da leitura
+// completa terminar (time-to-first-byte alto). Abrir e devolver o
+// *os.File deixa o handler transmitir em streaming.
+//
+// Confere que o documento realmente pertence a processoID (defesa em
+// profundidade: os dois IDs vêm de segmentos distintos da rota, GET
+// /processos/:id/documentos/:docId/download — sem essa checagem,
+// adivinhar o UUID de um documento de outro processo bastaria pra
+// baixá-lo por uma URL de processo errada).
+//
+// Quem chama é responsável por fechar o *os.File devolvido.
+func (s *DocumentoService) Baixar(ctx context.Context, processoID, documentoID uuid.UUID) (*os.File, *models.DocumentoAnexo, error) {
+	documento, err := s.docRepo.FindByID(ctx, documentoID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if documento.ProcessoPagamentoID != processoID {
+		return nil, nil, repository.ErrDocumentoNotFound
+	}
+
+	arquivo, err := os.Open(documento.CaminhoStorage)
+	if err != nil {
+		return nil, nil, fmt.Errorf("service: abrir arquivo do documento anexo: %w", err)
+	}
+
+	return arquivo, documento, nil
+}
+
+// Excluir remove um documento anexo — o registro e o arquivo físico.
+//
+// Sem trava de "já foi usado pra satisfazer o checklist de uma etapa já
+// concluída": o pedido é justamente poder corrigir um upload errado
+// (arquivo trocado, tipo errado). A auditoria do avanço em si continua
+// íntegra em kanban_logs — apagar o anexo não desfaz uma transição de
+// etapa já ocorrida, só remove o arquivo da lista atual. Decisão
+// deliberada, documentada aqui por não haver uma regra de domínio
+// pedindo o contrário; se um dia precisar bloquear isso, é um `if`
+// checando EtapaAtualID/histórico antes do Delete abaixo.
+func (s *DocumentoService) Excluir(ctx context.Context, processoID, documentoID uuid.UUID) error {
+	documento, err := s.docRepo.FindByID(ctx, documentoID)
+	if err != nil {
+		return err
+	}
+	if documento.ProcessoPagamentoID != processoID {
+		return repository.ErrDocumentoNotFound
+	}
+
+	if err := s.docRepo.Delete(ctx, documentoID); err != nil {
+		return err
+	}
+
+	// Best-effort: a exclusão lógica (a linha no banco, fonte de verdade
+	// da aplicação) já se consolidou nesse ponto — se o arquivo físico
+	// não puder ser removido (permissão, já apagado manualmente antes),
+	// só registra o aviso; não faz sentido devolver erro pro cliente por
+	// uma falha de limpeza de disco depois que o que importa já foi feito.
+	if err := os.Remove(documento.CaminhoStorage); err != nil && !os.IsNotExist(err) {
+		slog.WarnContext(ctx, "falha ao remover arquivo físico do documento excluído", "caminho", documento.CaminhoStorage, "erro", err)
+	}
+
+	return nil
 }
 
 // sanitizarNomeArquivo neutraliza um filename de upload não confiável

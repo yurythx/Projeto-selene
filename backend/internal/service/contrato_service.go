@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -31,6 +32,15 @@ type NovoContratoInput struct {
 	ContratadaEmail  string
 	FiscalID         uuid.UUID
 	TipoObjeto       models.TipoObjeto
+	// DataVigenciaFim (formato "2006-01-02") alimenta o Radar de Alertas
+	// (Fase 1 do roadmap) — opcional: string vazia = não informado, o
+	// contrato simplesmente não aparece no radar de vigência (ver o
+	// comentário no campo do model).
+	DataVigenciaFim string
+	// ExigeFiscalizacaoTerceirizacao marca o contrato como sujeito à IN SCL
+	// Nº 04/2021 (mão de obra terceirizada) — ver o comentário do campo
+	// homônimo em models.Contrato. Camada 2, opcional, default false.
+	ExigeFiscalizacaoTerceirizacao bool
 }
 
 // ContratoService contém os casos de uso de cadastro/consulta de
@@ -53,6 +63,14 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 		return nil, ErrTipoObjetoInvalido
 	}
 
+	if !cnpjValido(input.ContratadaCNPJ) {
+		return nil, ErrCNPJInvalido
+	}
+
+	if input.ContratadaEmail != "" && !emailValido(input.ContratadaEmail) {
+		return nil, ErrEmailInvalido
+	}
+
 	fiscal, err := s.userRepo.FindByID(ctx, input.FiscalID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
@@ -66,18 +84,32 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 
 	dataAssinatura, err := parseData(input.DataAssinatura)
 	if err != nil {
-		return nil, fmt.Errorf("service: data de assinatura inválida: %w", err)
+		return nil, fmt.Errorf("service: data de assinatura inválida: %w: %w", ErrDataInvalida, err)
+	}
+
+	var dataVigenciaFim *time.Time
+	if input.DataVigenciaFim != "" {
+		parsed, err := parseData(input.DataVigenciaFim)
+		if err != nil {
+			return nil, fmt.Errorf("service: data de vigência inválida: %w: %w", ErrDataInvalida, err)
+		}
+		if !parsed.After(dataAssinatura) {
+			return nil, ErrVigenciaAntesDaAssinatura
+		}
+		dataVigenciaFim = &parsed
 	}
 
 	contrato := &models.Contrato{
-		NumeroContrato:   input.NumeroContrato,
-		PortariaNomeacao: input.PortariaNomeacao,
-		DataAssinatura:   dataAssinatura,
-		ContratadaNome:   input.ContratadaNome,
-		ContratadaCNPJ:   input.ContratadaCNPJ,
-		ContratadaEmail:  input.ContratadaEmail,
-		FiscalID:         input.FiscalID,
-		TipoObjeto:       input.TipoObjeto,
+		NumeroContrato:                 input.NumeroContrato,
+		PortariaNomeacao:               input.PortariaNomeacao,
+		DataAssinatura:                 dataAssinatura,
+		ContratadaNome:                 input.ContratadaNome,
+		ContratadaCNPJ:                 input.ContratadaCNPJ,
+		ContratadaEmail:                input.ContratadaEmail,
+		FiscalID:                       input.FiscalID,
+		TipoObjeto:                     input.TipoObjeto,
+		DataVigenciaFim:                dataVigenciaFim,
+		ExigeFiscalizacaoTerceirizacao: input.ExigeFiscalizacaoTerceirizacao,
 		// Explícito, não implícito: o zero-value de bool em Go é false, e
 		// GORM.Create envia esse false para o banco em vez de deixar o
 		// DEFAULT true da coluna se aplicar (não há como o GORM
@@ -93,9 +125,10 @@ func (s *ContratoService) Criar(ctx context.Context, input NovoContratoInput) (*
 	return contrato, nil
 }
 
-// Listar retorna uma página de contratos cadastrados.
-func (s *ContratoService) Listar(ctx context.Context, pagina repository.Pagina) (repository.ResultadoPaginado[models.Contrato], error) {
-	resultado, err := s.contratoRepo.List(ctx, pagina)
+// Listar retorna uma página de contratos cadastrados, opcionalmente
+// restrita por filtro (busca textual, tipo de objeto, situação).
+func (s *ContratoService) Listar(ctx context.Context, pagina repository.Pagina, filtro repository.FiltroContrato) (repository.ResultadoPaginado[models.Contrato], error) {
+	resultado, err := s.contratoRepo.List(ctx, pagina, filtro)
 	if err != nil {
 		return repository.ResultadoPaginado[models.Contrato]{}, fmt.Errorf("service: listar contratos: %w", err)
 	}
@@ -123,6 +156,16 @@ type AtualizarContratoInput struct {
 	ContratadaNome   *string
 	ContratadaCNPJ   *string
 	ContratadaEmail  *string
+	// DataVigenciaFim (formato "2006-01-02"), se não-nil, atualiza a
+	// vigência usada pelo Radar de Alertas. Ponteiro-pra-string (não
+	// ponteiro-pra-time.Time): distingue "não enviado" (nil) de "enviado
+	// vazio" (string vazia, que limpa a vigência cadastrada).
+	DataVigenciaFim *string
+	// ExigeFiscalizacaoTerceirizacao, se não-nil, atualiza o flag de
+	// sujeição à IN04/2021 — editável depois de criado porque um
+	// aditivo/repactuação pode mudar a natureza da mão de obra do
+	// contrato.
+	ExigeFiscalizacaoTerceirizacao *bool
 }
 
 // Atualizar aplica as alterações de AtualizarContratoInput a um contrato
@@ -140,10 +183,33 @@ func (s *ContratoService) Atualizar(ctx context.Context, id uuid.UUID, input Atu
 		contrato.ContratadaNome = *input.ContratadaNome
 	}
 	if input.ContratadaCNPJ != nil {
+		if !cnpjValido(*input.ContratadaCNPJ) {
+			return nil, ErrCNPJInvalido
+		}
 		contrato.ContratadaCNPJ = *input.ContratadaCNPJ
 	}
 	if input.ContratadaEmail != nil {
+		if *input.ContratadaEmail != "" && !emailValido(*input.ContratadaEmail) {
+			return nil, ErrEmailInvalido
+		}
 		contrato.ContratadaEmail = *input.ContratadaEmail
+	}
+	if input.ExigeFiscalizacaoTerceirizacao != nil {
+		contrato.ExigeFiscalizacaoTerceirizacao = *input.ExigeFiscalizacaoTerceirizacao
+	}
+	if input.DataVigenciaFim != nil {
+		if *input.DataVigenciaFim == "" {
+			contrato.DataVigenciaFim = nil
+		} else {
+			parsed, err := parseData(*input.DataVigenciaFim)
+			if err != nil {
+				return nil, fmt.Errorf("service: data de vigência inválida: %w: %w", ErrDataInvalida, err)
+			}
+			if !parsed.After(contrato.DataAssinatura) {
+				return nil, ErrVigenciaAntesDaAssinatura
+			}
+			contrato.DataVigenciaFim = &parsed
+		}
 	}
 
 	if err := s.contratoRepo.Update(ctx, contrato); err != nil {

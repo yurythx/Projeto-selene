@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
@@ -25,23 +25,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+
+// items do Select de tipo de objeto — ver o comentário em
+// contratos-filtro.tsx sobre por quê (sem isso, <SelectValue> mostra o
+// value cru depois de escolher, não o rótulo).
+const ITEMS_TIPO_OBJETO = {
+  CONSUMO: "Consumo",
+  PERMANENTE: "Permanente",
+  SERVICO: "Serviço",
+};
 
 // fiscal_id NÃO é um campo do formulário — o Route Handler
 // (app/api/contratos/route.ts) preenche a partir do usuário logado. Ver o
 // comentário lá para o porquê (não há hoje como um não-admin listar outros
 // fiscais).
-const schema = z.object({
-  numero_contrato: z.string().min(1, "Obrigatório"),
-  data_assinatura: z.string().min(1, "Obrigatório"),
-  contratada_nome: z.string().min(1, "Obrigatório"),
-  contratada_cnpj: z.string().min(1, "Obrigatório"),
-  contratada_email: z.string().email("E-mail inválido").optional().or(z.literal("")),
-  portaria_nomeacao: z.string().optional(),
-  tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
-});
+const schema = z
+  .object({
+    numero_contrato: z.string().min(1, "Obrigatório"),
+    data_assinatura: z.string().min(1, "Obrigatório"),
+    contratada_nome: z.string().min(1, "Obrigatório"),
+    contratada_cnpj: z
+      .string()
+      .min(1, "Obrigatório")
+      .refine((v) => v.replace(/\D/g, "").length === 14, "CNPJ inválido — informe os 14 dígitos"),
+    contratada_email: z.string().email("E-mail inválido").optional().or(z.literal("")),
+    portaria_nomeacao: z.string().optional(),
+    tipo_objeto: z.enum(["CONSUMO", "PERMANENTE", "SERVICO"]),
+    // Opcional — alimenta o Radar de Alertas (Fase 1 do roadmap). Sem essa
+    // data, o contrato simplesmente não aparece no radar de vigência.
+    data_vigencia_fim: z.string().optional(),
+    // Camada 2 (regra do SGF, não da norma): marca contrato de mão de obra
+    // terceirizada, sujeito à IN SCL Nº 04/2021 — acrescenta os documentos
+    // do Art.9º-XXXII ao checklist da Etapa 5. Default false.
+    exige_fiscalizacao_terceirizacao: z.boolean().optional(),
+  })
+  // Mesma regra do backend (ContratoService.Criar — ErrVigenciaAntesDaAssinatura):
+  // um contrato não pode vencer antes (ou no mesmo dia) de ser assinado.
+  .refine((v) => !v.data_vigencia_fim || v.data_vigencia_fim > v.data_assinatura, {
+    message: "A vigência final precisa ser posterior à data de assinatura",
+    path: ["data_vigencia_fim"],
+  });
 
 type FormValues = z.infer<typeof schema>;
 
+// Dialog de cadastro de contrato — fiscalNome é só exibição (o
+// fiscal_id de verdade é sempre resolvido server-side a partir da sessão
+// pela rota BFF, nunca enviado pelo client, ver route.ts).
 export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
@@ -56,7 +86,18 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
       contratada_email: "",
       portaria_nomeacao: "",
       tipo_objeto: "SERVICO",
+      data_vigencia_fim: "",
+      exige_fiscalizacao_terceirizacao: false,
     },
+  });
+
+  // useWatch (não form.watch()) — o React Compiler não consegue memoizar
+  // com segurança a função retornada por watch(), o que gera um warning de
+  // lint (react-hooks/incompatible-library); useWatch é a alternativa
+  // recomendada pelo react-hook-form pra esse mesmo caso de uso.
+  const exigeFiscalizacaoTerceirizacao = useWatch({
+    control: form.control,
+    name: "exige_fiscalizacao_terceirizacao",
   });
 
   const mutation = useMutation({
@@ -122,6 +163,19 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="data_vigencia_fim">Fim da vigência (opcional)</Label>
+            <Input id="data_vigencia_fim" type="date" {...form.register("data_vigencia_fim")} />
+            {form.formState.errors.data_vigencia_fim && (
+              <p className="text-destructive text-sm">
+                {form.formState.errors.data_vigencia_fim.message}
+              </p>
+            )}
+            <p className="text-muted-foreground text-xs">
+              Alimenta o Radar de Alertas de prazos legais.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="contratada_nome">Empresa contratada</Label>
             <Input id="contratada_nome" {...form.register("contratada_nome")} />
             {form.formState.errors.contratada_nome && (
@@ -157,6 +211,7 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
             <div className="space-y-2">
               <Label htmlFor="tipo_objeto">Tipo de objeto</Label>
               <Select
+                items={ITEMS_TIPO_OBJETO}
                 defaultValue={form.getValues("tipo_objeto")}
                 onValueChange={(value) =>
                   form.setValue("tipo_objeto", value as FormValues["tipo_objeto"])
@@ -177,6 +232,25 @@ export function NovoContratoDialog({ fiscalNome }: { fiscalNome: string }) {
               <Label htmlFor="portaria_nomeacao">Portaria de nomeação</Label>
               <Input id="portaria_nomeacao" {...form.register("portaria_nomeacao")} />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="exige_fiscalizacao_terceirizacao">
+                Mão de obra terceirizada
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                Sujeito à IN SCL Nº 04/2021 — acrescenta os documentos
+                trabalhistas mensais (Art.9º-XXXII) ao checklist da Etapa 5.
+              </p>
+            </div>
+            <Switch
+              id="exige_fiscalizacao_terceirizacao"
+              checked={exigeFiscalizacaoTerceirizacao ?? false}
+              onCheckedChange={(checked) =>
+                form.setValue("exige_fiscalizacao_terceirizacao", checked)
+              }
+            />
           </div>
 
           <p className="text-muted-foreground text-sm">

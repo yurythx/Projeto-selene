@@ -12,6 +12,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Item de roadmap (ver backend/README.md, "security-review automatizado
+  # no CI") — a action oficial da Anthropic (anthropics/claude-code-
+  # security-review), não o /code-review interativo deste próprio Claude
+  # Code (esse é uma ferramenta de sessão, não algo que rode sozinho no
+  # GitHub Actions). Só em pull_request: a action faz diff contra o SHA
+  # base do PR (fetch-depth: 2, não precisa de todo o histórico nem de
+  # origin/HEAD já resolvido localmente — ao contrário de rodar o
+  # /code-review manualmente numa branch que ainda não foi empurrada,
+  # isto aqui só existe DEPOIS que o PR já existe no GitHub, então o SHA
+  # base sempre está disponível).
+  #
+  # Exige o secret de repositório CLAUDE_API_KEY (Settings → Secrets and
+  # variables → Actions) — uma chave de API da Anthropic habilitada tanto
+  # pra Claude API quanto pra Claude Code. Sem o secret configurado, este
+  # job falha (de propósito: silenciar/pular a falha esconderia que a
+  # revisão de segurança nunca rodou). Ver também a recomendação da
+  # própria action de exigir aprovação manual pra rodar workflows de
+  # contribuidores externos (Settings → Actions → "Require approval for
+  # all outside collaborators") — evita prompt injection via PR de
+  # estranho lendo o segredo.
+  security-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+
+      - name: Revisão de segurança automatizada (Claude)
+        uses: anthropics/claude-code-security-review@main
+        with:
+          comment-pr: true
+          claude-api-key: ${{ secrets.CLAUDE_API_KEY }}
+
   backend-lint-and-test:
     runs-on: ubuntu-latest
     defaults:

@@ -39,6 +39,14 @@ type DocumentoAnexo struct {
 	EnviadoPor   *User     `gorm:"foreignKey:EnviadoPorID;references:ID"`
 
 	DataUpload time.Time `gorm:"column:data_upload;autoCreateTime;not null"`
+
+	// DataValidade só é preenchida quando TipoDocumento.ExigeValidade é
+	// true (certidões) — alimenta o Radar de Alertas (Fase 1 do
+	// roadmap), que avisa quando uma certidão anexada ao processo em
+	// andamento está vencida ou vencendo. Nullable pros documentos que
+	// não vencem (a maioria) e pros já anexados antes desta coluna
+	// existir.
+	DataValidade *time.Time `gorm:"type:date"`
 }
 
 func (DocumentoAnexo) TableName() string {

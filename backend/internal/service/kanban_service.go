@@ -147,7 +147,7 @@ func (s *KanbanService) AvancarEtapa(ctx context.Context, processoID uuid.UUID, 
 		attribute.Int("etapa_destino", etapaDestino),
 	)
 
-	pendentes, err := ChecklistPendente(ctx, s.docRepo, processoID, etapaOrigem, processo.Contrato.TipoObjeto)
+	pendentes, err := ChecklistPendente(ctx, s.docRepo, processoID, etapaOrigem, processo.Contrato.TipoObjeto, processo.Contrato.ExigeFiscalizacaoTerceirizacao)
 	if err != nil {
 		return nil, err
 	}

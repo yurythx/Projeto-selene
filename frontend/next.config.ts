@@ -1,30 +1,5 @@
 import type { NextConfig } from "next";
 
-const isDev = process.env.NODE_ENV === "development";
-
-// CSP sem nonce (guia oficial do Next.js, seção "Without Nonces"): mais
-// simples e compatível com renderização estática, ao custo de precisar de
-// 'unsafe-inline' pra estilos/scripts injetados pelo framework e pelo
-// Tailwind/shadcn. A alternativa (CSP com nonce via proxy.ts) exigiria
-// forçar TODAS as páginas a renderização dinâmica (connection() em cada
-// page.tsx) — mudança maior, não testável em navegador real nesta sessão.
-// Documentado como limitação conhecida: endurecer para nonce-based é o
-// próximo passo natural se isto for pra produção de verdade.
-const cspHeader = `
-    default-src 'self';
-    script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""};
-    style-src 'self' 'unsafe-inline';
-    img-src 'self' blob: data:;
-    font-src 'self';
-    object-src 'none';
-    base-uri 'self';
-    form-action 'self';
-    frame-ancestors 'none';
-    upgrade-insecure-requests;
-`
-  .replace(/\s{2,}/g, " ")
-  .trim();
-
 const nextConfig: NextConfig = {
   // Necessário pro Dockerfile multi-stage: gera um build autocontido em
   // .next/standalone (só o necessário pra rodar, sem precisar copiar
@@ -36,9 +11,26 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          { key: "Content-Security-Policy", value: cspHeader },
-          // Redundante com frame-ancestors 'none' da CSP acima, mas
-          // navegadores mais antigos só entendem este header — clickjacking.
+          // Content-Security-Policy NÃO está aqui: precisa de um nonce
+          // novo por requisição (script-src), e o `headers()` do
+          // next.config.ts roda uma vez no build/boot, sem acesso a
+          // request nenhuma — por isso a CSP é montada e anexada em
+          // src/proxy.ts (guia oficial do Next.js, "Adding a nonce with
+          // Proxy"), a única camada que vê cada requisição individual.
+          //
+          // DENY: nenhuma rota deste app precisa ser enquadrada, nem por
+          // ele mesmo. A pré-visualização de documento anexo
+          // (components/kanban/processo-page.tsx) chegou a embutir
+          // /api/processos/{id}/documentos/{docId} num <iframe> — nesse
+          // meio-tempo isto foi SAMEORIGIN, senão a pré-visualização
+          // ficava em branco sem erro nenhum no console (achado real,
+          // não só teórico). Depois a pré-visualização passou a abrir o
+          // documento numa aba nova (target="_blank", mais rápido que
+          // um visualizador embutido — pedido explícito do usuário), e
+          // esse caso same-origin deixou de existir — DENY voltou a ser
+          // o valor correto. Páginas (não-API) têm a proteção
+          // equivalente via `frame-ancestors 'none'` na CSP montada em
+          // proxy.ts.
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

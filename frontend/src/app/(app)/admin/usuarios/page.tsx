@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
-import { listarUsuarios } from "@/lib/api/client";
+import { listarUsuarios, requireApi } from "@/lib/api/client";
 import {
   Table,
   TableBody,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EditarUsuarioDialog } from "@/components/admin/editar-usuario-dialog";
+import { CriarUsuarioLocalDialog } from "@/components/admin/criar-usuario-local-dialog";
 
 export default async function AdminUsuariosPage() {
   const session = await auth();
@@ -32,19 +33,22 @@ export default async function AdminUsuariosPage() {
     );
   }
 
-  const usuarios = await listarUsuarios(accessToken);
+  const usuarios = await requireApi(listarUsuarios(accessToken));
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Administração de usuários</h1>
-        <p className="text-muted-foreground text-sm">
-          {usuarios.length} usuário{usuarios.length === 1 ? "" : "s"} provisionado
-          {usuarios.length === 1 ? "" : "s"} (via primeiro login no Keycloak).
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Administração de usuários</h1>
+          <p className="text-muted-foreground text-sm">
+            {usuarios.length} usuário{usuarios.length === 1 ? "" : "s"} — via Keycloak (primeiro
+            login) ou conta local criada aqui.
+          </p>
+        </div>
+        <CriarUsuarioLocalDialog />
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-lg border shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -53,6 +57,7 @@ export default async function AdminUsuariosPage() {
               <TableHead>Matrícula</TableHead>
               <TableHead>Fiscal</TableHead>
               <TableHead>Admin</TableHead>
+              <TableHead>Situação</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -63,14 +68,21 @@ export default async function AdminUsuariosPage() {
                 <TableCell>{usuario.Email}</TableCell>
                 <TableCell>{usuario.Matricula || "—"}</TableCell>
                 <TableCell>
-                  <Badge variant={usuario.IsFiscal ? "default" : "secondary"}>
+                  <Badge variant={usuario.IsFiscal ? "success" : "secondary"}>
                     {usuario.IsFiscal ? "Sim" : "Não"}
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={usuario.IsAdmin ? "default" : "secondary"}>
+                  <Badge variant={usuario.IsAdmin ? "success" : "secondary"}>
                     {usuario.IsAdmin ? "Sim" : "Não"}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  {usuario.MustChangePassword ? (
+                    <Badge variant="warning">Senha temporária pendente</Badge>
+                  ) : (
+                    "—"
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   <EditarUsuarioDialog usuario={usuario} />

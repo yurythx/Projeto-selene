@@ -32,7 +32,7 @@ func NewKanbanEtapaRepository(db *gorm.DB) KanbanEtapaRepository {
 }
 
 func (r *gormKanbanEtapaRepository) List(ctx context.Context) ([]models.KanbanEtapa, error) {
-	var etapas []models.KanbanEtapa
+	etapas := []models.KanbanEtapa{}
 
 	if err := r.db.WithContext(ctx).Order("posicao").Find(&etapas).Error; err != nil {
 		return nil, fmt.Errorf("repository: listar etapas do kanban: %w", err)

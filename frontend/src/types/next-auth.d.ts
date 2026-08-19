@@ -11,19 +11,39 @@ declare module "next-auth" {
       id?: string;
       isAdmin: boolean;
       isFiscal: boolean;
+      // true = conta de login local com senha temporária, ainda não
+      // trocada — o frontend usa isso pra redirecionar pra
+      // /trocar-senha antes de liberar o resto da navegação (ver
+      // components/providers.tsx ou o gate equivalente).
+      mustChangePassword: boolean;
     };
     error?: string;
+  }
+
+  // Campos extras devolvidos por authorize() do provider Credentials
+  // (ver src/auth.ts) — não fazem parte do tipo padrão `User`.
+  interface User {
+    accessToken?: string;
+    isAdmin?: boolean;
+    isFiscal?: boolean;
+    mustChangePassword?: boolean;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
+    // "keycloak" | "credentials" — de qual provider esta sessão veio;
+    // usado só pra decidir COMO renovar o accessToken quando expira (ver
+    // refreshAccessToken em src/auth.ts). Login local não tem refresh
+    // token de verdade.
+    provider?: string;
     accessToken?: string;
     refreshToken?: string;
     expiresAt?: number;
     userId?: string;
     isAdmin?: boolean;
     isFiscal?: boolean;
+    mustChangePassword?: boolean;
     error?: string;
   }
 }

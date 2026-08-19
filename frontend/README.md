@@ -1,12 +1,23 @@
 # Frontend — Projeto Selene
 
-Cliente Next.js (App Router) que consome a API do [`backend/`](../backend/README.md): autenticação via Keycloak (OIDC/Auth.js), listagem e cadastro de contratos — base pro quadro Kanban das 6 etapas de compliance.
+Cliente Next.js (App Router) que consome a API do [`backend/`](../backend/README.md): autenticação via Keycloak (OIDC/Auth.js) **ou** login tradicional (e-mail/senha), quadro Kanban das 6 etapas de compliance, e todos os módulos do backend (Radar de Alertas, Gerador de Documentos Legais, Vistorias de Campo, Dossiê do Fornecedor, SGF-Rondonópolis).
+
+## Módulos cobertos
+
+- **Kanban** (`/kanban`) — o núcleo: cards por processo de pagamento, drawer com documentos/avançar/concluir/relatório. Arrastar um card entre colunas funciona em mouse (`PointerSensor`) **e touch** (`TouchSensor`, `activationConstraint: { delay: 250, tolerance: 8 }` — segurar ~250ms antes de mover, pra não competir com o gesto nativo de rolar a página; achado real de uma auditoria de mobile, ver `kanban-board.tsx`).
+- **Contratos** (`/contratos`, `/contratos/[id]`) — CRUD, mais os cards SGF de Empenho e Designações (ver abaixo).
+- **Radar** (`/radar`) — badges de vigência/certidão/processo parado, injetados no card e no drawer do Kanban via `lib/radar.ts`.
+- **Gerador de Documentos** — Notificação de Descumprimento e Minuta de Aditivo (na página do contrato) e Atesto (no drawer do processo), todos PDF.
+- **Vistorias de Campo** — dialog aninhado no drawer do Kanban (`components/kanban/vistorias-dialog.tsx`), mobile-first (geolocalização + captura de foto pela câmera).
+- **Dossiê do Fornecedor** (`/fornecedores`, `/fornecedores/[cnpj]`).
+- **Login local** (`/login`, `/trocar-senha`, `/admin/usuarios`) — `Credentials` provider do Auth.js ao lado do Keycloak; troca de senha obrigatória no primeiro login de conta local, aplicada por `proxy.ts`.
+- **SGF-Rondonópolis** — Ocorrências (dialog aninhado no drawer do Kanban, mesmo padrão de Vistorias — bloqueia de verdade o avanço de etapa enquanto aberta) e Empenho/Designações (cards na página do contrato). Ver a seção [SGF-Rondonópolis](#sgf-rondonópolis) abaixo.
 
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack, React 19)
 - **TypeScript** + **Tailwind CSS v4** + **shadcn/ui** (biblioteca base `@base-ui/react`, não Radix — os componentes gerados usam a prop `render` em vez de `asChild`)
-- **Auth.js v5** (`next-auth`) com provider Keycloak
+- **Auth.js v5** (`next-auth`) com providers Keycloak **e** Credentials (login local)
 - **TanStack Query** para mutações client-side
 - **react-hook-form** + **zod** para formulários
 - **Vitest** + **React Testing Library** para testes
@@ -50,10 +61,11 @@ Preencha `AUTH_KEYCLOAK_ID`, `AUTH_KEYCLOAK_SECRET` e `AUTH_KEYCLOAK_ISSUER` em 
 
 ## Variáveis de ambiente
 
-Ver [`.env.example`](.env.example) para a lista completa e comentada. Duas merecem destaque:
+Ver [`.env.example`](.env.example) para a lista completa e comentada. Três merecem destaque:
 
 - `API_URL` — URL do backend Go. **Sem** prefixo `NEXT_PUBLIC_` de propósito: variáveis `NEXT_PUBLIC_*` são fixadas no bundle em **build time**, o que quebraria a injeção de env em runtime do docker-compose. `API_URL` só é lida server-side (Server Components, Route Handlers), então não precisa (e não deve) ir pro bundle do browser.
 - `AUTH_TRUST_HOST` — precisa ser `true` em produção (`NODE_ENV=production`, como na imagem Docker) sempre que o app roda atrás de mapeamento de porta ou proxy reverso — o que é sempre o caso em deploy real. Sem isso, o Auth.js rejeita a requisição com `UntrustedHost`.
+- `INTERNAL_API_SECRET` — segredo compartilhado com o backend (mesmo valor nos dois lados) que autentica `GET /internal/keycloak-config`. `AUTH_KEYCLOAK_ID`/`SECRET`/`ISSUER` acima são só o valor de *fallback*: um admin pode salvar uma configuração de Keycloak diferente em runtime pela tela Configurações → Keycloak/SSO (persistida no backend), e `src/auth.ts` busca a config ATIVA a cada requisição de autenticação via `lib/keycloak-config.ts` (cache de 60s) em vez de fixá-la uma vez no boot — por isso `NextAuth()` é chamado na forma "preguiçosa" (`async () => ({...})`), não com um objeto literal. Ver os comentários em `src/auth.ts` e `src/proxy.ts` (a forma preguiçosa exige um `await` extra no wrapper de middleware, achado real ao migrar).
 
 ## Testes
 
@@ -66,6 +78,7 @@ npm test
 - `src/components/kanban/*.test.tsx` — documentos, e principalmente o fluxo de checklist incompleto (422 → mostra `documentos_pendentes`).
 - `src/components/contratos/encerrar-contrato-button.test.tsx`, `src/components/admin/editar-usuario-dialog.test.tsx`.
 - `src/lib/verify-origin.test.ts` — o helper de defesa contra CSRF.
+- `src/lib/rate-limit.test.ts` — o helper de rate limit do BFF (fail-open sem Redis configurado, contagem/TTL, 429 acima do limite, fail-open em erro do Redis), com `ioredis` mockado.
 
 ### E2E (Playwright)
 
@@ -78,7 +91,7 @@ Sobe dois servidores locais (`playwright.config.ts`): um stub do backend em mem�
 
 A sessão do Auth.js é **injetada direto num cookie** (`e2e/fixtures/auth.ts`, via `next-auth/jwt.encode()` com o mesmo `AUTH_SECRET` do servidor de teste) em vez de logar de verdade pelo Keycloak — não faz sentido (nem seria seguro) usar credenciais reais da instância de produção da prefeitura em CI. O que os specs cobrem é o comportamento do frontend a partir de uma sessão válida; o fluxo de login em si (redirect, `client_id`, discovery document) foi validado manualmente contra o Keycloak real antes deste commit.
 
-Specs em `e2e/*.spec.ts`: redirecionamento de quem não tem sessão, CRUD de contratos, o board do Kanban (incluindo o 422 de checklist incompleto e upload de documento) e a tela de administração (visibilidade por `is_admin`).
+Specs em `e2e/*.spec.ts` (23 testes): redirecionamento de quem não tem sessão, login local (credenciais corretas/erradas, troca de senha obrigatória), CRUD de contratos, o board do Kanban (incluindo o 422 de checklist incompleto, upload de documento e vistoria de campo), Dossiê do Fornecedor, a tela de administração (visibilidade por `is_admin`), `sgf.spec.ts` (Ocorrências bloqueando/liberando o avanço de etapa, Empenho com saldo, Designações — histórico e o fluxo completo de "Nova designação"), e `csp.spec.ts` (nonce presente no header, nenhuma violação de CSP no console ao abrir Select/Dialog).
 
 **Nota sobre `vitest.config.mts`**: `pool: "threads"` + `fileParallelism: false` não são só estilo — o pool padrão do Vitest 4 (`"forks"`, um processo filho por arquivo de teste) trava esperando os workers responderem em ambientes com poucos CPUs/contêineres (reproduzido em CI e num container Docker local simples: `Timeout waiting for worker to respond`, suíte inteira falha com "no tests found" mesmo com o código correto). `"threads"` usa `worker_threads` (sem spawn de processo) e é bem mais robusto nesse cenário.
 
@@ -105,29 +118,43 @@ Multi-stage (`deps` → `builder` → `runner`), usa `output: "standalone"` do N
 ```
 src/
   app/
-    (app)/            # rotas autenticadas — layout com Nav
-      contratos/      # listagem (Server Component) + criação (dialog)
-        [id]/         # detalhe, editar, encerrar
-      kanban/          # board das 6 etapas (Server Component + client dialogs)
-      admin/usuarios/  # só is_admin — gerenciar is_fiscal/is_admin/matricula
-    api/
-      auth/[...nextauth]/  # handler do Auth.js
-      contratos/           # Route Handlers BFF (POST, PATCH, encerrar — injeta fiscal_id no POST)
-      processos/            # Route Handlers BFF (criar, avançar, concluir, documentos, relatório)
-      admin/usuarios/        # Route Handler BFF (PATCH, checa is_admin antes de repassar)
-    login/            # fora do grupo (app) — sem Nav
-  auth.ts             # config do Auth.js (provider Keycloak, callbacks)
-  proxy.ts            # checagem otimista de sessão (renomeado de middleware.ts no Next 16)
+    (app)/                  # rotas autenticadas — layout com Nav
+      contratos/            # listagem (Server Component) + criação (dialog)
+        [id]/               # detalhe, editar, encerrar + cards SGF (Empenho, Designações)
+      kanban/                # board das 6 etapas (Server Component + client dialogs)
+      radar/                 # painel consolidado de alertas
+      fornecedores/           # Dossiê do Fornecedor, por CNPJ
+        [cnpj]/
+      admin/usuarios/         # só is_admin — permissões + criação de conta local
+    api/                     # Route Handlers BFF — um por recurso, espelhando o backend
+      auth/[...nextauth]/     # handler do Auth.js (Keycloak + Credentials)
+      auth/trocar-senha/
+      contratos/[id]/{designacoes,empenhos,notificacao,minuta-aditivo,encerrar}/
+      processos/[id]/{ocorrencias,vistorias,atesto,avancar,concluir,documentos,relatorio}/
+      ocorrencias/[id]/{notificar,tratar,regularizar}/
+      empenhos/[id]/movimentacoes/
+      vistorias/[id]/{fotos,relatorio}/
+      admin/usuarios/[id]/, admin/usuarios/local/
+      verificar/[codigo]/     # proxy PÚBLICO (sem sessão) — verificação externa de QR code
+    login/                  # fora do grupo (app) — sem Nav
+    trocar-senha/            # idem — troca obrigatória de senha temporária
+    verificar/[codigo]/      # página pública de verificação de documento
+  auth.ts                   # config do Auth.js (providers Keycloak + Credentials, callbacks)
+  proxy.ts                  # checagem otimista de sessão + gate de troca de senha obrigatória
   lib/
-    auth-token.ts     # getAccessToken() — lê o token real, nunca exposto ao browser
+    auth-token.ts           # getAccessToken() — lê o token real, nunca exposto ao browser
+    radar.ts                 # correlação de alertas do Radar com card/drawer do Kanban
     api/
-      client.ts       # wrapper de fetch tipado pro backend
-      schema.d.ts     # gerado — não editar à mão
+      client.ts             # wrapper de fetch tipado pro backend — 1 função por endpoint
+      schema.d.ts            # gerado — não editar à mão
   components/
-    ui/               # shadcn/ui
-    contratos/        # componentes específicos das telas de contrato
-    kanban/           # board, dialog de processo (documentos/avançar/concluir), novo processo
-    admin/            # dialog de edição de usuário
+    ui/                     # shadcn/ui
+    contratos/               # telas de contrato + cards SGF (designacoes-card, empenhos-card)
+    kanban/                   # board, drawer do processo, e os dialogs aninhados
+                              # (vistorias-dialog, ocorrencias-dialog)
+    radar/                   # badge de nível de alerta
+    admin/                    # edição de usuário, criação de conta local
+    login/                    # formulário de login tradicional, troca de senha
 ```
 
 ## Quadro Kanban
@@ -138,24 +165,38 @@ src/
 
 Abrir um processo novo não tem restrição de "fiscal dono do contrato" — a regra de negócio do backend permite qualquer fiscal abrir um processo pra qualquer contrato ativo (não há checagem de propriedade em `KanbanService.CriarProcesso`).
 
+## SGF-Rondonópolis
+
+Adequação às IN SCL 01/2019 e 04/2021 (ver `backend/README.md` para a Matriz Normativa e o modelo de dados) — dois pontos de entrada na UI:
+
+- **Ocorrências** (`components/kanban/ocorrencias-dialog.tsx`) — dialog aninhado no drawer do Kanban, mesmo padrão de Vistorias. Registrar uma ocorrência **bloqueia de verdade** (não só visualmente) o botão "Avançar etapa" — o drawer refaz `GET /processos/:id` ao abrir (`processo-dialog.tsx`, query `["processo", processo.ID]`) pra ler `allowed_actions`, que substituiu os booleanos `podeAvancar`/`podeConcluir` hoje calculados a partir só de `EtapaAtualID`/`Status` como fallback (enquanto essa query não resolveu).
+- **Empenho e Designações** (`components/contratos/empenhos-card.tsx`, `designacoes-card.tsx`) — cards na página de detalhe do contrato. Ambos têm CRUD completo agora: Empenho (criar, registrar reforço/anulação, saldo ao vivo) e Designações ("Nova designação" — seleciona servidor via `GET /servidores`, projeção mínima ID/Nome/Email aberta a qualquer autenticado, e papel FISCAL/FISCAL_SUPLENTE/GESTOR/FISCAL_SETORIAL; uma nova designação do mesmo papel revoga a anterior automaticamente no backend).
+- **Mão de obra terceirizada** (`novo-contrato-dialog.tsx`, `editar-contrato-dialog.tsx`) — switch "Mão de obra terceirizada" no formulário de contrato, ligado a `Contrato.ExigeFiscalizacaoTerceirizacao`; quando ativo, acrescenta os documentos trabalhistas do Art.9º-XXXII da IN04 ao checklist da Etapa 5 (ver `backend/README.md`). Um badge "Mão de obra terceirizada" aparece no cabeçalho de `/contratos/[id]` quando o contrato está marcado.
+- **Configurações** (`/configuracoes`) — hub admin-only com cards pras telas administrativas que não cabem em nenhuma área de negócio: Modelos de Documentos, Keycloak/SSO (editável em runtime, ver a seção Variáveis de ambiente acima) e Diário Oficial. A sidebar aponta pro hub, não direto pra nenhuma delas.
+- **Diário Oficial** — pedido explícito do usuário: configura e testa a conexão com a API do Diário Oficial da cidade, e busca novos contratos publicados por nome/CPF/data. **Duas seções IRMÃS no hub de Configurações** (pedido explícito do usuário — "dividir em duas partes: configuração e teste, e busca"), cada uma com sua própria entrada em `configuracoes/page.tsx`, sem link cruzado entre elas: "Diário Oficial — Configuração" (`/configuracoes/diario-oficial`) e "Diário Oficial — Busca" (`/configuracoes/diario-oficial/buscar`). **ESTRUTURA GENÉRICA, decisão de escopo confirmada com o usuário**: a API real da cidade ainda não está definida/documentada — a tela de configuração guarda URL base + chave de API e assume um contrato simples de request/response (`GET {base_url}/contratos?nome=&cpf=&data=`, header `Authorization: Bearer`), ajustável quando a API real for confirmada (ver o comentário de escopo no topo de `backend/internal/service/diario_oficial_service.go`). A tela de busca renderiza a resposta de forma tolerante a schema desconhecido (lista de itens genérica, com fallback pro JSON bruto se o formato não bater com o assumido) — ver `components/configuracoes/buscar-contratos-diario-oficial.tsx`.
+- **Notificações de prazos/vencimentos** (`components/notificacoes-bell.tsx`, sino na TopBar) — pedido explícito do usuário: "precisamos ter os alertas/notificacoes a respeito de prazos e vencimentos", nos dois canais confirmados (dentro do app + e-mail, este último só no backend). O sino só LÊ e marca como lida — quem gera as notificações é um processo em segundo plano no backend (`NotificacaoService.GerarAlertas`, a cada `NOTIFICACOES_INTERVALO_HORAS`), não esta tela. Poll simples via TanStack Query (`refetchInterval: 60s`, sem WebSocket/SSE nesta stack) tanto pra contagem não-lida (badge no sino) quanto pra lista completa (dropdown, mesmo componente `DropdownMenu` do menu de usuário). Cada item linka pro contrato relacionado e marca como lida ao clicar.
+- **Pré-visualização de documento anexo** (`components/kanban/processo-page.tsx`) — o nome do documento (na lista "Documentos anexados" e nos itens satisfeitos do checklist) abre o arquivo numa aba nova (`target="_blank"`), de propósito: um visualizador nativo do navegador é mais rápido de exibir do que qualquer visualizador embutido em JS, decisão tomada depois de testar um visualizador PDF.js embutido e comparar. O backend serve com cache HTTP agressivo (ver `backend/README.md`) — reabrir o mesmo documento não retransmite nada.
+
 ## Checklist de produção
 
 - [x] Autenticação via Auth.js v5 + Keycloak, access token nunca exposto ao browser (fica só no cookie de sessão criptografado; `getAccessToken()` lê direto via `next-auth/jwt`, nunca pelo endpoint público `/api/auth/session`)
 - [x] Arquitetura BFF: browser nunca chama o backend Go direto, só os Route Handlers do próprio Next
 - [x] `fiscal_id`/autorização sempre resolvidos server-side a partir da sessão — nunca aceitos do corpo da requisição do client
-- [x] Defesa em profundidade contra CSRF nos 8 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
-- [x] Security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy) via `next.config.ts`
+- [x] Defesa em profundidade contra CSRF nos 27 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
+- [x] Security headers: CSP com nonce via `src/proxy.ts` (por requisição); X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy via `next.config.ts` (estáticos, não dependem de nonce)
 - [x] `loading.tsx` (streaming) e `error.tsx`/`global-error.tsx` (boundary de erro amigável) nas rotas principais
-- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 32 testes unitários/componente + 12 E2E (Playwright)
+- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check, rate limit) — 56 testes unitários/componente + 44 E2E (Playwright)
 - [x] CI (lint + testes unitários + testes E2E + build + imagem Docker), mesmo pipeline do backend
-- [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root
+- [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root — etapa final em `gcr.io/distroless/nodejs22-debian12:nonroot` (UID/GID 65532, mesma convenção do stage `scratch` do backend), não `node:22-alpine` de novo. ACHADO DE REVISÃO (`trivy image` contra o artefato real já deployado, não só a base crua): a etapa final anterior, mesmo só copiando `.next/standalone` por cima, herdava o `npm` inteiro (com a árvore de `node_modules` DELE mesmo) da imagem base — nunca executado em runtime (`CMD` só roda `node server.js`), mas fisicamente presente, com 8 CVEs reais (7 HIGH + 1 CRITICAL: brace-expansion, tar, picomatch, sigstore, ip-address). distroless remove isso (sem npm, sem shell, sem gerenciador de pacotes nenhum) — troca com uma ressalva honesta documentada no próprio `Dockerfile`: a base Debian carrega um `libssl3` alguns patches atrás do mais recente (a alpine anterior estava em dia nesse pacote específico), mas a maioria das CVEs remanescentes não se aplica ao uso real deste app (ex: uma é só em 32-bit, outra é um servidor QUIC que não rodamos) e deve se resolver sozinha no próximo rebuild do distroless upstream.
 - [x] Tipos gerados a partir do OpenAPI do backend (`openapi-typescript`) — sem duplicar contratos de API à mão
-- [ ] CSP com nonce (hoje usa `'unsafe-inline'` pra scripts/estilos — mudar pra nonce via `proxy.ts` exigiria forçar renderização dinâmica em todas as páginas; ver `next.config.ts` para o raciocínio)
-- [ ] Paginação de verdade na listagem de contratos e nas colunas do Kanban (hoje busca até 100 registros de uma vez, sem UI de "próxima página")
-- [ ] Rate limiting nos Route Handlers do BFF — hoje só existe no backend Go (que já rate-limita as rotas de escrita por usuário); redundante mas não coberto no lado do Next
+- [x] CSP com nonce em `script-src` (`'nonce-x' 'strict-dynamic'`, sem `'unsafe-inline'`) — gerado por requisição em `src/proxy.ts`, viável porque toda página já é dinamicamente renderizada (confirmado no output de `next build`: nenhuma rota estática). `style-src` mantém `'unsafe-inline'` de propósito — nonce não cobre o atributo `style="..."` inline que o base-ui usa pra posicionar Select/Dialog/Popover; confirmado empiricamente (`e2e/csp.spec.ts`, não só por dedução) que apertar sem isso quebra esses componentes.
+- [x] Paginação de verdade na listagem de contratos (Anterior/Próxima dirigido pela URL, `components/paginacao.tsx`) e nas colunas do Kanban (botão "Carregar mais" por coluna, acumula páginas de 100 em 100 — `kanban-board.tsx`)
+- [x] Rate limiting nos 27 Route Handlers de mutação (`lib/rate-limit.ts`) — Redis compartilhado com o backend (mesmo `REDIS_ADDR`/`REDIS_PASSWORD`, DB lógico separado), fixed-window por IP, fail-open se o Redis estiver indisponível ou não configurado (ex.: dev local sem o serviço `redis`). Redundante de propósito com o limite por usuário que já existe no backend Go — cobre o BFF mesmo se algum handler, por bug, nunca chegasse a acionar o limite de lá.
+- [x] Auditoria de mobile (pedido explícito do usuário: "revisar o mobile completo... quero ele funcional") — varredura visual (Playwright, viewport 375×812) de todas as telas + dialogs principais. Achados reais, corrigidos: (1) arrastar card do Kanban não tinha suporte a touch (`PointerSensor` sozinho perde a disputa com o scroll nativo da página — sem `touch-action`/sensor dedicado, o gesto nunca ativava de verdade num touchscreen); adicionado `TouchSensor` com long-press (ver o módulo Kanban acima). (2) `DialogContent`/`AlertDialogContent` (`components/ui/dialog.tsx`, `alert-dialog.tsx`) não tinham `max-height`/`overflow-y` — um formulário mais alto que a viewport (tela curta, paisagem, ou só mais uma mensagem de erro de validação aparecendo) ficava com o topo E o rodapé fora da tela, sem nenhum jeito de rolar até o botão de salvar (o dialog é centralizado por transform, então conteúdo maior que a viewport transborda pros dois lados). Corrigido com `max-h-[calc(100dvh-2rem)] overflow-y-auto` nos dois — afeta TODOS os dialogs do app (dezenas de `*-dialog.tsx`), não só um. O resto das telas já estava correto (tabelas com `overflow-x-auto` de verdade — confirmado programaticamente, não só por screenshot, que rolam e não vazam scroll horizontal pro body; formulários/grids já colapsavam pra uma coluna; botões gated por permissão se comportam igual em qualquer viewport).
 
 ## Limitações conhecidas
 
-- **Login real não testado em navegador nesta sessão** — a construção da URL de autorização contra o Keycloak real (issuer, client_id, redirect_uri, discovery document) foi validada via curl, mas o fluxo interativo completo (login → callback → sessão) depende de um usuário de verdade clicando num browser. Um bug real relacionado foi encontrado (e corrigido) montando a suíte E2E: `getAccessToken()` decidia o nome do cookie de sessão com base em `NODE_ENV`, mas o Auth.js decide isso por requisição, com base no protocolo (`http`/`https`) — no docker-compose atual (HTTP puro, sem TLS na frente), isso fazia toda página protegida se comportar como se o usuário estivesse deslogado mesmo com uma sessão válida. `lib/auth-token.ts` agora tenta os dois nomes de cookie em vez de adivinhar.
+- **Fluxo de login via Keycloak (interativo, num browser real)**: a construção da URL de autorização (issuer, client_id, redirect_uri, discovery document) foi validada via curl contra o Keycloak real; o login tradicional (Credentials) tem cobertura E2E completa em Chromium real (`e2e/auth.spec.ts`). O clique-a-clique via Keycloak real, especificamente, ainda depende de um usuário de verdade — não dá pra automatizar em CI sem credenciais reais da instância de produção da prefeitura. Um bug real relacionado foi encontrado (e corrigido) montando a suíte E2E: `getAccessToken()` decidia o nome do cookie de sessão com base em `NODE_ENV`, mas o Auth.js decide isso por requisição, com base no protocolo (`http`/`https`) — no docker-compose atual (HTTP puro, sem TLS na frente), isso fazia toda página protegida se comportar como se o usuário estivesse deslogado mesmo com uma sessão válida. `lib/auth-token.ts` agora tenta os dois nomes de cookie em vez de adivinhar.
 - **Sem seletor de fiscal no cadastro de contrato/processo** — qualquer fiscal pode ser atribuído a um contrato ou abrir um processo pra qualquer contrato ativo, porque é assim que o backend autoriza hoje (sem checagem de propriedade). Documentado também no backend.
 - **Confirmação de "Encerrar contrato" via `window.confirm`** — funcional, mas um `AlertDialog` dedicado (shadcn/ui já tem o primitivo) seria a versão "produção de verdade" dessa UX.
+- **`POST /api/verificar/[codigo]`**: proxy público (sem checagem de sessão, de propósito — espelha a rota pública do backend) pra quem quiser verificar a autenticidade de um documento emitido programaticamente, sem carregar a página `/verificar/[codigo]` inteira. Hoje só a página usa `verificarDocumento()` diretamente; a rota BFF existe para consumidores externos.

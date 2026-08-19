@@ -4,17 +4,24 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/go-pdf/fpdf"
 	"github.com/google/uuid"
 
+	"projeto-selene/internal/models"
 	"projeto-selene/internal/repository"
 )
 
 // RelatorioService gera o Relatório de Pagamento (PDF) de um processo,
 // preenchendo as tags do contrato/fiscal cadastrados no Selene e a lista
 // de documentos já anexados (Seção 5, Coluna 5, "Ação Automatizada em
-// Go").
+// Go"). Desde o SGF-Rondonópolis (Fase 5 do plano), também inclui as
+// seções de Ocorrências (IN01 Art.3º-III/Art.5º-IV,IX; IN04 Art.3º-VIII)
+// e de Empenho (IN01 Art.5º-VIII; IN04 Art.5º-XXII) quando existirem,
+// como apoio documental ao atesto — nenhuma das duas é obrigatória para
+// gerar o relatório, ambas ficam omitidas quando não há dado.
 //
 // LIMITAÇÃO CONHECIDA: a documentação de domínio não forneceu o arquivo
 // oficial do modelo de Relatório de Pagamento usado pela prefeitura (o
@@ -25,31 +32,184 @@ import (
 // Pagamento Assinado" no checklist da Etapa 5). Trocar pelo layout
 // oficial da prefeitura é uma mudança isolada nesta função.
 type RelatorioService struct {
-	processoRepo repository.ProcessoPagamentoRepository
-	docRepo      repository.DocumentoAnexoRepository
+	processoRepo        repository.ProcessoPagamentoRepository
+	docRepo             repository.DocumentoAnexoRepository
+	ocorrenciaRepo      repository.OcorrenciaRepository
+	empenhoRepo         repository.EmpenhoRepository
+	movimentacaoRepo    repository.MovimentacaoEmpenhoRepository
+	modeloDocumentoRepo repository.ModeloDocumentoRepository
 }
 
 // NewRelatorioService constrói um RelatorioService.
-func NewRelatorioService(processoRepo repository.ProcessoPagamentoRepository, docRepo repository.DocumentoAnexoRepository) (*RelatorioService, error) {
-	return &RelatorioService{processoRepo: processoRepo, docRepo: docRepo}, nil
+func NewRelatorioService(
+	processoRepo repository.ProcessoPagamentoRepository,
+	docRepo repository.DocumentoAnexoRepository,
+	ocorrenciaRepo repository.OcorrenciaRepository,
+	empenhoRepo repository.EmpenhoRepository,
+	movimentacaoRepo repository.MovimentacaoEmpenhoRepository,
+	modeloDocumentoRepo repository.ModeloDocumentoRepository,
+) (*RelatorioService, error) {
+	return &RelatorioService{
+		processoRepo:        processoRepo,
+		docRepo:             docRepo,
+		ocorrenciaRepo:      ocorrenciaRepo,
+		empenhoRepo:         empenhoRepo,
+		movimentacaoRepo:    movimentacaoRepo,
+		modeloDocumentoRepo: modeloDocumentoRepo,
+	}, nil
 }
 
-// Gerar renderiza o Relatório de Pagamento (PDF, A4) do processo
-// informado.
-func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]byte, error) {
+// estadoOcorrenciaLabel traduz o Estado da Ocorrencia pro texto exibido
+// no PDF — mesmos rótulos usados no frontend (ver
+// components/kanban/ocorrencias-dialog.tsx), duplicados aqui de propósito
+// (Go e TypeScript não compartilham constantes).
+var estadoOcorrenciaLabel = map[models.EstadoOcorrencia]string{
+	models.OcorrenciaRegistrada:   "Registrada",
+	models.OcorrenciaNotificada:   "Notificada ao Gestor",
+	models.OcorrenciaEmTratamento: "Em tratamento",
+	models.OcorrenciaRegularizada: "Regularizada",
+}
+
+// formatarCentavos exibe um valor em centavos como "R$ 1.234,56"
+// (formato brasileiro) — só usado no texto do PDF, não precisa de uma
+// lib de i18n completa. Trata negativo (saldo pode ficar negativo se as
+// anulações/faturas apropriadas excederem os reforços registrados).
+func formatarCentavos(centavos int64) string {
+	negativo := centavos < 0
+	if negativo {
+		centavos = -centavos
+	}
+
+	reais := centavos / 100
+	cents := centavos % 100
+
+	reaisStr := fmt.Sprintf("%d", reais)
+	var comSeparador []byte
+	for i, digito := range []byte(reaisStr) {
+		if i > 0 && (len(reaisStr)-i)%3 == 0 {
+			comSeparador = append(comSeparador, '.')
+		}
+		comSeparador = append(comSeparador, digito)
+	}
+
+	sinal := ""
+	if negativo {
+		sinal = "-"
+	}
+	return fmt.Sprintf("%sR$ %s,%02d", sinal, comSeparador, cents)
+}
+
+// calcularSaldoEmpenho reconstrói o saldo somando/subtraindo o histórico
+// de movimentações — mesma lógica de EmpenhoService.CalcularSaldo,
+// duplicada aqui (4 linhas) em vez de composta via outro *XxxService: o
+// pacote service não tem precedente de um service injetar outro, só
+// repositórios (ver DesignacaoService, OcorrenciaService etc.).
+func calcularSaldoEmpenho(movimentacoes []models.MovimentacaoEmpenho) int64 {
+	var saldo int64
+	for _, m := range movimentacoes {
+		switch m.Tipo {
+		case models.MovimentacaoInicial, models.MovimentacaoReforco:
+			saldo += m.Valor
+		case models.MovimentacaoAnulacao, models.MovimentacaoFaturaApropriada:
+			saldo -= m.Valor
+		}
+	}
+	return saldo
+}
+
+// Gerar renderiza o Relatório de Pagamento do processo informado — .docx
+// (modelo preenchido) quando existe um modelo ativo pro gatilho
+// RELATORIO_PAGAMENTO, ou o fallback fpdf (PDF) original. Diferente dos
+// 3 geradores de GeradorDocumentosService, esta rota não recebe usuário
+// no path hoje (GET /processos/:id/relatorio) — o merge field
+// "servidor_gerador_nome" fica de fora de propósito, ver o plano desta
+// feature.
+func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]byte, models.TipoFormatoDocumento, error) {
 	processo, err := s.processoRepo.FindByID(ctx, processoID)
 	if err != nil {
-		return nil, fmt.Errorf("service: carregar processo para relatório: %w", err)
+		return nil, "", fmt.Errorf("service: carregar processo para relatório: %w", err)
 	}
 
 	documentos, err := s.docRepo.ListByProcesso(ctx, processoID)
 	if err != nil {
-		return nil, fmt.Errorf("service: carregar documentos para relatório: %w", err)
+		return nil, "", fmt.Errorf("service: carregar documentos para relatório: %w", err)
+	}
+
+	ocorrencias, err := s.ocorrenciaRepo.ListByProcesso(ctx, processoID)
+	if err != nil {
+		return nil, "", fmt.Errorf("service: carregar ocorrências para relatório: %w", err)
+	}
+
+	var empenho *models.Empenho
+	var saldoEmpenho int64
+	if processo.EmpenhoID != nil {
+		empenho, err = s.empenhoRepo.FindByID(ctx, *processo.EmpenhoID)
+		if err != nil {
+			return nil, "", fmt.Errorf("service: carregar empenho para relatório: %w", err)
+		}
+		movimentacoes, err := s.movimentacaoRepo.ListByEmpenho(ctx, empenho.ID)
+		if err != nil {
+			return nil, "", fmt.Errorf("service: carregar movimentações de empenho para relatório: %w", err)
+		}
+		saldoEmpenho = calcularSaldoEmpenho(movimentacoes)
 	}
 
 	fiscalNome := ""
 	if processo.Contrato.Fiscal != nil {
 		fiscalNome = processo.Contrato.Fiscal.Nome
+	}
+
+	documentosTexto := "Nenhum documento anexado ainda."
+	if len(documentos) > 0 {
+		linhas := make([]string, 0, len(documentos))
+		for _, doc := range documentos {
+			nomeTipo := ""
+			if doc.TipoDocumento != nil {
+				nomeTipo = doc.TipoDocumento.Nome
+			}
+			linhas = append(linhas, fmt.Sprintf("%s: %s", nomeTipo, doc.NomeArquivo))
+		}
+		documentosTexto = strings.Join(linhas, "; ")
+	}
+
+	ocorrenciasTexto := ""
+	if len(ocorrencias) > 0 {
+		linhas := make([]string, 0, len(ocorrencias))
+		for _, ocorrencia := range ocorrencias {
+			estado := estadoOcorrenciaLabel[ocorrencia.Estado]
+			if estado == "" {
+				estado = string(ocorrencia.Estado)
+			}
+			linhas = append(linhas, fmt.Sprintf("[%s] %s", estado, ocorrencia.Descricao))
+		}
+		ocorrenciasTexto = strings.Join(linhas, "; ")
+	}
+
+	empenhoNumero, empenhoSaldo := "", ""
+	if empenho != nil {
+		empenhoNumero = empenho.NumeroEmpenho
+		empenhoSaldo = formatarCentavos(saldoEmpenho)
+	}
+
+	conteudoModelo, usado, err := renderizarComModelo(ctx, s.modeloDocumentoRepo, models.GatilhoRelatorioPagamento, CamposMerge{
+		"numero_contrato":           processo.Contrato.NumeroContrato,
+		"portaria_nomeacao":         processo.Contrato.PortariaNomeacao,
+		"fiscal_nome":               fiscalNome,
+		"contratada_nome":           processo.Contrato.ContratadaNome,
+		"contratada_cnpj":           processo.Contrato.ContratadaCNPJ,
+		"tipo_objeto":               string(processo.Contrato.TipoObjeto),
+		"mes_referencia":            processo.MesReferencia,
+		"data_emissao":              time.Now().Format("02/01/2006"),
+		"documentos_anexados_lista": documentosTexto,
+		"ocorrencias_lista":         ocorrenciasTexto,
+		"empenho_numero":            empenhoNumero,
+		"empenho_saldo":             empenhoSaldo,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if usado {
+		return conteudoModelo, models.FormatoDOCX, nil
 	}
 
 	pdf := fpdf.New("P", "mm", "A4", "")
@@ -98,6 +258,42 @@ func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]b
 		pdf.CellFormat(0, 6, tr(fmt.Sprintf("- %s: %s", nomeTipo, doc.NomeArquivo)), "", 1, "L", false, 0, "")
 	}
 
+	// SGF-Rondonópolis (Fase 5 do plano) — seção de Ocorrências, só
+	// aparece quando há alguma registrada (IN01 Art.3º-III/Art.5º-IV,IX;
+	// IN04 Art.3º-VIII).
+	if len(ocorrencias) > 0 {
+		pdf.Ln(8)
+		pdf.SetFont("Helvetica", "B", 13)
+		pdf.CellFormat(0, 8, tr("Ocorrências Registradas (SGF)"), "", 1, "L", false, 0, "")
+		pdf.Ln(2)
+
+		pdf.SetFont("Helvetica", "", 10)
+		for _, ocorrencia := range ocorrencias {
+			estado := estadoOcorrenciaLabel[ocorrencia.Estado]
+			if estado == "" {
+				estado = string(ocorrencia.Estado)
+			}
+			pdf.CellFormat(0, 6, tr(fmt.Sprintf("- [%s] %s", estado, ocorrencia.Descricao)), "", 1, "L", false, 0, "")
+		}
+	}
+
+	// SGF-Rondonópolis (Fase 5 do plano) — seção de Empenho, só aparece
+	// quando o processo tem um Empenho vinculado (IN01 Art.5º-VIII; IN04
+	// Art.5º-XXII). Registro PARALELO/informativo, não a fonte de verdade
+	// orçamentária — ver o comentário em models.Empenho.
+	if empenho != nil {
+		pdf.Ln(8)
+		pdf.SetFont("Helvetica", "B", 13)
+		pdf.CellFormat(0, 8, tr("Empenho (Acompanhamento SGF)"), "", 1, "L", false, 0, "")
+		pdf.Ln(2)
+
+		pdf.SetFont("Helvetica", "", 10)
+		pdf.CellFormat(0, 6, tr(fmt.Sprintf("Número: %s", empenho.NumeroEmpenho)), "", 1, "L", false, 0, "")
+		pdf.CellFormat(0, 6, tr(fmt.Sprintf("Saldo atual: %s", formatarCentavos(saldoEmpenho))), "", 1, "L", false, 0, "")
+		pdf.SetFont("Helvetica", "I", 8)
+		pdf.CellFormat(0, 5, tr("Acompanhamento informativo do Selene — não substitui o saldo do sistema orçamentário oficial."), "", 1, "L", false, 0, "")
+	}
+
 	pdf.Ln(16)
 	pdf.SetFont("Helvetica", "", 11)
 	larguraAssinatura := 90.0
@@ -110,8 +306,8 @@ func (s *RelatorioService) Gerar(ctx context.Context, processoID uuid.UUID) ([]b
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
-		return nil, fmt.Errorf("service: renderizar relatório de pagamento em PDF: %w", err)
+		return nil, "", fmt.Errorf("service: renderizar relatório de pagamento em PDF: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	return buf.Bytes(), models.FormatoPDF, nil
 }

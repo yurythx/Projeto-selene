@@ -24,6 +24,13 @@ type ProcessoPagamentoRepository interface {
 	ListByEtapa(ctx context.Context, etapaID int, pagina Pagina) (ResultadoPaginado[models.ProcessoPagamento], error)
 	ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.ProcessoPagamento, error)
 	Update(ctx context.Context, processo *models.ProcessoPagamento) error
+	// ListAtivosComContrato retorna todos os processos com
+	// Status="Ativo" (não concluídos), com Contrato pré-carregado — usado
+	// pelo RadarService (Fase 1 do roadmap) pra varrer certidões
+	// vencidas/vencendo e tempo parado na etapa numa única query, sem 1
+	// query por contrato. Não filtra por Contrato.Ativo aqui (evitaria um
+	// join) — quem chama filtra em memória.
+	ListAtivosComContrato(ctx context.Context) ([]models.ProcessoPagamento, error)
 }
 
 type gormProcessoPagamentoRepository struct {
@@ -73,9 +80,12 @@ func (r *gormProcessoPagamentoRepository) ListByEtapa(ctx context.Context, etapa
 		return ResultadoPaginado[models.ProcessoPagamento]{}, fmt.Errorf("repository: contar processos por etapa: %w", err)
 	}
 
-	var processos []models.ProcessoPagamento
+	processos := []models.ProcessoPagamento{}
 	err := r.db.WithContext(ctx).
 		Preload("Contrato").
+		// Contrato.Fiscal: usado pelo quadro Kanban pra mostrar o avatar
+		// (iniciais) do fiscal responsável em cada card.
+		Preload("Contrato.Fiscal").
 		Where("etapa_atual_id = ?", etapaID).
 		Order("created_at").
 		Offset(pagina.Offset()).
@@ -94,7 +104,7 @@ func (r *gormProcessoPagamentoRepository) ListByEtapa(ctx context.Context, etapa
 }
 
 func (r *gormProcessoPagamentoRepository) ListByContrato(ctx context.Context, contratoID uuid.UUID) ([]models.ProcessoPagamento, error) {
-	var processos []models.ProcessoPagamento
+	processos := []models.ProcessoPagamento{}
 
 	err := r.db.WithContext(ctx).
 		Preload("EtapaAtual").
@@ -103,6 +113,21 @@ func (r *gormProcessoPagamentoRepository) ListByContrato(ctx context.Context, co
 		Find(&processos).Error
 	if err != nil {
 		return nil, fmt.Errorf("repository: listar processos por contrato: %w", err)
+	}
+
+	return processos, nil
+}
+
+func (r *gormProcessoPagamentoRepository) ListAtivosComContrato(ctx context.Context) ([]models.ProcessoPagamento, error) {
+	processos := []models.ProcessoPagamento{}
+
+	err := r.db.WithContext(ctx).
+		Preload("Contrato").
+		Preload("EtapaAtual").
+		Where("status = ?", string(models.StatusProcessoAtivo)).
+		Find(&processos).Error
+	if err != nil {
+		return nil, fmt.Errorf("repository: listar processos ativos com contrato: %w", err)
 	}
 
 	return processos, nil

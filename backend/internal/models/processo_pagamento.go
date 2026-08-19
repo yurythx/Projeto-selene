@@ -34,6 +34,15 @@ type ProcessoPagamento struct {
 
 	Status StatusProcesso `gorm:"type:varchar(20);not null;default:'Ativo';check:status IN ('Ativo','Concluido')"`
 
+	// EmpenhoID liga este processo ao registro paralelo/informativo de
+	// Empenho (ver empenho.go) quando a fatura do mês foi apropriada
+	// contra ele — nullable de propósito: processos já existentes
+	// continuam com NULL, e nem todo contrato precisa adotar o
+	// acompanhamento de empenho no Selene (ver comentário em empenho.go
+	// sobre este não ser a fonte de verdade orçamentária).
+	EmpenhoID *uuid.UUID `gorm:"type:uuid"`
+	Empenho   *Empenho   `gorm:"foreignKey:EmpenhoID;references:ID"`
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

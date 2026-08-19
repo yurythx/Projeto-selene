@@ -16,6 +16,17 @@ type DocumentoAnexoRepository interface {
 	Create(ctx context.Context, documento *models.DocumentoAnexo) error
 	ListByProcesso(ctx context.Context, processoID uuid.UUID) ([]models.DocumentoAnexo, error)
 	FindByProcessoAndHash(ctx context.Context, processoID uuid.UUID, hash string) (*models.DocumentoAnexo, error)
+	// FindByProcessoAndTipo implementa a regra "no máximo um documento de
+	// cada tipo por processo" (ver DocumentoService.Upload) — diferente
+	// de FindByProcessoAndHash (dedup por conteúdo idêntico), este é por
+	// TipoDocumentoID: dois arquivos DIFERENTES do mesmo tipo (ex: dois
+	// Pré-Empenho) não podem coexistir no mesmo processo.
+	FindByProcessoAndTipo(ctx context.Context, processoID uuid.UUID, tipoDocumentoID int) (*models.DocumentoAnexo, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*models.DocumentoAnexo, error)
+	// Delete remove o registro do documento — quem chama (ver
+	// DocumentoService.Excluir) é responsável por também apagar o arquivo
+	// físico em CaminhoStorage; este método só cuida da linha no banco.
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // ErrDocumentoNotFound é retornado quando nenhum documento anexo
@@ -40,7 +51,7 @@ func (r *gormDocumentoAnexoRepository) Create(ctx context.Context, documento *mo
 }
 
 func (r *gormDocumentoAnexoRepository) ListByProcesso(ctx context.Context, processoID uuid.UUID) ([]models.DocumentoAnexo, error) {
-	var documentos []models.DocumentoAnexo
+	documentos := []models.DocumentoAnexo{}
 
 	err := r.db.WithContext(ctx).
 		Preload("TipoDocumento").
@@ -53,6 +64,36 @@ func (r *gormDocumentoAnexoRepository) ListByProcesso(ctx context.Context, proce
 	}
 
 	return documentos, nil
+}
+
+// FindByID busca um documento anexo pelo ID, com TipoDocumento carregado
+// (necessário pro handler de download decidir o Content-Type e pro nome
+// de exibição).
+func (r *gormDocumentoAnexoRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.DocumentoAnexo, error) {
+	var documento models.DocumentoAnexo
+
+	err := r.db.WithContext(ctx).
+		Preload("TipoDocumento").
+		First(&documento, "id = ?", id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrDocumentoNotFound
+		}
+		return nil, fmt.Errorf("repository: buscar documento anexo por id: %w", err)
+	}
+
+	return &documento, nil
+}
+
+func (r *gormDocumentoAnexoRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	resultado := r.db.WithContext(ctx).Delete(&models.DocumentoAnexo{}, "id = ?", id)
+	if resultado.Error != nil {
+		return fmt.Errorf("repository: excluir documento anexo: %w", resultado.Error)
+	}
+	if resultado.RowsAffected == 0 {
+		return ErrDocumentoNotFound
+	}
+	return nil
 }
 
 // FindByProcessoAndHash implementa a checagem de duplicidade descrita na
@@ -69,6 +110,24 @@ func (r *gormDocumentoAnexoRepository) FindByProcessoAndHash(ctx context.Context
 			return nil, ErrDocumentoNotFound
 		}
 		return nil, fmt.Errorf("repository: buscar documento por hash: %w", err)
+	}
+
+	return &documento, nil
+}
+
+// FindByProcessoAndTipo busca o (único, se existir) documento já anexado
+// a este processo com este TipoDocumentoID.
+func (r *gormDocumentoAnexoRepository) FindByProcessoAndTipo(ctx context.Context, processoID uuid.UUID, tipoDocumentoID int) (*models.DocumentoAnexo, error) {
+	var documento models.DocumentoAnexo
+
+	err := r.db.WithContext(ctx).
+		Preload("TipoDocumento").
+		First(&documento, "processo_pagamento_id = ? AND tipo_documento_id = ?", processoID, tipoDocumentoID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrDocumentoNotFound
+		}
+		return nil, fmt.Errorf("repository: buscar documento por tipo: %w", err)
 	}
 
 	return &documento, nil

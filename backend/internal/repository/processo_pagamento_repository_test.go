@@ -31,7 +31,8 @@ func TestProcessoPagamentoRepository_Update_NaoReverteEtapaViaAssociacaoCarregad
 	contratoRepo := repository.NewContratoRepository(db)
 	processoRepo := repository.NewProcessoPagamentoRepository(db)
 
-	fiscal := &models.User{KeycloakID: "fiscal-regressao", Nome: "Fiscal Teste", Email: "fiscal@teste.local", IsFiscal: true}
+	keycloakID := "fiscal-regressao"
+	fiscal := &models.User{KeycloakID: &keycloakID, Nome: "Fiscal Teste", Email: "fiscal@teste.local", IsFiscal: true}
 	if err := userRepo.Create(ctx, fiscal); err != nil {
 		t.Fatalf("falha ao criar fiscal: %v", err)
 	}

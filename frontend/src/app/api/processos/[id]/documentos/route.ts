@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
-import { tipoDocumentoIdSchema } from "@/lib/validation/bff-schemas";
+import { assertDentroDoLimite } from "@/lib/rate-limit";
+import { tipoDocumentoIdSchema, dataValidadeSchema } from "@/lib/validation/bff-schemas";
 import { listarDocumentos, anexarDocumento, ApiError } from "@/lib/api/client";
 
 // Espelha maxUploadBytes em backend/internal/handler/documento_handler.go
@@ -33,6 +34,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const erroOrigem = assertOrigemSegura(request);
   if (erroOrigem) return erroOrigem;
 
+  const erroLimite = await assertDentroDoLimite(request);
+  if (erroLimite) return erroLimite;
+
   const session = await auth();
   const accessToken = await getAccessToken();
 
@@ -62,8 +66,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "arquivo excede o limite de 20MB" }, { status: 413 });
   }
 
+  const dataValidadeResultado = dataValidadeSchema.safeParse(formData.get("data_validade") ?? "");
+  if (!dataValidadeResultado.success) {
+    return NextResponse.json(
+      { error: "campo 'data_validade' precisa estar no formato AAAA-MM-DD" },
+      { status: 400 }
+    );
+  }
+
   try {
-    const documento = await anexarDocumento(accessToken, id, tipoResultado.data, arquivo);
+    const documento = await anexarDocumento(
+      accessToken,
+      id,
+      tipoResultado.data,
+      arquivo,
+      dataValidadeResultado.data || undefined
+    );
     return NextResponse.json(documento, { status: 201 });
   } catch (erro) {
     if (erro instanceof ApiError) {

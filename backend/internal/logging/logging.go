@@ -46,6 +46,8 @@ func New(level, format string) (*slog.Logger, error) {
 	return logger, nil
 }
 
+// parseLevel converte o valor textual de LOG_LEVEL ("debug"/"info"/
+// "warn"/"error") no slog.Level correspondente.
 func parseLevel(level string) (slog.Level, error) {
 	switch level {
 	case "debug":

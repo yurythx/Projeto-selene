@@ -24,6 +24,10 @@ var ErrUserNotFound = errors.New("repository: usuário não encontrado")
 type UserRepository interface {
 	FindByKeycloakID(ctx context.Context, keycloakID string) (*models.User, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*models.User, error)
+	// FindByEmail busca um usuário pelo e-mail — usado pelo login local
+	// (AuthService), onde o e-mail é o identificador que o usuário digita
+	// no formulário (não há "sub" de Keycloak pra contas locais).
+	FindByEmail(ctx context.Context, email string) (*models.User, error)
 	List(ctx context.Context) ([]models.User, error)
 	Create(ctx context.Context, user *models.User) error
 	Update(ctx context.Context, user *models.User) error
@@ -52,6 +56,20 @@ func (r *gormUserRepository) FindByKeycloakID(ctx context.Context, keycloakID st
 	return &user, nil
 }
 
+func (r *gormUserRepository) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+	var user models.User
+
+	err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("repository: buscar usuário por email: %w", err)
+	}
+
+	return &user, nil
+}
+
 func (r *gormUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	var user models.User
 
@@ -67,7 +85,7 @@ func (r *gormUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*model
 }
 
 func (r *gormUserRepository) List(ctx context.Context) ([]models.User, error) {
-	var users []models.User
+	users := []models.User{}
 
 	if err := r.db.WithContext(ctx).Order("nome").Find(&users).Error; err != nil {
 		return nil, fmt.Errorf("repository: listar usuários: %w", err)

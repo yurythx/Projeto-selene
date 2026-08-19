@@ -41,6 +41,10 @@ type InMemoryRateLimiter struct {
 	burst int
 }
 
+// visitanteLimiter é o limiter individual de uma chave (usuário
+// autenticado, ou IP quando não há usuário no contexto) mais o timestamp
+// do último uso — ultimoUso é o que permite limparPeriodicamente
+// descartar entradas ociosas, evitando crescimento sem limite do mapa.
 type visitanteLimiter struct {
 	limiter   *rate.Limiter
 	ultimoUso time.Time
@@ -60,6 +64,9 @@ func NewInMemoryRateLimiter(rps float64, burst int) *InMemoryRateLimiter {
 	return rl
 }
 
+// limparPeriodicamente roda pra sempre em goroutine própria (ver
+// NewInMemoryRateLimiter), descartando a cada minuto os visitantes sem
+// atividade há mais de tempoOciosoLimite.
 func (rl *InMemoryRateLimiter) limparPeriodicamente() {
 	for {
 		time.Sleep(time.Minute)
@@ -74,6 +81,9 @@ func (rl *InMemoryRateLimiter) limparPeriodicamente() {
 	}
 }
 
+// obterLimiter retorna o *rate.Limiter da chave, criando um novo (com os
+// parâmetros rps/burst do InMemoryRateLimiter) na primeira vez que essa
+// chave é vista.
 func (rl *InMemoryRateLimiter) obterLimiter(chave string) *rate.Limiter {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()

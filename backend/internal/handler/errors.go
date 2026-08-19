@@ -40,20 +40,67 @@ func respondError(c *gin.Context, err error) {
 	}
 
 	switch {
+	case errors.Is(err, repository.ErrNumeroContratoDuplicado),
+		errors.Is(err, repository.ErrCategoriaModeloDuplicada),
+		errors.Is(err, repository.ErrGatilhoModeloJaAssociado),
+		errors.Is(err, service.ErrTipoDocumentoJaAnexado):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+
 	case errors.Is(err, repository.ErrUserNotFound),
 		errors.Is(err, repository.ErrContratoNotFound),
 		errors.Is(err, repository.ErrEtapaNotFound),
 		errors.Is(err, repository.ErrTipoDocumentoNotFound),
 		errors.Is(err, repository.ErrProcessoNotFound),
-		errors.Is(err, repository.ErrDocumentoNotFound):
+		errors.Is(err, repository.ErrDocumentoNotFound),
+		errors.Is(err, repository.ErrDocumentoEmitidoNotFound),
+		errors.Is(err, repository.ErrVistoriaNotFound),
+		errors.Is(err, repository.ErrFotoVistoriaNotFound),
+		errors.Is(err, repository.ErrPortariaDesignacaoNotFound),
+		errors.Is(err, repository.ErrEmpenhoNotFound),
+		errors.Is(err, repository.ErrOcorrenciaNotFound),
+		errors.Is(err, repository.ErrModeloDocumentoNotFound),
+		errors.Is(err, repository.ErrModeloDocumentoVersaoNotFound),
+		errors.Is(err, repository.ErrNotificacaoNotFound),
+		errors.Is(err, service.ErrFornecedorNaoEncontrado):
 		c.JSON(http.StatusNotFound, gin.H{"error": "recurso não encontrado"})
 
 	case errors.Is(err, service.ErrEtapaFinal),
 		errors.Is(err, service.ErrProcessoNaoElegivelParaConclusao),
 		errors.Is(err, service.ErrFiscalInvalido),
 		errors.Is(err, service.ErrTipoObjetoInvalido),
-		errors.Is(err, service.ErrContratoEncerrado):
+		errors.Is(err, service.ErrContratoEncerrado),
+		errors.Is(err, service.ErrMotivoObrigatorio),
+		errors.Is(err, service.ErrSenhaFraca),
+		errors.Is(err, service.ErrContaSemSenhaLocal),
+		errors.Is(err, service.ErrValorInvalido),
+		errors.Is(err, service.ErrTipoMovimentacaoInvalido),
+		errors.Is(err, service.ErrSaldoInsuficiente),
+		errors.Is(err, service.ErrServidorInvalido),
+		errors.Is(err, service.ErrTransicaoOcorrenciaInvalida),
+		errors.Is(err, service.ErrOcorrenciaAbertaBloqueiaAvanco),
+		errors.Is(err, service.ErrDataInvalida),
+		errors.Is(err, service.ErrCNPJInvalido),
+		errors.Is(err, service.ErrEmailInvalido),
+		errors.Is(err, service.ErrVigenciaAntesDaAssinatura),
+		errors.Is(err, service.ErrCategoriaObrigatoria),
+		errors.Is(err, service.ErrArquivoNaoEDocx),
+		errors.Is(err, service.ErrTipoDocumentoNaoAplicavel),
+		errors.Is(err, service.ErrTipoDocumentoNaoExigidoAinda),
+		errors.Is(err, service.ErrKeycloakClientIDObrigatorio),
+		errors.Is(err, service.ErrKeycloakSegredoObrigatorio),
+		errors.Is(err, service.ErrKeycloakIssuerInvalido),
+		errors.Is(err, service.ErrDiarioOficialURLInvalida),
+		errors.Is(err, service.ErrDiarioOficialChaveObrigatoria):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+
+	case errors.Is(err, service.ErrDiarioOficialNaoConfigurado):
+		c.JSON(http.StatusPreconditionFailed, gin.H{"error": err.Error()})
+
+	case errors.Is(err, service.ErrDiarioOficialFalhaNaBusca):
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+
+	case errors.Is(err, service.ErrCredenciaisInvalidas):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 
 	default:
 		// Erro não mapeado = inesperado (bug, falha de infraestrutura) —

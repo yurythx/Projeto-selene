@@ -5,6 +5,8 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
+// Botão de encerrar contrato (soft-close, Contrato.Ativo=false) — pede
+// confirmação antes de mandar a requisição.
 export function EncerrarContratoButton({ contratoId }: { contratoId: string }) {
   const router = useRouter();
 

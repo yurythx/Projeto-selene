@@ -58,6 +58,17 @@ type Config struct {
 	// Keycloak popula "aud" da mesma forma, então essa checagem é opt-in.
 	KeycloakAudience string
 
+	// InternalAPISecret autentica chamadas server-to-server que não têm
+	// (e não podem ter) um JWT de usuário — hoje só GET
+	// /internal/keycloak-config, consultado pelo frontend Next.js antes
+	// de qualquer login existir, pra montar o provider Keycloak do
+	// NextAuth em runtime (ver KeycloakConfigHandler.BuscarInterno).
+	// Precisa ser o MESMO valor configurado no frontend
+	// (INTERNAL_API_SECRET lá também). Obrigatório: como esse endpoint
+	// devolve um Client Secret em texto puro, um valor vazio/ausente
+	// seria uma porta aberta, não uma degradação aceitável.
+	InternalAPISecret string
+
 	// LogLevel: "debug", "info" (default), "warn" ou "error".
 	LogLevel string
 	// LogFormat: "json" ou "text". Default depende de AppEnv — "json" em
@@ -70,6 +81,13 @@ type Config struct {
 	// internal/middleware/ratelimit.go.
 	RateLimitRPS   float64
 	RateLimitBurst int
+
+	// NotificacoesIntervaloHoras é de quanto em quanto tempo o gerador de
+	// alertas do Radar roda (ver a goroutine em cmd/api/main.go e
+	// service.NotificacaoService.GerarAlertas). Roda uma vez extra no
+	// boot, sem esperar o primeiro tick — pra não deixar o sistema sem
+	// nenhum alerta gerado até N horas depois de um deploy.
+	NotificacoesIntervaloHoras int
 
 	// RedisAddr ("host:porta"), se definido, faz o rate limit usar um
 	// backend Redis compartilhado (internal/middleware.RedisRateLimiter)
@@ -94,6 +112,15 @@ type Config struct {
 	// StorageDir é o diretório raiz onde os documentos anexos (PDFs) são
 	// gravados localmente.
 	StorageDir string
+
+	// PublicURL é a URL pública do FRONTEND (ex:
+	// "https://selene.papermoon.cloud"), usada só para montar o link
+	// embutido no QR code do Atesto (Fase 2 do roadmap): o backend não é
+	// publicamente exposto (só o frontend/BFF), então o QR sempre aponta
+	// pra uma página do frontend, nunca direto pro backend. Vazio
+	// (default) = o QR embute só o código de verificação em texto puro
+	// (ainda funcional pra digitação manual, só sem o link clicável).
+	PublicURL string
 
 	// Configuração SMTP para o envio assíncrono do pacote digital à
 	// empresa contratada (Etapa 3 do Kanban). Todos opcionais — se
@@ -148,6 +175,11 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	internalAPISecret, err := requireEnv("INTERNAL_API_SECRET")
+	if err != nil {
+		return nil, err
+	}
+
 	appEnv := getEnvOrDefault("APP_ENV", "development")
 
 	defaultLogFormat := "text"
@@ -160,6 +192,10 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	rateLimitBurst, err := parseIntOrDefault("RATE_LIMIT_BURST", 10)
+	if err != nil {
+		return nil, err
+	}
+	notificacoesIntervaloHoras, err := parseIntOrDefault("NOTIFICACOES_INTERVALO_HORAS", 6)
 	if err != nil {
 		return nil, err
 	}
@@ -182,18 +218,22 @@ func Load() (*Config, error) {
 		KeycloakIssuer:   keycloakIssuer,
 		KeycloakAudience: os.Getenv("KEYCLOAK_AUDIENCE"),
 
+		InternalAPISecret: internalAPISecret,
+
 		LogLevel:  getEnvOrDefault("LOG_LEVEL", "info"),
 		LogFormat: getEnvOrDefault("LOG_FORMAT", defaultLogFormat),
 
-		RateLimitRPS:   rateLimitRPS,
-		RateLimitBurst: rateLimitBurst,
-		RedisAddr:      os.Getenv("REDIS_ADDR"),
-		RedisPassword:  os.Getenv("REDIS_PASSWORD"),
+		RateLimitRPS:               rateLimitRPS,
+		RateLimitBurst:             rateLimitBurst,
+		NotificacoesIntervaloHoras: notificacoesIntervaloHoras,
+		RedisAddr:                  os.Getenv("REDIS_ADDR"),
+		RedisPassword:              os.Getenv("REDIS_PASSWORD"),
 
 		OTELExporterEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		OTELServiceName:      getEnvOrDefault("OTEL_SERVICE_NAME", "projeto-selene-backend"),
 
 		StorageDir: getEnvOrDefault("STORAGE_DIR", "./storage"),
+		PublicURL:  os.Getenv("PUBLIC_URL"),
 
 		SMTPHost:     os.Getenv("SMTP_HOST"),
 		SMTPPort:     getEnvOrDefault("SMTP_PORT", "587"),

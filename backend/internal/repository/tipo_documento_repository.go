@@ -33,7 +33,7 @@ func NewTipoDocumentoRepository(db *gorm.DB) TipoDocumentoRepository {
 }
 
 func (r *gormTipoDocumentoRepository) List(ctx context.Context) ([]models.TipoDocumento, error) {
-	var tipos []models.TipoDocumento
+	tipos := []models.TipoDocumento{}
 
 	if err := r.db.WithContext(ctx).Order("nome").Find(&tipos).Error; err != nil {
 		return nil, fmt.Errorf("repository: listar tipos de documento: %w", err)

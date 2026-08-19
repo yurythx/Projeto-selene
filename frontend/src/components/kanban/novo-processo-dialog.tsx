@@ -35,6 +35,11 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+// Dialog de abertura de um novo processo de pagamento (card do Kanban) —
+// escolhe o contrato e o mês de referência; entra sempre na Etapa 1. Sem
+// checagem de "fiscal dono do contrato" (ver o comentário no README do
+// frontend) — qualquer fiscal pode abrir processo pra qualquer contrato
+// ativo.
 export function NovoProcessoDialog({
   open,
   onOpenChange,
@@ -46,6 +51,15 @@ export function NovoProcessoDialog({
 }) {
   const router = useRouter();
   const [contratoSelecionado, setContratoSelecionado] = useState("");
+  // items — sem isso, <SelectValue> só resolve o rótulo enquanto o popup
+  // está aberto (o registro interno do base-ui some quando o
+  // SelectContent desmonta ao fechar); sem o mapa persistente, depois de
+  // escolher o gatilho mostraria o UUID cru do contrato em vez do
+  // "número — contratada". Achado real em produção (mesmo bug no select
+  // de tipo de documento da página do processo).
+  const itemsContrato = Object.fromEntries(
+    contratosAtivos.map((contrato) => [contrato.ID!, `${contrato.NumeroContrato} — ${contrato.ContratadaNome}`])
+  );
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -89,6 +103,7 @@ export function NovoProcessoDialog({
           <div className="space-y-2">
             <Label htmlFor="contrato_id">Contrato</Label>
             <Select
+              items={itemsContrato}
               value={contratoSelecionado}
               onValueChange={(value) => {
                 setContratoSelecionado(value ?? "");

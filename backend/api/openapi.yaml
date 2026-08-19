@@ -29,6 +29,11 @@ tags:
     description: Health check e métricas — sem autenticação.
   - name: Sessão
     description: Informações do usuário autenticado.
+  - name: Login Local
+    description: >
+      Login tradicional (e-mail/senha) — alternativa ao Keycloak. Contas
+      são criadas só por um administrador (POST /admin/users/local); não
+      há autocadastro público.
   - name: Referências do Kanban
     description: Tabelas de referência somente-leitura (etapas fixas, tipos de documento).
   - name: Contratos
@@ -39,8 +44,43 @@ tags:
     description: Upload e consulta de documentos anexados a um processo.
   - name: Relatório
     description: Geração do Relatório de Pagamento (PDF).
+  - name: Radar
+    description: Alertas de vigência de contrato, certidão vencida/vencendo e processo parado (Fase 1 do roadmap de módulos).
+  - name: Gerador de Documentos
+    description: >
+      Geração de PDFs oficiais (Notificação de Descumprimento, Atesto,
+      Minuta de Aditivo) e verificação pública de autenticidade via QR code
+      (Fase 2 do roadmap de módulos).
+  - name: Vistorias
+    description: >
+      Vistorias de campo com registro fotográfico e geolocalização, e o
+      "Relatório de Campo" em PDF (Fase 3 do roadmap de módulos).
+  - name: Dossiê do Fornecedor
+    description: >
+      Consolidação por CNPJ de contratos, histórico de notificações de
+      descumprimento e Score de Pontualidade (Fase 4 do roadmap de
+      módulos).
+  - name: SGF — Fiscalização
+    description: >
+      Adequação estrita à IN SCL Nº 01/2019 e IN SCL Nº 04/2021
+      (Prefeitura de Rondonópolis): designação auditável de
+      fiscal/gestor/fiscal setorial, acompanhamento paralelo/informativo
+      de saldo de empenho e registro/tratativa de ocorrências — ver
+      `.claude/plans/projeto-selene-rippling-kite.md` para a Matriz
+      Normativa completa. Extensão aditiva do Kanban existente, nenhuma
+      rota/campo anterior muda de comportamento.
   - name: Administração
     description: Gestão de contas de usuário — restrito a administradores.
+  - name: Configurações
+    description: >
+      Modelos de Documentos: categorias de arquivo .docx (texto livre,
+      cadastrado pelo admin) com histórico de versões. Quando uma
+      categoria tem um gatilho associado a um dos 4 fluxos de geração já
+      existentes (Notificação de Descumprimento, Minuta de Aditivo,
+      Atesto, Relatório de Pagamento), esse fluxo passa a preencher o
+      .docx de verdade (merge fields) em vez do PDF fixo — sem modelo
+      cadastrado, o fallback original continua funcionando sem mudança.
+      Restrito a administradores.
 
 security:
   - bearerAuth: []
@@ -102,7 +142,70 @@ paths:
                   email: { type: string, format: email }
                   is_fiscal: { type: boolean }
                   is_admin: { type: boolean }
+                  must_change_password: { type: boolean, description: "true = conta local com senha temporária, precisa trocar antes de continuar." }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/auth/login:
+    post:
+      tags: [Login Local]
+      summary: Login tradicional (e-mail/senha)
+      description: >
+        Rota PÚBLICA (ainda não há sessão) — sujeita a rate limit por IP
+        como defesa contra força bruta. Emite um token de acesso aceito
+        pelo resto da API exatamente como um token do Keycloak (mesmo
+        formato, issuer diferente).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, senha]
+              properties:
+                email: { type: string, format: email }
+                senha: { type: string, format: password }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  usuario: { $ref: "#/components/schemas/Usuario" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401":
+          description: E-mail ou senha inválidos.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/auth/trocar-senha:
+    post:
+      tags: [Login Local]
+      summary: Troca a senha da própria conta
+      description: >
+        Autenticado (qualquer usuário logado). Contas Keycloak recebem
+        400 — a senha delas é gerenciada pelo Keycloak, não pelo Selene.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [senha_atual, senha_nova]
+              properties:
+                senha_atual: { type: string, format: password }
+                senha_nova: { type: string, format: password, description: "Mínimo 8 caracteres." }
+      responses:
+        "204": { description: Senha trocada. }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401":
+          description: Não autenticado, ou senha atual incorreta.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
 
   /api/v1/kanban/etapas:
     get:
@@ -132,13 +235,111 @@ paths:
                 items: { $ref: "#/components/schemas/TipoDocumento" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
 
+  /api/v1/radar:
+    get:
+      tags: [Radar]
+      summary: Lista os itens em risco (Radar de Alertas)
+      description: >
+        Varre contratos e processos ativos e retorna todo item que entra
+        em algum dos 3 sinais de alerta: vigência de contrato perto do
+        fim, certidão vencida/vencendo anexada a um processo em
+        andamento, ou processo parado na mesma etapa do Kanban há muito
+        tempo. Sem paginação — a lista é o conjunto completo de itens em
+        risco.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ItemRadar" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/notificacoes:
+    get:
+      tags: [Notificações]
+      summary: Lista as notificações in-app do usuário autenticado (não-lidas primeiro)
+      description: >
+        Notificações de prazo/vencimento (Radar) entregues ao usuário —
+        geradas periodicamente por um processo em segundo plano (ver
+        NotificacaoService.GerarAlertas, backend), não por esta rota.
+        Sobre a PRÓPRIA conta, sem restrição de admin/fiscal.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Notificacao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/notificacoes/nao-lidas:
+    get:
+      tags: [Notificações]
+      summary: Contagem de notificações não lidas do usuário autenticado
+      description: Pro badge de contagem da TopBar — mais barato que listar tudo.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/notificacoes/marcar-todas-lidas:
+    post:
+      tags: [Notificações]
+      summary: Marca todas as notificações não lidas do usuário como lidas
+      responses:
+        "204": { description: Marcadas. }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/notificacoes/{id}/marcar-lida:
+    post:
+      tags: [Notificações]
+      summary: Marca UMA notificação como lida
+      description: >
+        404 tanto pra ID inexistente quanto pra ID de outro usuário — as
+        duas situações são indistinguíveis de propósito (não vaza se um ID
+        de outro usuário existe).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Marcada. }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
   /api/v1/contratos:
     get:
       tags: [Contratos]
-      summary: Lista contratos (paginado)
+      summary: Lista contratos (paginado, com busca e filtros opcionais)
       parameters:
         - $ref: "#/components/parameters/Pagina"
         - $ref: "#/components/parameters/Tamanho"
+        - name: busca
+          in: query
+          required: false
+          description: "Texto livre (ILIKE) casado contra número do contrato, nome da contratada ou CNPJ. Vazio = sem filtro."
+          schema: { type: string }
+        - name: tipo_objeto
+          in: query
+          required: false
+          description: "Valor diferente de CONSUMO/PERMANENTE/SERVICO (inclusive ausente) é tratado como 'sem filtro', não como erro."
+          schema: { type: string, enum: [CONSUMO, PERMANENTE, SERVICO] }
+        - name: situacao
+          in: query
+          required: false
+          description: "'ativo' ou 'encerrado'. Qualquer outro valor (inclusive ausente) é tratado como 'sem filtro'."
+          schema: { type: string, enum: [ativo, encerrado] }
       responses:
         "200":
           description: OK.
@@ -233,6 +434,94 @@ paths:
         "404": { $ref: "#/components/responses/NaoEncontrado" }
         "429": { $ref: "#/components/responses/MuitasRequisicoes" }
 
+  /api/v1/contratos/{id}/notificacao:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    post:
+      tags: [Gerador de Documentos]
+      summary: Gera a Notificação de Descumprimento (.docx de um modelo, ou PDF)
+      description: >
+        Registra o histórico em DocumentoEmitido (Fase 2 do roadmap).
+        Content-Type da resposta varia: se existir um modelo .docx ativo
+        cadastrado em Configurações pro gatilho NOTIFICACAO_DESCUMPRIMENTO,
+        devolve o modelo preenchido (merge fields); sem modelo cadastrado,
+        devolve o PDF fixo original (fallback, comportamento inalterado).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, description: "Motivo da notificação (texto livre)." }
+      responses:
+        "200":
+          description: Documento gerado — .docx (modelo) ou PDF (fallback), ver a description acima.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/contratos/{id}/minuta-aditivo:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    post:
+      tags: [Gerador de Documentos]
+      summary: Gera a Minuta de Aditivo (.docx de um modelo, ou PDF)
+      description: >
+        Justificativa técnica preliminar a partir de um questionário curto
+        — não substitui a formalização jurídica definitiva do termo
+        aditivo. Registra o histórico em DocumentoEmitido. Content-Type da
+        resposta varia igual à Notificação (ver a description lá): modelo
+        .docx cadastrado pro gatilho MINUTA_ADITIVO, ou PDF fallback.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MinutaAditivoRequest" }
+      responses:
+        "200":
+          description: Documento gerado — .docx (modelo) ou PDF (fallback).
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/verificar/{codigo}:
+    parameters:
+      - name: codigo
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Gerador de Documentos]
+      summary: Verifica a autenticidade de um documento emitido (QR code)
+      description: >
+        Rota PÚBLICA — fora da autenticação Keycloak, propositalmente: quem
+        escaneia o QR code de um Atesto impresso não tem login no Selene.
+        Nunca responde 404 pra um código inexistente; sempre 200 com
+        `valido=false`.
+      security: []
+      responses:
+        "200":
+          description: OK (mesmo para código inválido/inexistente — ver `valido`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VerificarDocumentoResponse" }
+
   /api/v1/processos:
     get:
       tags: [Processos de Pagamento]
@@ -295,12 +584,18 @@ paths:
     get:
       tags: [Processos de Pagamento]
       summary: Busca um processo por ID
+      description: >
+        Além dos campos já existentes de ProcessoPagamento, a resposta
+        inclui a leitura de Camada 2 do SGF-Rondonópolis
+        (estado_fiscalizacao, acao_ou_espera, allowed_actions) — ver
+        ProcessoComFiscalizacao e o plano, seção De/Para. Nenhum campo
+        anterior muda de nome/tipo.
       responses:
         "200":
           description: OK.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProcessoPagamento" }
+              schema: { $ref: "#/components/schemas/ProcessoComFiscalizacao" }
         "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
@@ -368,7 +663,16 @@ paths:
       description: >
         multipart/form-data. Se o SHA-256 do conteúdo já existir para este
         processo, reaproveita o registro existente em vez de duplicar (não
-        cria um novo). Limite de 20MB por arquivo.
+        cria um novo). Além disso, no máximo um documento de cada
+        tipo_documento_id é permitido por processo (ex: não pode haver dois
+        "Pré-Empenho") — um arquivo diferente do mesmo tipo é rejeitado com
+        409; para substituir, exclua o anterior (DELETE
+        /processos/{id}/documentos/{docId}) e envie o novo. tipo_documento_id
+        também precisa fazer parte do checklist cumulado até a etapa atual do
+        processo (etapas 1..EtapaAtualID — ver documentos_requeridos em GET
+        /processos/{id}); um tipo de uma etapa ainda não alcançada (ex: uma
+        CND, só exigida na Etapa 5, num processo ainda na Etapa 1) é
+        rejeitado com 400. Limite de 20MB por arquivo.
       requestBody:
         required: true
         content:
@@ -379,6 +683,7 @@ paths:
               properties:
                 tipo_documento_id: { type: integer, description: "ID de um tipo em GET /kanban/tipos-documento." }
                 arquivo: { type: string, format: binary }
+                data_validade: { type: string, format: date, description: 'Opcional. Formato "AAAA-MM-DD" — só faz sentido pra tipos com ExigeValidade=true (certidões). Alimenta o Radar de Alertas.' }
       responses:
         "201":
           description: Anexado.
@@ -389,10 +694,56 @@ paths:
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "403": { $ref: "#/components/responses/Proibido" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "409":
+          description: >
+            Já existe um documento deste tipo anexado a este processo —
+            exclua o anterior antes de enviar outro.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
         "413":
           description: Arquivo excede 20MB.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}/documentos/{docId}/download:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+      - name: docId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Documentos]
+      summary: Baixa/pré-visualiza o conteúdo de um documento anexo
+      description: >
+        Content-Disposition "inline" (não "attachment") — o frontend abre
+        esta URL numa aba nova (target="_blank") pra pré-visualização,
+        deixando o navegador usar seu próprio visualizador nativo em vez
+        de forçar um download direto. Content-Type detectado do conteúdo
+        real do arquivo (não confia só na extensão do nome). Cache
+        agressivo: `ETag` (hash SHA-256 do conteúdo) + `Cache-Control:
+        immutable` — documentos são imutáveis pelo próprio ID.
+      responses:
+        "200":
+          description: Conteúdo do arquivo (PDF ou imagem).
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+            image/*: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+    delete:
+      tags: [Documentos]
+      summary: Exclui um documento anexo (registro e arquivo físico)
+      description: >
+        Restrito a fiscais. Sem trava de "já usado num avanço de etapa
+        passado" — ver o comentário em DocumentoService.Excluir no
+        backend.
+      responses:
+        "204": { description: Excluído. }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
         "429": { $ref: "#/components/responses/MuitasRequisicoes" }
 
   /api/v1/processos/{id}/relatorio:
@@ -400,11 +751,150 @@ paths:
       - $ref: "#/components/parameters/ProcessoId"
     get:
       tags: [Relatório]
-      summary: Gera o Relatório de Pagamento (PDF)
+      summary: Gera o Relatório de Pagamento (.docx de um modelo, ou PDF)
       description: >
-        PDF pronto para impressão/assinatura física. Layout funcional
-        próprio do Selene, não o modelo oficial da prefeitura (nenhum
-        template real foi fornecido — ver README, seção "Limitações").
+        Pronto para impressão/assinatura física. Content-Type da resposta
+        varia: modelo .docx ativo cadastrado em Configurações pro gatilho
+        RELATORIO_PAGAMENTO devolve o modelo preenchido; sem modelo, PDF
+        de layout funcional próprio do Selene (fallback — nenhum template
+        oficial da prefeitura foi fornecido, ver README, seção
+        "Limitações"). SGF-Rondonópolis: inclui Ocorrências e Empenho
+        (acompanhamento paralelo/informativo) quando o processo tiver
+        algum vinculado — omitidos quando não há dado, nos dois formatos.
+      responses:
+        "200":
+          description: Documento gerado — .docx (modelo) ou PDF (fallback).
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/processos/{id}/atesto:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    post:
+      tags: [Gerador de Documentos]
+      summary: Gera o Atesto do processo (.docx de um modelo, ou PDF com QR code)
+      description: >
+        Folha de Rosto + Termo de Recebimento. Sem modelo cadastrado pro
+        gatilho ATESTO, PDF fallback com QR code embutido, que aponta pra
+        `PUBLIC_URL/verificar/{codigo}` (ou só o código em texto puro se
+        `PUBLIC_URL` não estiver configurado). Com modelo cadastrado,
+        devolve o .docx preenchido — SEM QR code embutido (a biblioteca
+        de merge só substitui texto; o código de verificação continua
+        presente em texto, verificável em GET /verificar/{codigo}).
+        Registra o histórico em DocumentoEmitido.
+      responses:
+        "200":
+          description: Documento gerado — .docx (modelo, sem QR) ou PDF (fallback, com QR).
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}/vistorias:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    get:
+      tags: [Vistorias]
+      summary: Lista as vistorias do processo
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RegistroVistoria" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [Vistorias]
+      summary: Registra uma nova vistoria de campo
+      description: >
+        Abre o registro; as fotos são anexadas depois, uma a uma, via
+        POST /vistorias/{id}/fotos. Latitude/longitude são opcionais — o
+        navegador pode negar/não suportar geolocalização.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                latitude: { type: number, format: double, nullable: true }
+                longitude: { type: number, format: double, nullable: true }
+                observacoes: { type: string }
+      responses:
+        "201":
+          description: Registrada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegistroVistoria" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/vistorias/{id}/fotos:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Vistorias]
+      summary: Anexa uma foto à vistoria
+      description: >
+        multipart/form-data, campo "foto". Mesma deduplicação por SHA-256
+        de POST /processos/{id}/documentos. Limite de 20MB por arquivo.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [foto]
+              properties:
+                foto: { type: string, format: binary }
+      responses:
+        "201":
+          description: Anexada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FotoVistoria" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "413":
+          description: Arquivo excede 20MB.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/vistorias/{id}/relatorio:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Vistorias]
+      summary: Gera o Relatório de Campo da vistoria (PDF)
+      description: >
+        Dados do contrato/processo, coordenadas, observações e as fotos
+        anexadas, embutidas no PDF.
       responses:
         "200":
           description: PDF gerado.
@@ -414,6 +904,290 @@ paths:
         "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/contratos/{id}/designacoes:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    get:
+      tags: [SGF — Fiscalização]
+      summary: Lista o histórico de designações do contrato
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PortariaDesignacao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Designa fiscal/suplente/gestor/fiscal setorial
+      description: >
+        Uma nova designação do mesmo papel revoga automaticamente a
+        anterior (DataRevogacao). Papel=FISCAL também sincroniza
+        Contrato.FiscalID (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DesignarRequest" }
+      responses:
+        "201":
+          description: Designado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortariaDesignacao" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/contratos/{id}/empenhos:
+    parameters:
+      - $ref: "#/components/parameters/ContratoId"
+    get:
+      tags: [SGF — Fiscalização]
+      summary: Lista os empenhos do contrato
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Empenho" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Abre um novo empenho (registro paralelo/informativo)
+      description: >
+        Já registra a movimentação INICIAL automaticamente (IN01
+        Art.5º-VIII; IN04 Art.5º-XXII) — ver o comentário em
+        components/schemas/Empenho sobre isto não ser a fonte de verdade
+        orçamentária.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CriarEmpenhoRequest" }
+      responses:
+        "201":
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Empenho" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/empenhos/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [SGF — Fiscalização]
+      summary: Busca um empenho, com o saldo reconstruído do histórico
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EmpenhoComSaldo" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/empenhos/{id}/movimentacoes:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Registra um reforço, anulação ou apropriação de fatura
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistrarMovimentacaoRequest" }
+      responses:
+        "201":
+          description: Registrada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MovimentacaoEmpenho" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/processos/{id}/ocorrencias:
+    parameters:
+      - $ref: "#/components/parameters/ProcessoId"
+    get:
+      tags: [SGF — Fiscalização]
+      summary: Lista as ocorrências do processo
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ocorrencia" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Registra uma nova ocorrência
+      description: >
+        Abre no estado REGISTRADA. ContratoID é resolvido automaticamente
+        a partir do processo. Enquanto não regularizada, bloqueia
+        AVANCAR_ETAPA neste processo (regra de Camada 2, ver o plano).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistrarOcorrenciaRequest" }
+      responses:
+        "201":
+          description: Registrada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ocorrencia" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/ocorrencias/{id}/notificar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Transiciona REGISTRADA → NOTIFICADA
+      description: Comunicação formal ao Gestor (IN04 Art.5º-XVI).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ocorrencia" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/ocorrencias/{id}/tratar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Transiciona NOTIFICADA → EM_TRATAMENTO
+      description: O Gestor já definiu as medidas a tomar (IN04 Art.5º-XVII).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ocorrencia" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/ocorrencias/{id}/regularizar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [SGF — Fiscalização]
+      summary: Transiciona EM_TRATAMENTO → REGULARIZADA
+      description: A partir daqui, esta ocorrência para de bloquear AVANCAR_ETAPA no processo.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ocorrencia" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "429": { $ref: "#/components/responses/MuitasRequisicoes" }
+
+  /api/v1/fornecedores:
+    get:
+      tags: [Dossiê do Fornecedor]
+      summary: Lista um resumo por CNPJ de todos os fornecedores
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FornecedorResumo" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/fornecedores/{cnpj}:
+    parameters:
+      - name: cnpj
+        in: path
+        required: true
+        schema: { type: string }
+        description: 'Só dígitos (sem máscara) — ver FornecedorResumo.cnpj.'
+        example: "12345678000190"
+    get:
+      tags: [Dossiê do Fornecedor]
+      summary: Monta o dossiê completo do fornecedor
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FornecedorDossie" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/servidores:
+    get:
+      tags: [Usuários]
+      summary: Lista uma projeção mínima (ID/Nome/Email) de todos os usuários
+      description: >-
+        Não é admin-only (ao contrário de /admin/users): usada pra popular
+        seletores de servidor, ex. SGF-Rondonópolis "Nova designação".
+        ID/Nome/Email já são visíveis a qualquer usuário autenticado hoje
+        via Contrato.Fiscal aninhado em /contratos e /processos — esta
+        rota não expõe dado novo, só uma forma de listar todo mundo sem
+        precisar já conhecer um ContratoID.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ServidorOpcao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
 
   /api/v1/admin/users:
     get:
@@ -428,6 +1202,38 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Usuario" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+
+  /api/v1/admin/users/local:
+    post:
+      tags: [Administração, Login Local]
+      summary: Cria uma conta de login local (e-mail/senha)
+      description: >
+        Restrito a administradores. Não há autocadastro público — só por
+        aqui. A conta nasce com `must_change_password=true`: o usuário
+        precisa trocar a senha temporária no primeiro login (ver POST
+        /auth/trocar-senha).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nome, email, senha_temporaria]
+              properties:
+                nome: { type: string }
+                email: { type: string, format: email }
+                senha_temporaria: { type: string, format: password, description: "Mínimo 8 caracteres." }
+                is_fiscal: { type: boolean }
+                is_admin: { type: boolean }
+      responses:
+        "201":
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Usuario" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
         "403": { $ref: "#/components/responses/Proibido" }
 
@@ -475,6 +1281,332 @@ paths:
         "403": { $ref: "#/components/responses/Proibido" }
         "404": { $ref: "#/components/responses/NaoEncontrado" }
 
+  /api/v1/admin/modelos-documento:
+    get:
+      tags: [Configurações]
+      summary: Lista todas as categorias de modelo de documento
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ModeloDocumento" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+    post:
+      tags: [Configurações]
+      summary: Cadastra uma categoria nova com sua primeira versão
+      description: >
+        multipart/form-data. `categoria` é texto livre (não pode duplicar,
+        ignorando maiúscula/minúscula). `gatilho`, se informado, associa a
+        categoria a um dos 4 fluxos de geração existentes — só um gatilho
+        distinto por categoria (ver ModeloDocumento). Limite de 20MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [categoria, arquivo]
+              properties:
+                categoria: { type: string, example: "Ofício de Notificação" }
+                gatilho: { type: string, enum: [NOTIFICACAO_DESCUMPRIMENTO, MINUTA_ADITIVO, ATESTO, RELATORIO_PAGAMENTO], description: "Opcional — sem gatilho, a categoria é só biblioteca de referência." }
+                arquivo: { type: string, format: binary, description: "Precisa ser um .docx válido." }
+      responses:
+        "201":
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeloDocumento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "409": { $ref: "#/components/responses/Conflito" }
+        "413":
+          description: Arquivo excede 20MB.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+
+  /api/v1/admin/modelos-documento/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Configurações]
+      summary: Busca uma categoria por ID
+      description: Inclui a versão ativa e o histórico completo de versões (mais recente primeiro).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeloDocumento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+    patch:
+      tags: [Configurações]
+      summary: Renomeia a categoria e/ou troca o gatilho associado
+      description: >
+        Não mexe no arquivo (ver POST .../versoes pra isso). Só os campos
+        presentes no corpo são alterados. Em `gatilho`, "" ou "NENHUM"
+        remove a associação atual; um dos 4 valores associa a categoria a
+        um fluxo de geração.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                categoria: { type: string }
+                gatilho: { type: string, enum: ["", "NENHUM", NOTIFICACAO_DESCUMPRIMENTO, MINUTA_ADITIVO, ATESTO, RELATORIO_PAGAMENTO] }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeloDocumento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "409": { $ref: "#/components/responses/Conflito" }
+
+  /api/v1/admin/modelos-documento/{id}/versoes:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Configurações]
+      summary: Publica uma nova versão do arquivo, substituindo a ativa
+      description: A versão anterior permanece no histórico (nunca é apagada). Limite de 20MB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [arquivo]
+              properties:
+                arquivo: { type: string, format: binary, description: "Precisa ser um .docx válido." }
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModeloDocumento" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+        "413":
+          description: Arquivo excede 20MB.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+
+  /api/v1/admin/modelos-documento/{id}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Configurações]
+      summary: Baixa o arquivo da versão ATIVA da categoria
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/admin/modelos-documento/{id}/versoes/{versaoId}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: versaoId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Configurações]
+      summary: Baixa o arquivo de uma versão específica do histórico
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
+  /api/v1/admin/config/keycloak:
+    get:
+      tags: [Configurações]
+      summary: Configuração de Keycloak/SSO atualmente ativa
+      description: >
+        Nunca inclui o Client Secret (só `tem_segredo_configurado`).
+        `origem` indica se veio de uma configuração salva por um admin
+        (`banco_de_dados`) ou ainda são as variáveis de ambiente de boot
+        (`variaveis_de_ambiente`) — nesse segundo caso `client_id` vem
+        vazio, porque o backend não tem acesso a AUTH_KEYCLOAK_ID (só o
+        frontend, via variável de ambiente própria).
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracaoKeycloak" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+    put:
+      tags: [Configurações]
+      summary: Atualiza a configuração de Keycloak/SSO
+      description: >
+        Aplica IMEDIATAMENTE (sem reiniciar o backend) à validação de
+        token deste serviço — a nova configuração é testada (fetch do
+        JWKS do novo issuer) ANTES de ser persistida; se o Keycloak
+        informado não responder, nada é salvo e a configuração anterior
+        continua ativa (fail-closed, 400). `client_secret` vazio numa
+        atualização mantém o segredo já salvo (não exige reenviar toda
+        vez). Efeito colateral: sessões via SSO Keycloak já abertas podem
+        precisar logar de novo se o Client ID/Secret mudar; login local
+        não é afetado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AtualizarConfiguracaoKeycloakRequest" }
+      responses:
+        "200":
+          description: Salvo e aplicado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracaoKeycloak" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+
+  /api/v1/admin/config/diario-oficial:
+    get:
+      tags: [Configurações]
+      summary: Configuração da integração com o Diário Oficial atualmente ativa
+      description: >
+        Nunca inclui a chave de API (só `tem_chave_configurada`). ESTRUTURA
+        GENÉRICA — a API real do Diário Oficial da cidade ainda não está
+        definida; ver o comentário de escopo no topo de
+        internal/service/diario_oficial_service.go pro contrato assumido
+        de request/response.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracaoDiarioOficial" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+    put:
+      tags: [Configurações]
+      summary: Atualiza a configuração da integração com o Diário Oficial
+      description: >
+        Ao contrário do PUT de Keycloak, NÃO testa a conexão antes de
+        salvar (uma API de terceiro fora do ar temporariamente não deveria
+        invalidar a URL/chave configuradas) — use POST .../testar
+        separadamente. `api_key` vazia numa atualização mantém a chave já
+        salva.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AtualizarConfiguracaoDiarioOficialRequest" }
+      responses:
+        "200":
+          description: Salvo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfiguracaoDiarioOficial" }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+
+  /api/v1/admin/config/diario-oficial/testar:
+    post:
+      tags: [Configurações]
+      summary: Testa a conexão com a API do Diário Oficial configurada
+      description: >
+        Faz uma requisição real contra a BaseURL configurada. Qualquer
+        resposta HTTP (mesmo 404/401) conta como sucesso de conexão — não
+        validamos o schema da API real, só que ela respondeu. Só erro de
+        rede (DNS, timeout, conexão recusada) conta como falha.
+      responses:
+        "200":
+          description: Resultado do teste (Sucesso pode ser false — ver descrição).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultadoTesteConexao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "412":
+          description: Nenhuma configuração de Diário Oficial foi salva ainda.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroSimples" }
+
+  /api/v1/admin/diario-oficial/contratos:
+    get:
+      tags: [Configurações]
+      summary: Busca novos contratos publicados no Diário Oficial
+      description: >
+        Proxy autenticado pra API externa configurada — filtros por nome,
+        CPF e data (todos opcionais, repassados como vieram). Resposta é o
+        JSON decodificado da API externa, sem validação de schema fixo
+        (ver o comentário de escopo no service).
+      parameters:
+        - name: nome
+          in: query
+          schema: { type: string }
+        - name: cpf
+          in: query
+          schema: { type: string }
+        - name: data
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK — `resultado` é o JSON bruto devolvido pela API externa.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resultado: {}
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "403": { $ref: "#/components/responses/Proibido" }
+        "412":
+          description: Nenhuma configuração de Diário Oficial foi salva ainda.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroSimples" }
+        "502":
+          description: A API externa do Diário Oficial não respondeu ou devolveu erro.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErroSimples" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -520,6 +1652,10 @@ components:
       description: "Corpo/parâmetros inválidos, ou regra de negócio violada (ex: contrato encerrado)."
       content:
         application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
+    Conflito:
+      description: "Viola uma restrição de unicidade (ex: número de contrato duplicado, categoria de modelo já existente, gatilho já associado a outra categoria)."
+      content:
+        application/json: { schema: { $ref: "#/components/schemas/ErroSimples" } }
     MuitasRequisicoes:
       description: Rate limit excedido para este usuário (rotas de escrita).
       content:
@@ -562,19 +1698,158 @@ components:
       properties:
         ID: { type: integer, example: 4 }
         Nome: { type: string, example: "Nota de Empenho" }
+        ExigeValidade: { type: boolean, description: "true = tipo que vence (certidões) — o upload aceita 'data_validade'." }
+        RestritoTipoObjeto:
+          type: string
+          nullable: true
+          enum: [CONSUMO, PERMANENTE, SERVICO]
+          description: "Quando preenchido, este tipo só se aplica a contratos deste TipoObjeto (ex: 'Boleto DAM' só em SERVICO) — o cliente deve ocultá-lo do select quando o contrato do processo for de outro tipo, e o upload é rejeitado (400) se enviado mesmo assim."
+        RestritoTerceirizacao: { type: boolean, description: "true = só se aplica a contratos com ExigeFiscalizacaoTerceirizacao=true (documentos mensais do Art.9º-XXXII)." }
+
+    ItemRadar:
+      type: object
+      description: Um alerta individual do Radar (Fase 1 do roadmap).
+      properties:
+        tipo: { type: string, enum: [vigencia_contrato, certidao, processo_parado] }
+        nivel: { type: string, enum: [ATENCAO, CRITICO] }
+        contrato_id: { type: string, format: uuid }
+        numero_contrato: { type: string, example: "125/2026" }
+        processo_id: { type: string, format: uuid, nullable: true, description: "Ausente pra alertas de tipo vigencia_contrato (o alerta é do contrato, não de um processo específico)." }
+        mensagem: { type: string, example: "Faltam 25 dias para o fim da vigência do contrato" }
+        dias_restantes: { type: integer, description: "Negativo quando o prazo já passou (vencido/parado há N dias)." }
+
+    Notificacao:
+      type: object
+      description: Uma notificação in-app de prazo/vencimento entregue a um usuário — ver GET /notificacoes.
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string, enum: [vigencia_contrato, certidao, processo_parado] }
+        nivel: { type: string, enum: [ATENCAO, CRITICO] }
+        contrato_id: { type: string, format: uuid }
+        numero_contrato: { type: string, example: "125/2026" }
+        processo_id: { type: string, format: uuid, nullable: true }
+        mensagem: { type: string }
+        lida: { type: boolean }
+        criada_em: { type: string, format: date-time }
+
+    MinutaAditivoRequest:
+      type: object
+      required: [tipo_aditivo, justificativa]
+      properties:
+        tipo_aditivo: { type: string, enum: [VALOR, PRAZO, VALOR_E_PRAZO] }
+        justificativa: { type: string, description: "Justificativa técnica da necessidade do aditivo." }
+        novo_valor: { type: string, description: 'Opcional, texto livre (ex: "R$ 150.000,00"). Preenchido quando tipo_aditivo inclui VALOR.' }
+        novo_prazo: { type: string, description: 'Opcional, texto livre (ex: "31/12/2026"). Preenchido quando tipo_aditivo inclui PRAZO.' }
+
+    VerificarDocumentoResponse:
+      type: object
+      description: Resposta de GET /verificar/{codigo} (Fase 2 do roadmap) — rota pública.
+      properties:
+        valido: { type: boolean, description: "false = código inexistente/inválido; os demais campos ficam ausentes nesse caso." }
+        tipo: { type: string, enum: [NOTIFICACAO_DESCUMPRIMENTO, ATESTO, MINUTA_ADITIVO] }
+        numero_contrato: { type: string, example: "125/2026" }
+        contratada_nome: { type: string }
+        mes_referencia: { type: string, example: "07/2026", description: "Presente só pra documentos amarrados a um processo (ex: Atesto)." }
+        gerado_por_nome: { type: string }
+        criado_em: { type: string, example: "13/08/2026 14:32" }
+        codigo_verificacao: { type: string, example: "SEL-A1B2C3D4E5F60708" }
+
+    RegistroVistoria:
+      type: object
+      description: Uma vistoria de campo (Fase 3 do roadmap).
+      properties:
+        ID: { type: string, format: uuid }
+        ProcessoPagamentoID: { type: string, format: uuid }
+        FiscalID: { type: string, format: uuid }
+        Fiscal: { $ref: "#/components/schemas/Usuario" }
+        DataHora: { type: string, format: date-time }
+        Latitude: { type: number, format: double, nullable: true, description: "Ausente quando o navegador negou/não suportou geolocalização." }
+        Longitude: { type: number, format: double, nullable: true }
+        Observacoes: { type: string }
+        Fotos:
+          type: array
+          items: { $ref: "#/components/schemas/FotoVistoria" }
+        CreatedAt: { type: string, format: date-time }
+
+    FotoVistoria:
+      type: object
+      description: 'CaminhoStorage (path local no servidor) é omitido de propósito — nunca serializado (json:"-").'
+      properties:
+        ID: { type: string, format: uuid }
+        VistoriaID: { type: string, format: uuid }
+        NomeArquivo: { type: string }
+        HashArquivo: { type: string }
+        CreatedAt: { type: string, format: date-time }
+
+    FornecedorResumo:
+      type: object
+      description: Uma linha da listagem consolidada por CNPJ (Fase 4 do roadmap).
+      properties:
+        cnpj: { type: string, description: "Só dígitos, sem máscara — identificador canônico usado na URL do dossiê.", example: "12345678000190" }
+        cnpj_formatado: { type: string, description: "Como cadastrado no contrato, só para exibição.", example: "12.345.678/0001-90" }
+        nome: { type: string }
+        qtd_contratos: { type: integer }
+        qtd_contratos_ativos: { type: integer }
+
+    FornecedorDossie:
+      type: object
+      description: Consolidação completa de um fornecedor (Fase 4 do roadmap).
+      properties:
+        cnpj: { type: string, example: "12345678000190" }
+        cnpj_formatado: { type: string, example: "12.345.678/0001-90" }
+        nome: { type: string }
+        contratos:
+          type: array
+          items: { $ref: "#/components/schemas/Contrato" }
+        notificacoes:
+          type: array
+          description: 'Só DocumentoEmitido do tipo NOTIFICACAO_DESCUMPRIMENTO — o "histórico de penalidades".'
+          items: { $ref: "#/components/schemas/DocumentoEmitido" }
+        score_pontualidade:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            Percentual (0-100) de transições de etapa do Kanban que
+            aconteceram em até 15 dias (mesmo limiar do Radar de Alertas
+            pra "processo parado"). null quando não há transições
+            suficientes pra calcular — distinto de 0%.
+
+    DocumentoEmitido:
+      type: object
+      description: Um PDF oficial gerado pelo Selene (Fase 2 do roadmap) — histórico consultável no Dossiê do Fornecedor.
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        ProcessoPagamentoID: { type: string, format: uuid, nullable: true }
+        Tipo: { type: string, enum: [NOTIFICACAO_DESCUMPRIMENTO, ATESTO, MINUTA_ADITIVO] }
+        Motivo: { type: string }
+        GeradoPorID: { type: string, format: uuid }
+        GeradoPor: { $ref: "#/components/schemas/Usuario" }
+        CodigoVerificacao: { type: string, example: "SEL-A1B2C3D4E5F60708" }
+        CreatedAt: { type: string, format: date-time }
 
     Usuario:
       type: object
-      description: 'KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI.'
+      description: 'KeycloakID (claim "sub" do token OIDC) e PasswordHash (bcrypt) são omitidos de propósito — nunca serializados (json:"-"): o primeiro é um identificador interno sem uso na UI, o segundo nunca deveria sair do servidor em nenhuma resposta.'
       properties:
         ID: { type: string, format: uuid }
         Nome: { type: string }
         Email: { type: string, format: email }
         IsFiscal: { type: boolean }
         IsAdmin: { type: boolean }
+        MustChangePassword: { type: boolean, description: "true = conta local com senha temporária definida pelo admin, ainda não trocada." }
         Matricula: { type: string }
         CriadoEm: { type: string, format: date-time }
         AtualizadoEm: { type: string, format: date-time }
+
+    ServidorOpcao:
+      type: object
+      description: 'Projeção mínima de Usuario (só ID/Nome/Email) usada pra popular seletores de servidor — ver GET /servidores.'
+      properties:
+        ID: { type: string, format: uuid }
+        Nome: { type: string }
+        Email: { type: string, format: email }
 
     Contrato:
       type: object
@@ -590,6 +1865,8 @@ components:
         Fiscal: { $ref: "#/components/schemas/Usuario" }
         TipoObjeto: { type: string, enum: [CONSUMO, PERMANENTE, SERVICO] }
         Ativo: { type: boolean, description: "false = contrato encerrado (soft-close)." }
+        DataVigenciaFim: { type: string, format: date, nullable: true, description: "Alimenta o Radar de Alertas — null se não cadastrada." }
+        ExigeFiscalizacaoTerceirizacao: { type: boolean, description: "Camada 2 (regra do SGF): marca contrato de mão de obra terceirizada, sujeito à IN SCL Nº 04/2021 — acrescenta os documentos do Art.9º-XXXII ao checklist da Etapa 5." }
         CreatedAt: { type: string, format: date-time }
         UpdatedAt: { type: string, format: date-time }
 
@@ -605,6 +1882,8 @@ components:
         contratada_email: { type: string, format: email }
         fiscal_id: { type: string, format: uuid, description: "Precisa ser um usuário com IsFiscal=true." }
         tipo_objeto: { type: string, enum: [CONSUMO, PERMANENTE, SERVICO] }
+        data_vigencia_fim: { type: string, format: date, description: 'Opcional. Formato "AAAA-MM-DD" — alimenta o Radar de Alertas.' }
+        exige_fiscalizacao_terceirizacao: { type: boolean, description: "Opcional, default false. Ver Contrato.ExigeFiscalizacaoTerceirizacao." }
 
     AtualizarContratoRequest:
       type: object
@@ -613,6 +1892,8 @@ components:
         contratada_nome: { type: string }
         contratada_cnpj: { type: string }
         contratada_email: { type: string, format: email }
+        data_vigencia_fim: { type: string, format: date, description: 'Formato "AAAA-MM-DD". Enviar string vazia limpa a vigência cadastrada.' }
+        exige_fiscalizacao_terceirizacao: { type: boolean, description: "Ver Contrato.ExigeFiscalizacaoTerceirizacao." }
 
     ProcessoPagamento:
       type: object
@@ -624,8 +1905,35 @@ components:
         EtapaAtualID: { type: integer, minimum: 1, maximum: 6 }
         EtapaAtual: { $ref: "#/components/schemas/KanbanEtapa" }
         Status: { type: string, enum: [Ativo, Concluido] }
+        EmpenhoID: { type: string, format: uuid, nullable: true, description: "SGF-Rondonópolis: liga este processo ao Empenho paralelo/informativo quando a fatura do mês foi apropriada contra ele. Null pra processos que não adotam esse acompanhamento." }
         CreatedAt: { type: string, format: date-time }
         UpdatedAt: { type: string, format: date-time }
+
+    ProcessoComFiscalizacao:
+      description: >
+        Resposta de GET /processos/{id} — todos os campos de
+        ProcessoPagamento mais a leitura de Camada 2 computada pelo SGF
+        (nunca persistida). Ver o plano, seção De/Para.
+      allOf:
+        - $ref: "#/components/schemas/ProcessoPagamento"
+        - type: object
+          properties:
+            estado_fiscalizacao:
+              type: string
+              enum: [A_EXECUTAR_CONFERIR, EM_ANALISE_EXTERNA, DOCUMENTAR_ATESTAR, PENDENCIA_DEVOLVIDO, CONCLUIDO]
+              description: "Rótulo de Camada 2 (regra do SGF, não da norma) derivado da etapa atual — vira PENDENCIA_DEVOLVIDO independente da etapa quando há Ocorrencia aberta vinculada."
+            acao_ou_espera:
+              type: string
+              enum: [ACAO_FISCAL, ESPERA_EXTERNA]
+              description: "Se a etapa atual exige ação ativa do fiscal ou está em tramitação fora do seu controle direto (ex: Contabilidade/Tesouraria)."
+            allowed_actions:
+              type: array
+              items: { type: string, enum: [AVANCAR_ETAPA, CONCLUIR_PAGAMENTO, ANEXAR_DOCUMENTO, REGISTRAR_OCORRENCIA, REGISTRAR_MOVIMENTACAO_EMPENHO] }
+              description: "Vocabulário fechado que o frontend usa pra decidir quais botões mostrar — substitui a checagem client-side de EtapaAtualID/Status que existia antes."
+            documentos_requeridos:
+              type: array
+              items: { type: string }
+              description: "Lista COMPLETA e ACUMULADA de nomes de TipoDocumento exigidos até a etapa atual (não só os da etapa atual isolada, nem só os pendentes) — união dos requisitos de TODAS as etapas já percorridas (1..etapa_atual_id inclusive). Isso garante que um documento obrigatório de uma etapa anterior que tenha sido excluído volta a aparecer aqui e bloqueia o avanço, mesmo que a etapa atual em si não exija esse tipo (ex: as etapas 2 e 6 não têm checklist próprio, mas continuam mostrando os requisitos acumulados das etapas anteriores). Cruze com GET /processos/{id}/documentos (por TipoDocumento.Nome) pra saber quais já foram anexados. Vazio só quando o processo não tem Contrato carregado."
 
     DocumentoAnexo:
       type: object
@@ -640,3 +1948,195 @@ components:
         EnviadoPorID: { type: string, format: uuid }
         EnviadoPor: { $ref: "#/components/schemas/Usuario" }
         DataUpload: { type: string, format: date-time }
+        DataValidade: { type: string, format: date, nullable: true, description: "Só preenchida pra tipos com ExigeValidade=true (certidões)." }
+
+    PortariaDesignacao:
+      type: object
+      description: >
+        Histórico auditável de designação de fiscal/suplente/gestor/fiscal
+        setorial por contrato (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10).
+        Imutável — uma nova designação do mesmo papel revoga a anterior
+        (DataRevogacao), nunca sobrescreve.
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        ServidorID: { type: string, format: uuid }
+        Servidor: { $ref: "#/components/schemas/Usuario" }
+        Papel: { type: string, enum: [FISCAL, FISCAL_SUPLENTE, GESTOR, FISCAL_SETORIAL] }
+        NumeroPortaria: { type: string }
+        PublicadoDiorondon: { type: string }
+        DataDesignacao: { type: string, format: date }
+        DataRevogacao: { type: string, format: date, nullable: true, description: "Preenchida quando esta designação é substituída por uma nova do mesmo papel." }
+        CriadoPorID: { type: string, format: uuid }
+        CreatedAt: { type: string, format: date-time }
+
+    DesignarRequest:
+      type: object
+      required: [servidor_id, papel]
+      properties:
+        servidor_id: { type: string, format: uuid }
+        papel: { type: string, enum: [FISCAL, FISCAL_SUPLENTE, GESTOR, FISCAL_SETORIAL] }
+        numero_portaria: { type: string }
+        publicado_diorondon: { type: string }
+        data_designacao: { type: string, example: "2026-01-15", description: 'Opcional. Formato "AAAA-MM-DD" — default é a data atual.' }
+
+    Empenho:
+      type: object
+      description: >
+        Registro PARALELO/informativo de empenho — apoia a obrigação do
+        FISCAL de controlar o saldo (IN01 Art.5º-VIII; IN04 Art.5º-XXII),
+        NÃO é fonte de verdade orçamentária (essa é exclusiva dos sistemas
+        corporativos da prefeitura).
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        NumeroEmpenho: { type: string }
+        DataEmissao: { type: string, format: date }
+        ValorInicial: { type: integer, format: int64, description: "Centavos." }
+        CreatedAt: { type: string, format: date-time }
+
+    EmpenhoComSaldo:
+      description: Resposta de GET /empenhos/{id} — inclui o saldo reconstruído do histórico de movimentações.
+      allOf:
+        - $ref: "#/components/schemas/Empenho"
+        - type: object
+          properties:
+            saldo: { type: integer, format: int64, description: "Centavos. Sempre recalculado a partir de MovimentacaoEmpenho, nunca lido de um campo denormalizado." }
+
+    CriarEmpenhoRequest:
+      type: object
+      required: [numero_empenho, data_emissao, valor_inicial]
+      properties:
+        numero_empenho: { type: string }
+        data_emissao: { type: string, example: "2026-01-15", description: 'Formato "AAAA-MM-DD".' }
+        valor_inicial: { type: integer, format: int64, description: "Centavos, maior que zero." }
+
+    MovimentacaoEmpenho:
+      type: object
+      description: Lançamento imutável no histórico de um Empenho.
+      properties:
+        ID: { type: string, format: uuid }
+        EmpenhoID: { type: string, format: uuid }
+        Tipo: { type: string, enum: [INICIAL, REFORCO, ANULACAO, FATURA_APROPRIADA] }
+        Valor: { type: integer, format: int64, description: "Centavos, sempre positivo — o sinal é implícito pelo Tipo." }
+        ProcessoPagamentoID: { type: string, format: uuid, nullable: true, description: "Só preenchido quando Tipo=FATURA_APROPRIADA." }
+        Observacao: { type: string }
+        RegistradoPorID: { type: string, format: uuid }
+        CreatedAt: { type: string, format: date-time }
+
+    RegistrarMovimentacaoRequest:
+      type: object
+      required: [tipo, valor]
+      properties:
+        tipo: { type: string, enum: [REFORCO, ANULACAO, FATURA_APROPRIADA], description: "INICIAL não é aceito aqui — é criado automaticamente por POST /contratos/{id}/empenhos." }
+        valor: { type: integer, format: int64, description: "Centavos, maior que zero." }
+        processo_pagamento_id: { type: string, format: uuid, description: "Opcional — usar quando tipo=FATURA_APROPRIADA." }
+        observacao: { type: string }
+
+    Ocorrencia:
+      type: object
+      description: >
+        Registro formal de ocorrência da execução contratual (IN01
+        Art.3º-III/Art.5º-IV,IX; IN04 Art.3º-VIII/Art.5º-VIII,XVI). Ciclo
+        de vida linear REGISTRADA→NOTIFICADA→EM_TRATAMENTO→REGULARIZADA
+        (simplificação de Camada 2 — ver o plano, seção "Lacunas
+        conhecidas", sobre o ramo de escalonamento da IN04 Art.5º-XVII
+        ainda não modelado).
+      properties:
+        ID: { type: string, format: uuid }
+        ContratoID: { type: string, format: uuid }
+        ProcessoPagamentoID: { type: string, format: uuid, nullable: true }
+        Descricao: { type: string }
+        Estado: { type: string, enum: [REGISTRADA, NOTIFICADA, EM_TRATAMENTO, REGULARIZADA] }
+        RegistradoPorID: { type: string, format: uuid }
+        RegistradoPor: { $ref: "#/components/schemas/Usuario" }
+        DataNotificacaoGestor: { type: string, format: date, nullable: true }
+        DataRegularizacao: { type: string, format: date, nullable: true }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+
+    RegistrarOcorrenciaRequest:
+      type: object
+      required: [descricao]
+      properties:
+        descricao: { type: string }
+
+    ModeloDocumento:
+      type: object
+      description: >
+        Categoria de arquivo-modelo (.docx) cadastrada em Configurações —
+        ex: "Ofício", "Relatório Quadrimestral". Gatilho associa a
+        categoria a um dos 4 fluxos de geração já existentes; sem
+        gatilho, é só biblioteca de referência (upload/consulta/
+        substituição, sem geração automática).
+      properties:
+        ID: { type: string, format: uuid }
+        Categoria: { type: string }
+        Gatilho: { type: string, enum: [NOTIFICACAO_DESCUMPRIMENTO, MINUTA_ADITIVO, ATESTO, RELATORIO_PAGAMENTO], nullable: true }
+        VersaoAtivaID: { type: string, format: uuid, nullable: true }
+        VersaoAtiva: { $ref: "#/components/schemas/ModeloDocumentoVersao" }
+        Versoes:
+          type: array
+          description: "Histórico completo, mais recente primeiro — só preenchido em GET .../{id}, omitido em listagens."
+          items: { $ref: "#/components/schemas/ModeloDocumentoVersao" }
+        CreatedAt: { type: string, format: date-time }
+        UpdatedAt: { type: string, format: date-time }
+
+    ModeloDocumentoVersao:
+      type: object
+      description: Uma versão publicada do arquivo de uma categoria — nunca apagada quando substituída, ver ModeloDocumento.
+      properties:
+        ID: { type: string, format: uuid }
+        ModeloDocumentoID: { type: string, format: uuid }
+        NomeArquivo: { type: string }
+        HashArquivo: { type: string, description: "SHA-256 do conteúdo, hexadecimal." }
+        TamanhoBytes: { type: integer, format: int64 }
+        EnviadoPorID: { type: string, format: uuid }
+        EnviadoPor: { $ref: "#/components/schemas/Usuario" }
+        CreatedAt: { type: string, format: date-time }
+
+    ConfiguracaoKeycloak:
+      type: object
+      description: Configuração de Keycloak/SSO atualmente ativa — nunca inclui o Client Secret em texto puro.
+      properties:
+        ClientID: { type: string, description: "Vazio quando Origem=variaveis_de_ambiente (ver a descrição do endpoint)." }
+        IssuerURL: { type: string }
+        Audience: { type: string }
+        TemSegredoConfigurado: { type: boolean }
+        Origem: { type: string, enum: [banco_de_dados, variaveis_de_ambiente] }
+        AtualizadoEm: { type: string, format: date-time, nullable: true }
+        AtualizadoPorNome: { type: string }
+
+    AtualizarConfiguracaoKeycloakRequest:
+      type: object
+      required: [client_id, issuer_url]
+      properties:
+        client_id: { type: string }
+        client_secret: { type: string, description: "Vazio numa atualização mantém o segredo já salvo." }
+        issuer_url: { type: string, description: 'Ex: "https://keycloak.prefeitura.gov.br/realms/selene" — o JWKS é derivado automaticamente (sufixo fixo do Keycloak).' }
+        audience: { type: string }
+
+    ConfiguracaoDiarioOficial:
+      type: object
+      description: Configuração da integração com o Diário Oficial — nunca inclui a chave de API em texto puro.
+      properties:
+        BaseURL: { type: string }
+        TemChaveConfigurada: { type: boolean }
+        AtualizadoEm: { type: string, format: date-time, nullable: true }
+        AtualizadoPorNome: { type: string }
+
+    AtualizarConfiguracaoDiarioOficialRequest:
+      type: object
+      required: [base_url]
+      properties:
+        base_url: { type: string, description: 'Ex: "https://diario.example.gov.br/api" — sem barra final.' }
+        api_key: { type: string, description: "Vazia numa atualização mantém a chave já salva." }
+
+    ResultadoTesteConexao:
+      type: object
+      properties:
+        Sucesso: { type: boolean, description: "true se o servidor respondeu (mesmo com status de erro HTTP) — false só em falha de rede." }
+        StatusHTTP: { type: integer }
+        LatenciaMS: { type: integer }
+        Erro: { type: string, description: "Preenchido só quando Sucesso=false." }
+        TrechoCorpo: { type: string, description: "Primeiros bytes da resposta, pra debug." }

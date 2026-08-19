@@ -10,6 +10,16 @@ const testEnv = {
   API_URL: `http://localhost:${MOCK_BACKEND_PORT}`,
   AUTH_SECRET: TEST_AUTH_SECRET,
   AUTH_TRUST_HOST: "true",
+  // Toda implantação real (docker-compose*.yml) define AUTH_URL — sem
+  // ela, redirects construídos a partir de request.url saem errados
+  // sempre que HOSTNAME for algo diferente do Host público (ex:
+  // HOSTNAME=0.0.0.0 no build standalone em Docker, ver o comentário em
+  // app/api/auth/sessao-invalida/route.ts). Definir aqui também deixa
+  // este ambiente de teste fiel o bastante pra pegar esse tipo de bug —
+  // foi assim que "http://0.0.0.0:3000/login" (net::ERR_ADDRESS_INVALID)
+  // foi reproduzido, só não contra este servidor de teste (HOSTNAME
+  // abaixo já era "localhost", mascarando o problema).
+  AUTH_URL: `http://localhost:${APP_PORT}`,
   AUTH_KEYCLOAK_ID: "e2e-placeholder",
   AUTH_KEYCLOAK_SECRET: "e2e-placeholder",
   AUTH_KEYCLOAK_ISSUER: "http://localhost:9999/realms/e2e-placeholder",

@@ -17,6 +17,12 @@ import (
 	"projeto-selene/internal/testutil"
 )
 
+// keycloakIDPtr converte um KeycloakID literal pro *string que o model
+// User agora exige (nulo pra contas de login local, ver models.User).
+func keycloakIDPtr(id string) *string {
+	return &id
+}
+
 // recordingNotifier é um dublê de Notifier que registra as chamadas
 // recebidas de forma thread-safe (AvancarEtapa dispara a notificação numa
 // goroutine separada) e expõe um jeito de esperar a chamada acontecer sem
@@ -36,6 +42,10 @@ func (n *recordingNotifier) EnviarPacoteEmpresa(ctx context.Context, processo *m
 	n.chamadas = append(n.chamadas, processo.ID)
 	n.mu.Unlock()
 	n.sinal <- struct{}{}
+	return nil
+}
+
+func (n *recordingNotifier) EnviarResumoAlertas(ctx context.Context, destinatario, nomeDestinatario string, itens []service.ItemRadar) error {
 	return nil
 }
 
@@ -92,7 +102,7 @@ func TestKanbanService_FluxoCompleto(t *testing.T) {
 	notifier := newRecordingNotifier()
 	kanban := service.NewKanbanService(db, processoRepo, contratoRepo, docRepo, notifier)
 
-	fiscal := &models.User{KeycloakID: "fiscal-" + uuid.NewString(), Nome: "Fiscal Kanban", Email: "fiscal@teste.local", IsFiscal: true}
+	fiscal := &models.User{KeycloakID: keycloakIDPtr("fiscal-" + uuid.NewString()), Nome: "Fiscal Kanban", Email: "fiscal@teste.local", IsFiscal: true}
 	if err := userRepo.Create(ctx, fiscal); err != nil {
 		t.Fatalf("falha ao criar fiscal: %v", err)
 	}
@@ -223,7 +233,7 @@ func TestKanbanService_ConcluirAntesDaEtapaFinalFalha(t *testing.T) {
 
 	kanban := service.NewKanbanService(db, processoRepo, contratoRepo, docRepo, newRecordingNotifier())
 
-	fiscal := &models.User{KeycloakID: "fiscal-" + uuid.NewString(), Nome: "Fiscal", Email: "f@teste.local", IsFiscal: true}
+	fiscal := &models.User{KeycloakID: keycloakIDPtr("fiscal-" + uuid.NewString()), Nome: "Fiscal", Email: "f@teste.local", IsFiscal: true}
 	if err := userRepo.Create(ctx, fiscal); err != nil {
 		t.Fatalf("falha ao criar fiscal: %v", err)
 	}
@@ -262,7 +272,7 @@ func TestKanbanService_ContratoEncerradoNaoAceitaNovoProcesso(t *testing.T) {
 
 	kanban := service.NewKanbanService(db, processoRepo, contratoRepo, docRepo, newRecordingNotifier())
 
-	fiscal := &models.User{KeycloakID: "fiscal-" + uuid.NewString(), Nome: "Fiscal", Email: "f@teste.local", IsFiscal: true}
+	fiscal := &models.User{KeycloakID: keycloakIDPtr("fiscal-" + uuid.NewString()), Nome: "Fiscal", Email: "f@teste.local", IsFiscal: true}
 	if err := userRepo.Create(ctx, fiscal); err != nil {
 		t.Fatalf("falha ao criar fiscal: %v", err)
 	}

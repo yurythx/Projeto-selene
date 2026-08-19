@@ -14,6 +14,18 @@ const badgeVariants = cva(
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
         destructive:
           "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+        // success/warning/info: não fazem parte do design system base do
+        // shadcn (só existe destructive pra "cor de estado") — adicionados
+        // aqui pra parar de reinventar essas mesmas 3 cores como classes
+        // ad-hoc em cada página (ver o histórico de RadarNivelBadge, por
+        // exemplo). Mesmo padrão visual de destructive: fundo translúcido
+        // da própria cor, texto sólido, ring de foco combinando.
+        success:
+          "bg-emerald-500/10 text-emerald-700 focus-visible:ring-emerald-500/20 dark:bg-emerald-500/20 dark:text-emerald-400 dark:focus-visible:ring-emerald-500/40 [a]:hover:bg-emerald-500/20",
+        warning:
+          "bg-amber-500/10 text-amber-700 focus-visible:ring-amber-500/20 dark:bg-amber-500/20 dark:text-amber-400 dark:focus-visible:ring-amber-500/40 [a]:hover:bg-amber-500/20",
+        info:
+          "bg-sky-500/10 text-sky-700 focus-visible:ring-sky-500/20 dark:bg-sky-500/20 dark:text-sky-400 dark:focus-visible:ring-sky-500/40 [a]:hover:bg-sky-500/20",
         outline:
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:

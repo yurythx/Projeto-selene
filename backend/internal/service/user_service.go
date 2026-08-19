@@ -46,7 +46,7 @@ func (s *UserService) FindOrCreateByKeycloakID(ctx context.Context, keycloakID, 
 	}
 
 	newUser := &models.User{
-		KeycloakID: keycloakID,
+		KeycloakID: &keycloakID,
 		Nome:       nome,
 		Email:      email,
 		IsFiscal:   false,
@@ -71,6 +71,13 @@ func (s *UserService) Listar(ctx context.Context) ([]models.User, error) {
 
 // Buscar retorna um usuário pelo ID.
 func (s *UserService) Buscar(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	return s.FindByID(ctx, id)
+}
+
+// FindByID satisfaz middleware.UserProvisioner — resolve o usuário por ID
+// direto, sem provisionamento (usado pelo caminho de login local: a conta
+// já existe, criada por um admin, ver AuthService).
+func (s *UserService) FindByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	return s.userRepo.FindByID(ctx, id)
 }
 

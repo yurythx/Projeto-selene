@@ -69,7 +69,11 @@ services:
       KEYCLOAK_JWKS_URL: ${KEYCLOAK_JWKS_URL}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
+      # Precisa ser IDÊNTICO ao do serviço frontend abaixo — ver o
+      # comentário em backend/.env.example sobre GET /internal/keycloak-config.
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-dev-internal-secret-troque-em-producao}
       STORAGE_DIR: /app/storage
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
@@ -89,18 +93,39 @@ services:
     build: ./frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
       NODE_ENV: production
       AUTH_TRUST_HOST: "true"
+      # OBRIGATÓRIO no build "standalone" do Next.js rodando em Docker: o
+      # server standalone passa hostname/porta explícitos pro Next
+      # (HOSTNAME=0.0.0.0, ver Dockerfile), e quando esses dois valores são
+      # conhecidos o Next monta a URL absoluta da requisição a partir
+      # DELES, não do header Host recebido (next/dist/server/next-server.js,
+      # attachRequestMeta) — sem AUTH_URL, o redirect_uri mandado pro
+      # Keycloak sai como "http://0.0.0.0:3000/..." em vez de
+      # "http://localhost:3000/...", e o Keycloak rejeita por não bater com
+      # o Valid Redirect URI cadastrado no client. AUTH_URL faz o
+      # next-auth reescrever a origem da requisição antes disso acontecer
+      # (ver node_modules/next-auth/lib/env.js, reqWithEnvURL).
+      AUTH_URL: http://localhost:3000
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_KEYCLOAK_ID: ${AUTH_KEYCLOAK_ID}
       AUTH_KEYCLOAK_SECRET: ${AUTH_KEYCLOAK_SECRET}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER}
+      # Precisa ser IDÊNTICO ao do serviço backend acima.
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-dev-internal-secret-troque-em-producao}
       # Rede interna do compose — nunca o host/porta publicado pro browser.
       API_URL: http://backend:8080
+      # Rate limiting nos Route Handlers de mutação (lib/rate-limit.ts) —
+      # mesmo Redis do backend acima, sem senha aqui em dev (mesma
+      # configuração do serviço redis).
+      REDIS_ADDR: redis:6379
 
 volumes:
   postgres_data:

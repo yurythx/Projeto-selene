@@ -29,6 +29,14 @@ type Contrato struct {
 	PortariaNomeacao string    `gorm:"type:varchar(255)"`
 	DataAssinatura   time.Time `gorm:"type:date;not null"`
 
+	// DataVigenciaFim alimenta o Radar de Alertas (Fase 1 do roadmap) —
+	// "faltam N dias pro fim do contrato". Nullable de propósito:
+	// contratos cadastrados antes desta coluna existir não têm esse dado,
+	// e não faz sentido travar retroativamente algo que não existia. Sem
+	// essa data, o contrato simplesmente não aparece no radar de vigência
+	// (não é tratado como vencido nem como OK).
+	DataVigenciaFim *time.Time `gorm:"type:date"`
+
 	ContratadaNome string `gorm:"type:varchar(255);not null"`
 	ContratadaCNPJ string `gorm:"type:varchar(18);not null;index"`
 
@@ -58,6 +66,16 @@ type Contrato struct {
 	// Update não tem essa omissão. Ver ContratoService.Criar, que
 	// documenta e evita isso setando Ativo:true explicitamente.
 	Ativo bool `gorm:"not null;default:true"`
+
+	// ExigeFiscalizacaoTerceirizacao é Camada 2 (regra do SGF, não da
+	// norma): marca contratos de mão de obra terceirizada, sujeitos à
+	// IN SCL Nº 04/2021 (que é mais estreita que TipoObjeto == SERVICO —
+	// nem todo contrato de serviço é terceirização de mão de obra). Quando
+	// true, o checklist da Etapa 5 passa a exigir também os documentos
+	// mensais do Art.9º-XXXII (alíneas a/b.1/b.2/b.3) — ver
+	// internal/service/checklist.go. Default false para não afetar
+	// contratos já cadastrados.
+	ExigeFiscalizacaoTerceirizacao bool `gorm:"not null;default:false"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

@@ -132,6 +132,8 @@ export interface paths {
                             email?: string;
                             is_fiscal?: boolean;
                             is_admin?: boolean;
+                            /** @description true = conta local com senha temporária, precisa trocar antes de continuar. */
+                            must_change_password?: boolean;
                         };
                     };
                 };
@@ -140,6 +142,127 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login tradicional (e-mail/senha)
+         * @description Rota PÚBLICA (ainda não há sessão) — sujeita a rate limit por IP como defesa contra força bruta. Emite um token de acesso aceito pelo resto da API exatamente como um token do Keycloak (mesmo formato, issuer diferente).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: email */
+                        email: string;
+                        /** Format: password */
+                        senha: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            access_token?: string;
+                            usuario?: components["schemas"]["Usuario"];
+                        };
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                /** @description E-mail ou senha inválidos. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/trocar-senha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Troca a senha da própria conta
+         * @description Autenticado (qualquer usuário logado). Contas Keycloak recebem 400 — a senha delas é gerenciada pelo Keycloak, não pelo Selene.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: password */
+                        senha_atual: string;
+                        /**
+                         * Format: password
+                         * @description Mínimo 8 caracteres.
+                         */
+                        senha_nova: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Senha trocada. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                /** @description Não autenticado, ou senha atual incorreta. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -220,6 +343,205 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/radar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista os itens em risco (Radar de Alertas)
+         * @description Varre contratos e processos ativos e retorna todo item que entra em algum dos 3 sinais de alerta: vigência de contrato perto do fim, certidão vencida/vencendo anexada a um processo em andamento, ou processo parado na mesma etapa do Kanban há muito tempo. Sem paginação — a lista é o conjunto completo de itens em risco.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ItemRadar"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as notificações in-app do usuário autenticado (não-lidas primeiro)
+         * @description Notificações de prazo/vencimento (Radar) entregues ao usuário — geradas periodicamente por um processo em segundo plano (ver NotificacaoService.GerarAlertas, backend), não por esta rota. Sobre a PRÓPRIA conta, sem restrição de admin/fiscal.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Notificacao"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificacoes/nao-lidas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Contagem de notificações não lidas do usuário autenticado
+         * @description Pro badge de contagem da TopBar — mais barato que listar tudo.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            total?: number;
+                        };
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificacoes/marcar-todas-lidas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Marca todas as notificações não lidas do usuário como lidas */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Marcadas. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificacoes/{id}/marcar-lida": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca UMA notificação como lida
+         * @description 404 tanto pra ID inexistente quanto pra ID de outro usuário — as duas situações são indistinguíveis de propósito (não vaza se um ID de outro usuário existe).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Marcada. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contratos": {
         parameters: {
             query?: never;
@@ -227,12 +549,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Lista contratos (paginado) */
+        /** Lista contratos (paginado, com busca e filtros opcionais) */
         get: {
             parameters: {
                 query?: {
                     pagina?: components["parameters"]["Pagina"];
                     tamanho?: components["parameters"]["Tamanho"];
+                    /** @description Texto livre (ILIKE) casado contra número do contrato, nome da contratada ou CNPJ. Vazio = sem filtro. */
+                    busca?: string;
+                    /** @description Valor diferente de CONSUMO/PERMANENTE/SERVICO (inclusive ausente) é tratado como 'sem filtro', não como erro. */
+                    tipo_objeto?: "CONSUMO" | "PERMANENTE" | "SERVICO";
+                    /** @description 'ativo' ou 'encerrado'. Qualquer outro valor (inclusive ausente) é tratado como 'sem filtro'. */
+                    situacao?: "ativo" | "encerrado";
                 };
                 header?: never;
                 path?: never;
@@ -417,6 +745,158 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/contratos/{id}/notificacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ContratoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera a Notificação de Descumprimento (.docx de um modelo, ou PDF)
+         * @description Registra o histórico em DocumentoEmitido (Fase 2 do roadmap). Content-Type da resposta varia: se existir um modelo .docx ativo cadastrado em Configurações pro gatilho NOTIFICACAO_DESCUMPRIMENTO, devolve o modelo preenchido (merge fields); sem modelo cadastrado, devolve o PDF fixo original (fallback, comportamento inalterado).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description Motivo da notificação (texto livre). */
+                        motivo: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Documento gerado — .docx (modelo) ou PDF (fallback), ver a description acima. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contratos/{id}/minuta-aditivo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ContratoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera a Minuta de Aditivo (.docx de um modelo, ou PDF)
+         * @description Justificativa técnica preliminar a partir de um questionário curto — não substitui a formalização jurídica definitiva do termo aditivo. Registra o histórico em DocumentoEmitido. Content-Type da resposta varia igual à Notificação (ver a description lá): modelo .docx cadastrado pro gatilho MINUTA_ADITIVO, ou PDF fallback.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["MinutaAditivoRequest"];
+                };
+            };
+            responses: {
+                /** @description Documento gerado — .docx (modelo) ou PDF (fallback). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/verificar/{codigo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                codigo: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Verifica a autenticidade de um documento emitido (QR code)
+         * @description Rota PÚBLICA — fora da autenticação Keycloak, propositalmente: quem escaneia o QR code de um Atesto impresso não tem login no Selene. Nunca responde 404 pra um código inexistente; sempre 200 com `valido=false`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    codigo: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK (mesmo para código inválido/inexistente — ver `valido`). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VerificarDocumentoResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/processos": {
         parameters: {
             query?: never;
@@ -514,7 +994,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Busca um processo por ID */
+        /**
+         * Busca um processo por ID
+         * @description Além dos campos já existentes de ProcessoPagamento, a resposta inclui a leitura de Camada 2 do SGF-Rondonópolis (estado_fiscalizacao, acao_ou_espera, allowed_actions) — ver ProcessoComFiscalizacao e o plano, seção De/Para. Nenhum campo anterior muda de nome/tipo.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -532,7 +1015,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ProcessoPagamento"];
+                        "application/json": components["schemas"]["ProcessoComFiscalizacao"];
                     };
                 };
                 400: components["responses"]["RequisicaoInvalida"];
@@ -681,7 +1164,7 @@ export interface paths {
         put?: never;
         /**
          * Anexa um documento ao processo
-         * @description multipart/form-data. Se o SHA-256 do conteúdo já existir para este processo, reaproveita o registro existente em vez de duplicar (não cria um novo). Limite de 20MB por arquivo.
+         * @description multipart/form-data. Se o SHA-256 do conteúdo já existir para este processo, reaproveita o registro existente em vez de duplicar (não cria um novo). Além disso, no máximo um documento de cada tipo_documento_id é permitido por processo (ex: não pode haver dois "Pré-Empenho") — um arquivo diferente do mesmo tipo é rejeitado com 409; para substituir, exclua o anterior (DELETE /processos/{id}/documentos/{docId}) e envie o novo. tipo_documento_id também precisa fazer parte do checklist cumulado até a etapa atual do processo (etapas 1..EtapaAtualID — ver documentos_requeridos em GET /processos/{id}); um tipo de uma etapa ainda não alcançada (ex: uma CND, só exigida na Etapa 5, num processo ainda na Etapa 1) é rejeitado com 400. Limite de 20MB por arquivo.
          */
         post: {
             parameters: {
@@ -699,6 +1182,11 @@ export interface paths {
                         tipo_documento_id: number;
                         /** Format: binary */
                         arquivo: string;
+                        /**
+                         * Format: date
+                         * @description Opcional. Formato "AAAA-MM-DD" — só faz sentido pra tipos com ExigeValidade=true (certidões). Alimenta o Radar de Alertas.
+                         */
+                        data_validade?: string;
                     };
                 };
             };
@@ -710,6 +1198,332 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["DocumentoAnexo"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                /** @description Já existe um documento deste tipo anexado a este processo — exclua o anterior antes de enviar outro. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+                /** @description Arquivo excede 20MB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/processos/{id}/documentos/{docId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+                docId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Baixa/pré-visualiza o conteúdo de um documento anexo
+         * @description Content-Disposition "inline" (não "attachment") — o frontend abre esta URL numa aba nova (target="_blank") pra pré-visualização, deixando o navegador usar seu próprio visualizador nativo em vez de forçar um download direto. Content-Type detectado do conteúdo real do arquivo (não confia só na extensão do nome). Cache agressivo: `ETag` (hash SHA-256 do conteúdo) + `Cache-Control: immutable` — documentos são imutáveis pelo próprio ID.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                    docId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Conteúdo do arquivo (PDF ou imagem). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                        "image/*": string;
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Exclui um documento anexo (registro e arquivo físico)
+         * @description Restrito a fiscais. Sem trava de "já usado num avanço de etapa passado" — ver o comentário em DocumentoService.Excluir no backend.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                    docId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Excluído. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/processos/{id}/relatorio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Gera o Relatório de Pagamento (.docx de um modelo, ou PDF)
+         * @description Pronto para impressão/assinatura física. Content-Type da resposta varia: modelo .docx ativo cadastrado em Configurações pro gatilho RELATORIO_PAGAMENTO devolve o modelo preenchido; sem modelo, PDF de layout funcional próprio do Selene (fallback — nenhum template oficial da prefeitura foi fornecido, ver README, seção "Limitações"). SGF-Rondonópolis: inclui Ocorrências e Empenho (acompanhamento paralelo/informativo) quando o processo tiver algum vinculado — omitidos quando não há dado, nos dois formatos.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Documento gerado — .docx (modelo) ou PDF (fallback). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/processos/{id}/atesto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera o Atesto do processo (.docx de um modelo, ou PDF com QR code)
+         * @description Folha de Rosto + Termo de Recebimento. Sem modelo cadastrado pro gatilho ATESTO, PDF fallback com QR code embutido, que aponta pra `PUBLIC_URL/verificar/{codigo}` (ou só o código em texto puro se `PUBLIC_URL` não estiver configurado). Com modelo cadastrado, devolve o .docx preenchido — SEM QR code embutido (a biblioteca de merge só substitui texto; o código de verificação continua presente em texto, verificável em GET /verificar/{codigo}). Registra o histórico em DocumentoEmitido.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Documento gerado — .docx (modelo, sem QR) ou PDF (fallback, com QR). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/pdf": string;
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/processos/{id}/vistorias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+            };
+            cookie?: never;
+        };
+        /** Lista as vistorias do processo */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RegistroVistoria"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        /**
+         * Registra uma nova vistoria de campo
+         * @description Abre o registro; as fotos são anexadas depois, uma a uma, via POST /vistorias/{id}/fotos. Latitude/longitude são opcionais — o navegador pode negar/não suportar geolocalização.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: double */
+                        latitude?: number | null;
+                        /** Format: double */
+                        longitude?: number | null;
+                        observacoes?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Registrada. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RegistroVistoria"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vistorias/{id}/fotos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anexa uma foto à vistoria
+         * @description multipart/form-data, campo "foto". Mesma deduplicação por SHA-256 de POST /processos/{id}/documentos. Limite de 20MB por arquivo.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /** Format: binary */
+                        foto: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Anexada. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FotoVistoria"];
                     };
                 };
                 400: components["responses"]["RequisicaoInvalida"];
@@ -734,25 +1548,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/processos/{id}/relatorio": {
+    "/api/v1/vistorias/{id}/relatorio": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: components["parameters"]["ProcessoId"];
+                id: string;
             };
             cookie?: never;
         };
         /**
-         * Gera o Relatório de Pagamento (PDF)
-         * @description PDF pronto para impressão/assinatura física. Layout funcional próprio do Selene, não o modelo oficial da prefeitura (nenhum template real foi fornecido — ver README, seção "Limitações").
+         * Gera o Relatório de Campo da vistoria (PDF)
+         * @description Dados do contrato/processo, coordenadas, observações e as fotos anexadas, embutidas no PDF.
          */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
-                    id: components["parameters"]["ProcessoId"];
+                    id: string;
                 };
                 cookie?: never;
             };
@@ -770,6 +1584,594 @@ export interface paths {
                 400: components["responses"]["RequisicaoInvalida"];
                 401: components["responses"]["NaoAutenticado"];
                 404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contratos/{id}/designacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ContratoId"];
+            };
+            cookie?: never;
+        };
+        /** Lista o histórico de designações do contrato */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PortariaDesignacao"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        /**
+         * Designa fiscal/suplente/gestor/fiscal setorial
+         * @description Uma nova designação do mesmo papel revoga automaticamente a anterior (DataRevogacao). Papel=FISCAL também sincroniza Contrato.FiscalID (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DesignarRequest"];
+                };
+            };
+            responses: {
+                /** @description Designado. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PortariaDesignacao"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contratos/{id}/empenhos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ContratoId"];
+            };
+            cookie?: never;
+        };
+        /** Lista os empenhos do contrato */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Empenho"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        /**
+         * Abre um novo empenho (registro paralelo/informativo)
+         * @description Já registra a movimentação INICIAL automaticamente (IN01 Art.5º-VIII; IN04 Art.5º-XXII) — ver o comentário em components/schemas/Empenho sobre isto não ser a fonte de verdade orçamentária.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ContratoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CriarEmpenhoRequest"];
+                };
+            };
+            responses: {
+                /** @description Criado. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Empenho"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/empenhos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Busca um empenho, com o saldo reconstruído do histórico */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["EmpenhoComSaldo"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/empenhos/{id}/movimentacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Registra um reforço, anulação ou apropriação de fatura */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RegistrarMovimentacaoRequest"];
+                };
+            };
+            responses: {
+                /** @description Registrada. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MovimentacaoEmpenho"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/processos/{id}/ocorrencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProcessoId"];
+            };
+            cookie?: never;
+        };
+        /** Lista as ocorrências do processo */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        /**
+         * Registra uma nova ocorrência
+         * @description Abre no estado REGISTRADA. ContratoID é resolvido automaticamente a partir do processo. Enquanto não regularizada, bloqueia AVANCAR_ETAPA neste processo (regra de Camada 2, ver o plano).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["ProcessoId"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RegistrarOcorrenciaRequest"];
+                };
+            };
+            responses: {
+                /** @description Registrada. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ocorrencias/{id}/notificar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transiciona REGISTRADA → NOTIFICADA
+         * @description Comunicação formal ao Gestor (IN04 Art.5º-XVI).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ocorrencias/{id}/tratar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transiciona NOTIFICADA → EM_TRATAMENTO
+         * @description O Gestor já definiu as medidas a tomar (IN04 Art.5º-XVII).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ocorrencias/{id}/regularizar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transiciona EM_TRATAMENTO → REGULARIZADA
+         * @description A partir daqui, esta ocorrência para de bloquear AVANCAR_ETAPA no processo.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Ocorrencia"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                429: components["responses"]["MuitasRequisicoes"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fornecedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista um resumo por CNPJ de todos os fornecedores */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FornecedorResumo"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fornecedores/{cnpj}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Só dígitos (sem máscara) — ver FornecedorResumo.cnpj.
+                 * @example 12345678000190
+                 */
+                cnpj: string;
+            };
+            cookie?: never;
+        };
+        /** Monta o dossiê completo do fornecedor */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /**
+                     * @description Só dígitos (sem máscara) — ver FornecedorResumo.cnpj.
+                     * @example 12345678000190
+                     */
+                    cnpj: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["FornecedorDossie"];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/servidores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista uma projeção mínima (ID/Nome/Email) de todos os usuários
+         * @description Não é admin-only (ao contrário de /admin/users): usada pra popular seletores de servidor, ex. SGF-Rondonópolis "Nova designação". ID/Nome/Email já são visíveis a qualquer usuário autenticado hoje via Contrato.Fiscal aninhado em /contratos e /processos — esta rota não expõe dado novo, só uma forma de listar todo mundo sem precisar já conhecer um ContratoID.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServidorOpcao"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
             };
         };
         put?: never;
@@ -815,6 +2217,63 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/local": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cria uma conta de login local (e-mail/senha)
+         * @description Restrito a administradores. Não há autocadastro público — só por aqui. A conta nasce com `must_change_password=true`: o usuário precisa trocar a senha temporária no primeiro login (ver POST /auth/trocar-senha).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        nome: string;
+                        /** Format: email */
+                        email: string;
+                        /**
+                         * Format: password
+                         * @description Mínimo 8 caracteres.
+                         */
+                        senha_temporaria: string;
+                        is_fiscal?: boolean;
+                        is_admin?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Criado. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Usuario"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -902,6 +2361,593 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/v1/admin/modelos-documento": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista todas as categorias de modelo de documento */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        put?: never;
+        /**
+         * Cadastra uma categoria nova com sua primeira versão
+         * @description multipart/form-data. `categoria` é texto livre (não pode duplicar, ignorando maiúscula/minúscula). `gatilho`, se informado, associa a categoria a um dos 4 fluxos de geração existentes — só um gatilho distinto por categoria (ver ModeloDocumento). Limite de 20MB.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /** @example Ofício de Notificação */
+                        categoria: string;
+                        /**
+                         * @description Opcional — sem gatilho, a categoria é só biblioteca de referência.
+                         * @enum {string}
+                         */
+                        gatilho?: "NOTIFICACAO_DESCUMPRIMENTO" | "MINUTA_ADITIVO" | "ATESTO" | "RELATORIO_PAGAMENTO";
+                        /**
+                         * Format: binary
+                         * @description Precisa ser um .docx válido.
+                         */
+                        arquivo: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Criado. */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                409: components["responses"]["Conflito"];
+                /** @description Arquivo excede 20MB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modelos-documento/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Busca uma categoria por ID
+         * @description Inclui a versão ativa e o histórico completo de versões (mais recente primeiro).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Renomeia a categoria e/ou troca o gatilho associado
+         * @description Não mexe no arquivo (ver POST .../versoes pra isso). Só os campos presentes no corpo são alterados. Em `gatilho`, "" ou "NENHUM" remove a associação atual; um dos 4 valores associa a categoria a um fluxo de geração.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        categoria?: string;
+                        /** @enum {string} */
+                        gatilho?: "" | "NENHUM" | "NOTIFICACAO_DESCUMPRIMENTO" | "MINUTA_ADITIVO" | "ATESTO" | "RELATORIO_PAGAMENTO";
+                    };
+                };
+            };
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                409: components["responses"]["Conflito"];
+            };
+        };
+        trace?: never;
+    };
+    "/api/v1/admin/modelos-documento/{id}/versoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publica uma nova versão do arquivo, substituindo a ativa
+         * @description A versão anterior permanece no histórico (nunca é apagada). Limite de 20MB.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "multipart/form-data": {
+                        /**
+                         * Format: binary
+                         * @description Precisa ser um .docx válido.
+                         */
+                        arquivo: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ModeloDocumento"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+                /** @description Arquivo excede 20MB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modelos-documento/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Baixa o arquivo da versão ATIVA da categoria */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modelos-documento/{id}/versoes/{versaoId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versaoId: string;
+            };
+            cookie?: never;
+        };
+        /** Baixa o arquivo de uma versão específica do histórico */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    versaoId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/keycloak": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuração de Keycloak/SSO atualmente ativa
+         * @description Nunca inclui o Client Secret (só `tem_segredo_configurado`). `origem` indica se veio de uma configuração salva por um admin (`banco_de_dados`) ou ainda são as variáveis de ambiente de boot (`variaveis_de_ambiente`) — nesse segundo caso `client_id` vem vazio, porque o backend não tem acesso a AUTH_KEYCLOAK_ID (só o frontend, via variável de ambiente própria).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfiguracaoKeycloak"];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        /**
+         * Atualiza a configuração de Keycloak/SSO
+         * @description Aplica IMEDIATAMENTE (sem reiniciar o backend) à validação de token deste serviço — a nova configuração é testada (fetch do JWKS do novo issuer) ANTES de ser persistida; se o Keycloak informado não responder, nada é salvo e a configuração anterior continua ativa (fail-closed, 400). `client_secret` vazio numa atualização mantém o segredo já salvo (não exige reenviar toda vez). Efeito colateral: sessões via SSO Keycloak já abertas podem precisar logar de novo se o Client ID/Secret mudar; login local não é afetado.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AtualizarConfiguracaoKeycloakRequest"];
+                };
+            };
+            responses: {
+                /** @description Salvo e aplicado. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfiguracaoKeycloak"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/diario-oficial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuração da integração com o Diário Oficial atualmente ativa
+         * @description Nunca inclui a chave de API (só `tem_chave_configurada`). ESTRUTURA GENÉRICA — a API real do Diário Oficial da cidade ainda não está definida; ver o comentário de escopo no topo de internal/service/diario_oficial_service.go pro contrato assumido de request/response.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfiguracaoDiarioOficial"];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        /**
+         * Atualiza a configuração da integração com o Diário Oficial
+         * @description Ao contrário do PUT de Keycloak, NÃO testa a conexão antes de salvar (uma API de terceiro fora do ar temporariamente não deveria invalidar a URL/chave configuradas) — use POST .../testar separadamente. `api_key` vazia numa atualização mantém a chave já salva.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AtualizarConfiguracaoDiarioOficialRequest"];
+                };
+            };
+            responses: {
+                /** @description Salvo. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfiguracaoDiarioOficial"];
+                    };
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/config/diario-oficial/testar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Testa a conexão com a API do Diário Oficial configurada
+         * @description Faz uma requisição real contra a BaseURL configurada. Qualquer resposta HTTP (mesmo 404/401) conta como sucesso de conexão — não validamos o schema da API real, só que ela respondeu. Só erro de rede (DNS, timeout, conexão recusada) conta como falha.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Resultado do teste (Sucesso pode ser false — ver descrição). */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ResultadoTesteConexao"];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                /** @description Nenhuma configuração de Diário Oficial foi salva ainda. */
+                412: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/diario-oficial/contratos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Busca novos contratos publicados no Diário Oficial
+         * @description Proxy autenticado pra API externa configurada — filtros por nome, CPF e data (todos opcionais, repassados como vieram). Resposta é o JSON decodificado da API externa, sem validação de schema fixo (ver o comentário de escopo no service).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    nome?: string;
+                    cpf?: string;
+                    data?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK — `resultado` é o JSON bruto devolvido pela API externa. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            resultado?: unknown;
+                        };
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+                403: components["responses"]["Proibido"];
+                /** @description Nenhuma configuração de Diário Oficial foi salva ainda. */
+                412: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+                /** @description A API externa do Diário Oficial não respondeu ou devolveu erro. */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErroSimples"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -930,8 +2976,171 @@ export interface components {
             ID?: number;
             /** @example Nota de Empenho */
             Nome?: string;
+            /** @description true = tipo que vence (certidões) — o upload aceita 'data_validade'. */
+            ExigeValidade?: boolean;
+            /**
+             * @description Quando preenchido, este tipo só se aplica a contratos deste TipoObjeto (ex: 'Boleto DAM' só em SERVICO) — o cliente deve ocultá-lo do select quando o contrato do processo for de outro tipo, e o upload é rejeitado (400) se enviado mesmo assim.
+             * @enum {string|null}
+             */
+            RestritoTipoObjeto?: "CONSUMO" | "PERMANENTE" | "SERVICO" | null;
+            /** @description true = só se aplica a contratos com ExigeFiscalizacaoTerceirizacao=true (documentos mensais do Art.9º-XXXII). */
+            RestritoTerceirizacao?: boolean;
         };
-        /** @description KeycloakID (claim "sub" do token OIDC) é omitido de propósito — nunca serializado (json:"-"), identificador interno sem uso na UI. */
+        /** @description Um alerta individual do Radar (Fase 1 do roadmap). */
+        ItemRadar: {
+            /** @enum {string} */
+            tipo?: "vigencia_contrato" | "certidao" | "processo_parado";
+            /** @enum {string} */
+            nivel?: "ATENCAO" | "CRITICO";
+            /** Format: uuid */
+            contrato_id?: string;
+            /** @example 125/2026 */
+            numero_contrato?: string;
+            /**
+             * Format: uuid
+             * @description Ausente pra alertas de tipo vigencia_contrato (o alerta é do contrato, não de um processo específico).
+             */
+            processo_id?: string | null;
+            /** @example Faltam 25 dias para o fim da vigência do contrato */
+            mensagem?: string;
+            /** @description Negativo quando o prazo já passou (vencido/parado há N dias). */
+            dias_restantes?: number;
+        };
+        /** @description Uma notificação in-app de prazo/vencimento entregue a um usuário — ver GET /notificacoes. */
+        Notificacao: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            tipo?: "vigencia_contrato" | "certidao" | "processo_parado";
+            /** @enum {string} */
+            nivel?: "ATENCAO" | "CRITICO";
+            /** Format: uuid */
+            contrato_id?: string;
+            /** @example 125/2026 */
+            numero_contrato?: string;
+            /** Format: uuid */
+            processo_id?: string | null;
+            mensagem?: string;
+            lida?: boolean;
+            /** Format: date-time */
+            criada_em?: string;
+        };
+        MinutaAditivoRequest: {
+            /** @enum {string} */
+            tipo_aditivo: "VALOR" | "PRAZO" | "VALOR_E_PRAZO";
+            /** @description Justificativa técnica da necessidade do aditivo. */
+            justificativa: string;
+            /** @description Opcional, texto livre (ex: "R$ 150.000,00"). Preenchido quando tipo_aditivo inclui VALOR. */
+            novo_valor?: string;
+            /** @description Opcional, texto livre (ex: "31/12/2026"). Preenchido quando tipo_aditivo inclui PRAZO. */
+            novo_prazo?: string;
+        };
+        /** @description Resposta de GET /verificar/{codigo} (Fase 2 do roadmap) — rota pública. */
+        VerificarDocumentoResponse: {
+            /** @description false = código inexistente/inválido; os demais campos ficam ausentes nesse caso. */
+            valido?: boolean;
+            /** @enum {string} */
+            tipo?: "NOTIFICACAO_DESCUMPRIMENTO" | "ATESTO" | "MINUTA_ADITIVO";
+            /** @example 125/2026 */
+            numero_contrato?: string;
+            contratada_nome?: string;
+            /**
+             * @description Presente só pra documentos amarrados a um processo (ex: Atesto).
+             * @example 07/2026
+             */
+            mes_referencia?: string;
+            gerado_por_nome?: string;
+            /** @example 13/08/2026 14:32 */
+            criado_em?: string;
+            /** @example SEL-A1B2C3D4E5F60708 */
+            codigo_verificacao?: string;
+        };
+        /** @description Uma vistoria de campo (Fase 3 do roadmap). */
+        RegistroVistoria: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ProcessoPagamentoID?: string;
+            /** Format: uuid */
+            FiscalID?: string;
+            Fiscal?: components["schemas"]["Usuario"];
+            /** Format: date-time */
+            DataHora?: string;
+            /**
+             * Format: double
+             * @description Ausente quando o navegador negou/não suportou geolocalização.
+             */
+            Latitude?: number | null;
+            /** Format: double */
+            Longitude?: number | null;
+            Observacoes?: string;
+            Fotos?: components["schemas"]["FotoVistoria"][];
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        /** @description CaminhoStorage (path local no servidor) é omitido de propósito — nunca serializado (json:"-"). */
+        FotoVistoria: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            VistoriaID?: string;
+            NomeArquivo?: string;
+            HashArquivo?: string;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        /** @description Uma linha da listagem consolidada por CNPJ (Fase 4 do roadmap). */
+        FornecedorResumo: {
+            /**
+             * @description Só dígitos, sem máscara — identificador canônico usado na URL do dossiê.
+             * @example 12345678000190
+             */
+            cnpj?: string;
+            /**
+             * @description Como cadastrado no contrato, só para exibição.
+             * @example 12.345.678/0001-90
+             */
+            cnpj_formatado?: string;
+            nome?: string;
+            qtd_contratos?: number;
+            qtd_contratos_ativos?: number;
+        };
+        /** @description Consolidação completa de um fornecedor (Fase 4 do roadmap). */
+        FornecedorDossie: {
+            /** @example 12345678000190 */
+            cnpj?: string;
+            /** @example 12.345.678/0001-90 */
+            cnpj_formatado?: string;
+            nome?: string;
+            contratos?: components["schemas"]["Contrato"][];
+            /** @description Só DocumentoEmitido do tipo NOTIFICACAO_DESCUMPRIMENTO — o "histórico de penalidades". */
+            notificacoes?: components["schemas"]["DocumentoEmitido"][];
+            /**
+             * Format: double
+             * @description Percentual (0-100) de transições de etapa do Kanban que aconteceram em até 15 dias (mesmo limiar do Radar de Alertas pra "processo parado"). null quando não há transições suficientes pra calcular — distinto de 0%.
+             */
+            score_pontualidade?: number | null;
+        };
+        /** @description Um PDF oficial gerado pelo Selene (Fase 2 do roadmap) — histórico consultável no Dossiê do Fornecedor. */
+        DocumentoEmitido: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ContratoID?: string;
+            /** Format: uuid */
+            ProcessoPagamentoID?: string | null;
+            /** @enum {string} */
+            Tipo?: "NOTIFICACAO_DESCUMPRIMENTO" | "ATESTO" | "MINUTA_ADITIVO";
+            Motivo?: string;
+            /** Format: uuid */
+            GeradoPorID?: string;
+            GeradoPor?: components["schemas"]["Usuario"];
+            /** @example SEL-A1B2C3D4E5F60708 */
+            CodigoVerificacao?: string;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        /** @description KeycloakID (claim "sub" do token OIDC) e PasswordHash (bcrypt) são omitidos de propósito — nunca serializados (json:"-"): o primeiro é um identificador interno sem uso na UI, o segundo nunca deveria sair do servidor em nenhuma resposta. */
         Usuario: {
             /** Format: uuid */
             ID?: string;
@@ -940,11 +3149,21 @@ export interface components {
             Email?: string;
             IsFiscal?: boolean;
             IsAdmin?: boolean;
+            /** @description true = conta local com senha temporária definida pelo admin, ainda não trocada. */
+            MustChangePassword?: boolean;
             Matricula?: string;
             /** Format: date-time */
             CriadoEm?: string;
             /** Format: date-time */
             AtualizadoEm?: string;
+        };
+        /** @description Projeção mínima de Usuario (só ID/Nome/Email) usada pra popular seletores de servidor — ver GET /servidores. */
+        ServidorOpcao: {
+            /** Format: uuid */
+            ID?: string;
+            Nome?: string;
+            /** Format: email */
+            Email?: string;
         };
         Contrato: {
             /** Format: uuid */
@@ -965,6 +3184,13 @@ export interface components {
             TipoObjeto?: "CONSUMO" | "PERMANENTE" | "SERVICO";
             /** @description false = contrato encerrado (soft-close). */
             Ativo?: boolean;
+            /**
+             * Format: date
+             * @description Alimenta o Radar de Alertas — null se não cadastrada.
+             */
+            DataVigenciaFim?: string | null;
+            /** @description Camada 2 (regra do SGF): marca contrato de mão de obra terceirizada, sujeito à IN SCL Nº 04/2021 — acrescenta os documentos do Art.9º-XXXII ao checklist da Etapa 5. */
+            ExigeFiscalizacaoTerceirizacao?: boolean;
             /** Format: date-time */
             CreatedAt?: string;
             /** Format: date-time */
@@ -990,6 +3216,13 @@ export interface components {
             fiscal_id: string;
             /** @enum {string} */
             tipo_objeto: "CONSUMO" | "PERMANENTE" | "SERVICO";
+            /**
+             * Format: date
+             * @description Opcional. Formato "AAAA-MM-DD" — alimenta o Radar de Alertas.
+             */
+            data_vigencia_fim?: string;
+            /** @description Opcional, default false. Ver Contrato.ExigeFiscalizacaoTerceirizacao. */
+            exige_fiscalizacao_terceirizacao?: boolean;
         };
         AtualizarContratoRequest: {
             portaria_nomeacao?: string;
@@ -997,6 +3230,13 @@ export interface components {
             contratada_cnpj?: string;
             /** Format: email */
             contratada_email?: string;
+            /**
+             * Format: date
+             * @description Formato "AAAA-MM-DD". Enviar string vazia limpa a vigência cadastrada.
+             */
+            data_vigencia_fim?: string;
+            /** @description Ver Contrato.ExigeFiscalizacaoTerceirizacao. */
+            exige_fiscalizacao_terceirizacao?: boolean;
         };
         ProcessoPagamento: {
             /** Format: uuid */
@@ -1010,10 +3250,32 @@ export interface components {
             EtapaAtual?: components["schemas"]["KanbanEtapa"];
             /** @enum {string} */
             Status?: "Ativo" | "Concluido";
+            /**
+             * Format: uuid
+             * @description SGF-Rondonópolis: liga este processo ao Empenho paralelo/informativo quando a fatura do mês foi apropriada contra ele. Null pra processos que não adotam esse acompanhamento.
+             */
+            EmpenhoID?: string | null;
             /** Format: date-time */
             CreatedAt?: string;
             /** Format: date-time */
             UpdatedAt?: string;
+        };
+        /** @description Resposta de GET /processos/{id} — todos os campos de ProcessoPagamento mais a leitura de Camada 2 computada pelo SGF (nunca persistida). Ver o plano, seção De/Para. */
+        ProcessoComFiscalizacao: components["schemas"]["ProcessoPagamento"] & {
+            /**
+             * @description Rótulo de Camada 2 (regra do SGF, não da norma) derivado da etapa atual — vira PENDENCIA_DEVOLVIDO independente da etapa quando há Ocorrencia aberta vinculada.
+             * @enum {string}
+             */
+            estado_fiscalizacao?: "A_EXECUTAR_CONFERIR" | "EM_ANALISE_EXTERNA" | "DOCUMENTAR_ATESTAR" | "PENDENCIA_DEVOLVIDO" | "CONCLUIDO";
+            /**
+             * @description Se a etapa atual exige ação ativa do fiscal ou está em tramitação fora do seu controle direto (ex: Contabilidade/Tesouraria).
+             * @enum {string}
+             */
+            acao_ou_espera?: "ACAO_FISCAL" | "ESPERA_EXTERNA";
+            /** @description Vocabulário fechado que o frontend usa pra decidir quais botões mostrar — substitui a checagem client-side de EtapaAtualID/Status que existia antes. */
+            allowed_actions?: ("AVANCAR_ETAPA" | "CONCLUIR_PAGAMENTO" | "ANEXAR_DOCUMENTO" | "REGISTRAR_OCORRENCIA" | "REGISTRAR_MOVIMENTACAO_EMPENHO")[];
+            /** @description Lista COMPLETA e ACUMULADA de nomes de TipoDocumento exigidos até a etapa atual (não só os da etapa atual isolada, nem só os pendentes) — união dos requisitos de TODAS as etapas já percorridas (1..etapa_atual_id inclusive). Isso garante que um documento obrigatório de uma etapa anterior que tenha sido excluído volta a aparecer aqui e bloqueia o avanço, mesmo que a etapa atual em si não exija esse tipo (ex: as etapas 2 e 6 não têm checklist próprio, mas continuam mostrando os requisitos acumulados das etapas anteriores). Cruze com GET /processos/{id}/documentos (por TipoDocumento.Nome) pra saber quais já foram anexados. Vazio só quando o processo não tem Contrato carregado. */
+            documentos_requeridos?: string[];
         };
         /** @description CaminhoStorage (path local no servidor) é omitido de propósito — nunca serializado (json:"-"). */
         DocumentoAnexo: {
@@ -1032,6 +3294,234 @@ export interface components {
             EnviadoPor?: components["schemas"]["Usuario"];
             /** Format: date-time */
             DataUpload?: string;
+            /**
+             * Format: date
+             * @description Só preenchida pra tipos com ExigeValidade=true (certidões).
+             */
+            DataValidade?: string | null;
+        };
+        /** @description Histórico auditável de designação de fiscal/suplente/gestor/fiscal setorial por contrato (IN01 Art.4º-I/Art.6º; IN04 Art.4º-I/Art.10). Imutável — uma nova designação do mesmo papel revoga a anterior (DataRevogacao), nunca sobrescreve. */
+        PortariaDesignacao: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ContratoID?: string;
+            /** Format: uuid */
+            ServidorID?: string;
+            Servidor?: components["schemas"]["Usuario"];
+            /** @enum {string} */
+            Papel?: "FISCAL" | "FISCAL_SUPLENTE" | "GESTOR" | "FISCAL_SETORIAL";
+            NumeroPortaria?: string;
+            PublicadoDiorondon?: string;
+            /** Format: date */
+            DataDesignacao?: string;
+            /**
+             * Format: date
+             * @description Preenchida quando esta designação é substituída por uma nova do mesmo papel.
+             */
+            DataRevogacao?: string | null;
+            /** Format: uuid */
+            CriadoPorID?: string;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        DesignarRequest: {
+            /** Format: uuid */
+            servidor_id: string;
+            /** @enum {string} */
+            papel: "FISCAL" | "FISCAL_SUPLENTE" | "GESTOR" | "FISCAL_SETORIAL";
+            numero_portaria?: string;
+            publicado_diorondon?: string;
+            /**
+             * @description Opcional. Formato "AAAA-MM-DD" — default é a data atual.
+             * @example 2026-01-15
+             */
+            data_designacao?: string;
+        };
+        /** @description Registro PARALELO/informativo de empenho — apoia a obrigação do FISCAL de controlar o saldo (IN01 Art.5º-VIII; IN04 Art.5º-XXII), NÃO é fonte de verdade orçamentária (essa é exclusiva dos sistemas corporativos da prefeitura). */
+        Empenho: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ContratoID?: string;
+            NumeroEmpenho?: string;
+            /** Format: date */
+            DataEmissao?: string;
+            /**
+             * Format: int64
+             * @description Centavos.
+             */
+            ValorInicial?: number;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        /** @description Resposta de GET /empenhos/{id} — inclui o saldo reconstruído do histórico de movimentações. */
+        EmpenhoComSaldo: components["schemas"]["Empenho"] & {
+            /**
+             * Format: int64
+             * @description Centavos. Sempre recalculado a partir de MovimentacaoEmpenho, nunca lido de um campo denormalizado.
+             */
+            saldo?: number;
+        };
+        CriarEmpenhoRequest: {
+            numero_empenho: string;
+            /**
+             * @description Formato "AAAA-MM-DD".
+             * @example 2026-01-15
+             */
+            data_emissao: string;
+            /**
+             * Format: int64
+             * @description Centavos, maior que zero.
+             */
+            valor_inicial: number;
+        };
+        /** @description Lançamento imutável no histórico de um Empenho. */
+        MovimentacaoEmpenho: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            EmpenhoID?: string;
+            /** @enum {string} */
+            Tipo?: "INICIAL" | "REFORCO" | "ANULACAO" | "FATURA_APROPRIADA";
+            /**
+             * Format: int64
+             * @description Centavos, sempre positivo — o sinal é implícito pelo Tipo.
+             */
+            Valor?: number;
+            /**
+             * Format: uuid
+             * @description Só preenchido quando Tipo=FATURA_APROPRIADA.
+             */
+            ProcessoPagamentoID?: string | null;
+            Observacao?: string;
+            /** Format: uuid */
+            RegistradoPorID?: string;
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        RegistrarMovimentacaoRequest: {
+            /**
+             * @description INICIAL não é aceito aqui — é criado automaticamente por POST /contratos/{id}/empenhos.
+             * @enum {string}
+             */
+            tipo: "REFORCO" | "ANULACAO" | "FATURA_APROPRIADA";
+            /**
+             * Format: int64
+             * @description Centavos, maior que zero.
+             */
+            valor: number;
+            /**
+             * Format: uuid
+             * @description Opcional — usar quando tipo=FATURA_APROPRIADA.
+             */
+            processo_pagamento_id?: string;
+            observacao?: string;
+        };
+        /** @description Registro formal de ocorrência da execução contratual (IN01 Art.3º-III/Art.5º-IV,IX; IN04 Art.3º-VIII/Art.5º-VIII,XVI). Ciclo de vida linear REGISTRADA→NOTIFICADA→EM_TRATAMENTO→REGULARIZADA (simplificação de Camada 2 — ver o plano, seção "Lacunas conhecidas", sobre o ramo de escalonamento da IN04 Art.5º-XVII ainda não modelado). */
+        Ocorrencia: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ContratoID?: string;
+            /** Format: uuid */
+            ProcessoPagamentoID?: string | null;
+            Descricao?: string;
+            /** @enum {string} */
+            Estado?: "REGISTRADA" | "NOTIFICADA" | "EM_TRATAMENTO" | "REGULARIZADA";
+            /** Format: uuid */
+            RegistradoPorID?: string;
+            RegistradoPor?: components["schemas"]["Usuario"];
+            /** Format: date */
+            DataNotificacaoGestor?: string | null;
+            /** Format: date */
+            DataRegularizacao?: string | null;
+            /** Format: date-time */
+            CreatedAt?: string;
+            /** Format: date-time */
+            UpdatedAt?: string;
+        };
+        RegistrarOcorrenciaRequest: {
+            descricao: string;
+        };
+        /** @description Categoria de arquivo-modelo (.docx) cadastrada em Configurações — ex: "Ofício", "Relatório Quadrimestral". Gatilho associa a categoria a um dos 4 fluxos de geração já existentes; sem gatilho, é só biblioteca de referência (upload/consulta/ substituição, sem geração automática). */
+        ModeloDocumento: {
+            /** Format: uuid */
+            ID?: string;
+            Categoria?: string;
+            /** @enum {string|null} */
+            Gatilho?: "NOTIFICACAO_DESCUMPRIMENTO" | "MINUTA_ADITIVO" | "ATESTO" | "RELATORIO_PAGAMENTO" | null;
+            /** Format: uuid */
+            VersaoAtivaID?: string | null;
+            VersaoAtiva?: components["schemas"]["ModeloDocumentoVersao"];
+            /** @description Histórico completo, mais recente primeiro — só preenchido em GET .../{id}, omitido em listagens. */
+            Versoes?: components["schemas"]["ModeloDocumentoVersao"][];
+            /** Format: date-time */
+            CreatedAt?: string;
+            /** Format: date-time */
+            UpdatedAt?: string;
+        };
+        /** @description Uma versão publicada do arquivo de uma categoria — nunca apagada quando substituída, ver ModeloDocumento. */
+        ModeloDocumentoVersao: {
+            /** Format: uuid */
+            ID?: string;
+            /** Format: uuid */
+            ModeloDocumentoID?: string;
+            NomeArquivo?: string;
+            /** @description SHA-256 do conteúdo, hexadecimal. */
+            HashArquivo?: string;
+            /** Format: int64 */
+            TamanhoBytes?: number;
+            /** Format: uuid */
+            EnviadoPorID?: string;
+            EnviadoPor?: components["schemas"]["Usuario"];
+            /** Format: date-time */
+            CreatedAt?: string;
+        };
+        /** @description Configuração de Keycloak/SSO atualmente ativa — nunca inclui o Client Secret em texto puro. */
+        ConfiguracaoKeycloak: {
+            /** @description Vazio quando Origem=variaveis_de_ambiente (ver a descrição do endpoint). */
+            ClientID?: string;
+            IssuerURL?: string;
+            Audience?: string;
+            TemSegredoConfigurado?: boolean;
+            /** @enum {string} */
+            Origem?: "banco_de_dados" | "variaveis_de_ambiente";
+            /** Format: date-time */
+            AtualizadoEm?: string | null;
+            AtualizadoPorNome?: string;
+        };
+        AtualizarConfiguracaoKeycloakRequest: {
+            client_id: string;
+            /** @description Vazio numa atualização mantém o segredo já salvo. */
+            client_secret?: string;
+            /** @description Ex: "https://keycloak.prefeitura.gov.br/realms/selene" — o JWKS é derivado automaticamente (sufixo fixo do Keycloak). */
+            issuer_url: string;
+            audience?: string;
+        };
+        /** @description Configuração da integração com o Diário Oficial — nunca inclui a chave de API em texto puro. */
+        ConfiguracaoDiarioOficial: {
+            BaseURL?: string;
+            TemChaveConfigurada?: boolean;
+            /** Format: date-time */
+            AtualizadoEm?: string | null;
+            AtualizadoPorNome?: string;
+        };
+        AtualizarConfiguracaoDiarioOficialRequest: {
+            /** @description Ex: "https://diario.example.gov.br/api" — sem barra final. */
+            base_url: string;
+            /** @description Vazia numa atualização mantém a chave já salva. */
+            api_key?: string;
+        };
+        ResultadoTesteConexao: {
+            /** @description true se o servidor respondeu (mesmo com status de erro HTTP) — false só em falha de rede. */
+            Sucesso?: boolean;
+            StatusHTTP?: number;
+            LatenciaMS?: number;
+            /** @description Preenchido só quando Sucesso=false. */
+            Erro?: string;
+            /** @description Primeiros bytes da resposta, pra debug. */
+            TrechoCorpo?: string;
         };
     };
     responses: {
@@ -1064,6 +3554,15 @@ export interface components {
         };
         /** @description Corpo/parâmetros inválidos, ou regra de negócio violada (ex: contrato encerrado). */
         RequisicaoInvalida: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErroSimples"];
+            };
+        };
+        /** @description Viola uma restrição de unicidade (ex: número de contrato duplicado, categoria de modelo já existente, gatilho já associado a outra categoria). */
+        Conflito: {
             headers: {
                 [name: string]: unknown;
             };

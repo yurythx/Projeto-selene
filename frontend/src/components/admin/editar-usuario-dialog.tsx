@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import type { Usuario, AtualizarUsuarioRequest } from "@/lib/api/client";
 
+// Dialog admin-only (ver /admin/usuarios) pra alternar is_fiscal/is_admin
+// e editar a matrícula de um usuário existente.
 export function EditarUsuarioDialog({ usuario }: { usuario: Usuario }) {
   const [open, setOpen] = useState(false);
   const [isFiscal, setIsFiscal] = useState(Boolean(usuario.IsFiscal));

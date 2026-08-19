@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { buscarContrato, ApiError } from "@/lib/api/client";
@@ -6,6 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EditarContratoDialog } from "@/components/contratos/editar-contrato-dialog";
 import { EncerrarContratoButton } from "@/components/contratos/encerrar-contrato-button";
+import { GerarNotificacaoDialog } from "@/components/contratos/gerar-notificacao-dialog";
+import { GerarMinutaAditivoDialog } from "@/components/contratos/gerar-minuta-aditivo-dialog";
+import { DesignacoesCard } from "@/components/contratos/designacoes-card";
+import { EmpenhosCard } from "@/components/contratos/empenhos-card";
 
 const TIPO_OBJETO_LABEL: Record<string, string> = {
   CONSUMO: "Consumo",
@@ -38,6 +42,14 @@ export default async function ContratoDetalhePage({
     if (erro instanceof ApiError && (erro.status === 404 || erro.status === 400)) {
       notFound();
     }
+    // 401 = sessão inválida (não "contrato não encontrado"), ver o
+    // comentário de requireApi em lib/api/client.ts — o mesmo tratamento
+    // (inclusive a rota intermediária que limpa o cookie, sem ela vira
+    // loop de redirect), só que inline aqui porque esta página já tem
+    // seu próprio catch.
+    if (erro instanceof ApiError && erro.status === 401) {
+      redirect("/api/auth/sessao-invalida");
+    }
     throw erro;
   }
 
@@ -52,12 +64,19 @@ export default async function ContratoDetalhePage({
             {contrato.TipoObjeto ? TIPO_OBJETO_LABEL[contrato.TipoObjeto] : "—"}
           </p>
         </div>
-        <Badge variant={contrato.Ativo ? "default" : "secondary"}>
-          {contrato.Ativo ? "Ativo" : "Encerrado"}
-        </Badge>
+        <div className="flex flex-col items-end gap-1">
+          <Badge variant={contrato.Ativo ? "success" : "secondary"}>
+            {contrato.Ativo ? "Ativo" : "Encerrado"}
+          </Badge>
+          {/* Camada 2: sujeito à IN SCL Nº 04/2021 (mão de obra
+              terceirizada) — ver Contrato.ExigeFiscalizacaoTerceirizacao. */}
+          {contrato.ExigeFiscalizacaoTerceirizacao && (
+            <Badge variant="info">Mão de obra terceirizada</Badge>
+          )}
+        </div>
       </div>
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Dados do contrato</CardTitle>
         </CardHeader>
@@ -90,11 +109,18 @@ export default async function ContratoDetalhePage({
       </Card>
 
       {isFiscal && (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <EditarContratoDialog contrato={contrato} />
           {contrato.Ativo && <EncerrarContratoButton contratoId={contrato.ID!} />}
+          <GerarNotificacaoDialog contratoId={contrato.ID!} />
+          <GerarMinutaAditivoDialog contratoId={contrato.ID!} />
         </div>
       )}
+
+      {/* SGF-Rondonópolis: adequação às IN SCL 01/2019 e 04/2021 — ver o
+          plano em .claude/plans/projeto-selene-rippling-kite.md. */}
+      <DesignacoesCard contratoId={contrato.ID!} isFiscal={isFiscal} />
+      <EmpenhosCard contratoId={contrato.ID!} isFiscal={isFiscal} />
     </div>
   );
 }
