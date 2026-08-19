@@ -1,9 +1,19 @@
 # syntax=docker/dockerfile:1
 
 # --- Etapa de build ---
-# Usa a mesma major/minor do go.mod para evitar builds "funciona na minha
-# máquina" por divergência de toolchain.
-FROM golang:1.25-alpine AS builder
+# Patch exato (não só a major/minor) pinado de propósito — ACHADO DE
+# REVISÃO (auditoria geral): govulncheck apontou 7 CVEs reais de stdlib
+# (net/url, net/http, crypto/tls, encoding/xml, encoding/asn1,
+# html/template, golang.org/x/net/idna via net/http) alcançáveis a
+# partir do fluxo de auth (AuthMiddlewareState.Reload) e de outros
+# caminhos deste binário, todos corrigidos no release de segurança
+# 1.25.13 (11/08/2026). A tag flutuante "golang:1.25-alpine" já
+# aponta pra 1.25.13 hoje, mas fixar o patch exato evita build
+# silenciosamente "voltando" a ficar vulnerável se o cache local do
+# Docker segurar uma camada antiga da tag flutuante. go.mod tem o
+# mesmo floor (`toolchain go1.25.13`) — os dois precisam ficar em
+# sincronia quando o Go lançar o próximo patch de segurança.
+FROM golang:1.25.13-alpine AS builder
 
 WORKDIR /src
 
