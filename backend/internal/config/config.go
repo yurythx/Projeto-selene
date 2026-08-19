@@ -82,6 +82,13 @@ type Config struct {
 	RateLimitRPS   float64
 	RateLimitBurst int
 
+	// NotificacoesIntervaloHoras é de quanto em quanto tempo o gerador de
+	// alertas do Radar roda (ver a goroutine em cmd/api/main.go e
+	// service.NotificacaoService.GerarAlertas). Roda uma vez extra no
+	// boot, sem esperar o primeiro tick — pra não deixar o sistema sem
+	// nenhum alerta gerado até N horas depois de um deploy.
+	NotificacoesIntervaloHoras int
+
 	// RedisAddr ("host:porta"), se definido, faz o rate limit usar um
 	// backend Redis compartilhado (internal/middleware.RedisRateLimiter)
 	// em vez do limiter em memória — necessário pra o limite valer entre
@@ -188,6 +195,10 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	notificacoesIntervaloHoras, err := parseIntOrDefault("NOTIFICACOES_INTERVALO_HORAS", 6)
+	if err != nil {
+		return nil, err
+	}
 
 	cfg := &Config{
 		AppEnv:     appEnv,
@@ -212,10 +223,11 @@ func Load() (*Config, error) {
 		LogLevel:  getEnvOrDefault("LOG_LEVEL", "info"),
 		LogFormat: getEnvOrDefault("LOG_FORMAT", defaultLogFormat),
 
-		RateLimitRPS:   rateLimitRPS,
-		RateLimitBurst: rateLimitBurst,
-		RedisAddr:      os.Getenv("REDIS_ADDR"),
-		RedisPassword:  os.Getenv("REDIS_PASSWORD"),
+		RateLimitRPS:               rateLimitRPS,
+		RateLimitBurst:             rateLimitBurst,
+		NotificacoesIntervaloHoras: notificacoesIntervaloHoras,
+		RedisAddr:                  os.Getenv("REDIS_ADDR"),
+		RedisPassword:              os.Getenv("REDIS_PASSWORD"),
 
 		OTELExporterEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		OTELServiceName:      getEnvOrDefault("OTEL_SERVICE_NAME", "projeto-selene-backend"),

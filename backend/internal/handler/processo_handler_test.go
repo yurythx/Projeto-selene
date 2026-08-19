@@ -53,6 +53,10 @@ func (noopNotifier) EnviarPacoteEmpresa(ctx context.Context, processo *models.Pr
 	return nil
 }
 
+func (noopNotifier) EnviarResumoAlertas(ctx context.Context, destinatario, nomeDestinatario string, itens []service.ItemRadar) error {
+	return nil
+}
+
 func TestProcessoHandler_Listar_ExigeEtapa(t *testing.T) {
 	usuario := &models.User{ID: uuid.New(), Nome: "Fiscal Teste", IsFiscal: true}
 	router := setupProcessoRouter(t, usuario)

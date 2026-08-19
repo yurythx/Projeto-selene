@@ -255,6 +255,7 @@ function resetState() {
   };
   keycloakConfig = null;
   diarioOficialConfig = null;
+  notificacoesMock = [];
 }
 
 // Configurações → Keycloak/SSO — null = nenhum admin salvou nada ainda
@@ -278,6 +279,22 @@ interface DiarioOficialConfigMock {
   AtualizadoPorNome: string;
 }
 let diarioOficialConfig: DiarioOficialConfigMock | null = null;
+
+// Notificações in-app (sino da TopBar) — vazio por padrão; populado só
+// pelo endpoint de seed /__e2e__/seed-notificacoes, pra specs que
+// precisem exercitar o sino com conteúdo de verdade (ex: screenshot de
+// verificação visual).
+interface NotificacaoMock {
+  id: string;
+  tipo: string;
+  nivel: "ATENCAO" | "CRITICO";
+  contrato_id: string;
+  numero_contrato: string;
+  mensagem: string;
+  lida: boolean;
+  criada_em: string;
+}
+let notificacoesMock: NotificacaoMock[] = [];
 
 // Mesma tabela De/Para do backend (ver
 // internal/service/fiscalizacao_service.go) — reimplementada aqui em
@@ -475,6 +492,57 @@ const server = createServer((req, res) => {
     // chamada não quebrar o carregamento do Kanban.
     if (pathname === "/api/v1/radar" && req.method === "GET") {
       return json(res, 200, []);
+    }
+
+    // Notificações in-app (sino da TopBar, ver components/notificacoes-bell.tsx)
+    // — vazio por padrão: a TopBar chama isso em TODA página autenticada,
+    // então precisa responder (200) mesmo quando nenhum spec exercita o
+    // conteúdo de verdade, senão o sino ficaria eternamente em estado de
+    // "carregando" sem quebrar nada visivelmente, mas com uma requisição
+    // 404 barulhenta no console de cada teste.
+    if (pathname === "/api/v1/notificacoes" && req.method === "GET") {
+      return json(res, 200, notificacoesMock);
+    }
+    if (pathname === "/api/v1/notificacoes/nao-lidas" && req.method === "GET") {
+      return json(res, 200, { total: notificacoesMock.filter((n) => !n.lida).length });
+    }
+    if (pathname === "/api/v1/notificacoes/marcar-todas-lidas" && req.method === "POST") {
+      notificacoesMock.forEach((n) => (n.lida = true));
+      return json(res, 204, null);
+    }
+    const marcarNotificacaoLidaMatch = pathname.match(/^\/api\/v1\/notificacoes\/([^/]+)\/marcar-lida$/);
+    if (marcarNotificacaoLidaMatch && req.method === "POST") {
+      const notificacao = notificacoesMock.find((n) => n.id === marcarNotificacaoLidaMatch[1]);
+      if (notificacao) notificacao.lida = true;
+      return json(res, 204, null);
+    }
+    // Seed pra testes que precisam do sino com conteúdo de verdade
+    // (screenshot de verificação visual, ex.).
+    if (pathname === "/__e2e__/seed-notificacoes" && req.method === "POST") {
+      const contrato = contratos[0];
+      notificacoesMock.push(
+        {
+          id: nextId("notificacao-seed"),
+          tipo: "vigencia_contrato",
+          nivel: "CRITICO",
+          contrato_id: contrato.ID,
+          numero_contrato: contrato.NumeroContrato,
+          mensagem: "Faltam 10 dias para o fim da vigência do contrato",
+          lida: false,
+          criada_em: new Date().toISOString(),
+        },
+        {
+          id: nextId("notificacao-seed"),
+          tipo: "certidao",
+          nivel: "ATENCAO",
+          contrato_id: contrato.ID,
+          numero_contrato: contrato.NumeroContrato,
+          mensagem: "CND Federal vence em 20 dias",
+          lida: false,
+          criada_em: new Date().toISOString(),
+        }
+      );
+      return json(res, 204, null);
     }
 
     if (pathname === "/api/v1/contratos" && req.method === "GET") {

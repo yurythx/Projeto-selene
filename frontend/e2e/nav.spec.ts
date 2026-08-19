@@ -89,4 +89,24 @@ test.describe("barra de navegação", () => {
     // rota ativa) não deveria estar visível de novo sem reabrir o menu.
     await expect(page.getByRole("link", { name: "Kanban" })).not.toBeInViewport();
   });
+
+  test("sino de notificações: mostra o badge, abre a lista, e marcar como lida some com o badge", async ({
+    page,
+    request,
+  }) => {
+    await request.post(`${MOCK_BACKEND_URL}/__e2e__/seed-notificacoes`);
+    await page.goto("/dashboard");
+
+    const sino = page.getByRole("button", { name: "Notificações" });
+    // "2" — as duas notificações seedadas, ambas não-lidas.
+    await expect(sino.getByText("2")).toBeVisible();
+
+    await sino.click();
+    await expect(page.getByText("Faltam 10 dias para o fim da vigência do contrato")).toBeVisible();
+    await expect(page.getByText("CND Federal vence em 20 dias")).toBeVisible();
+
+    await page.getByRole("button", { name: "Marcar todas como lidas" }).click();
+    // O badge de contagem some quando não há mais notificação não-lida.
+    await expect(sino.getByText("2")).not.toBeVisible();
+  });
 });

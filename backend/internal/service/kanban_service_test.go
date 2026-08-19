@@ -45,6 +45,10 @@ func (n *recordingNotifier) EnviarPacoteEmpresa(ctx context.Context, processo *m
 	return nil
 }
 
+func (n *recordingNotifier) EnviarResumoAlertas(ctx context.Context, destinatario, nomeDestinatario string, itens []service.ItemRadar) error {
+	return nil
+}
+
 func (n *recordingNotifier) esperarChamada(t *testing.T) {
 	t.Helper()
 	select {

@@ -16,6 +16,7 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"projeto-selene/internal/models"
@@ -39,6 +40,14 @@ const (
 // etapa já confirmada, apenas ficam registradas em log.
 type Notifier interface {
 	EnviarPacoteEmpresa(ctx context.Context, processo *models.ProcessoPagamento, anexos []models.DocumentoAnexo) error
+
+	// EnviarResumoAlertas envia UM e-mail de resumo com todos os alertas
+	// NOVOS de prazo/vencimento (Radar) — chamado por
+	// NotificacaoService.GerarAlertas uma vez por destinatário a cada
+	// execução do gerador, não um e-mail por alerta individual (evita
+	// encher a caixa de entrada de quem tem vários alertas na mesma
+	// rodada).
+	EnviarResumoAlertas(ctx context.Context, destinatario, nomeDestinatario string, itens []ItemRadar) error
 }
 
 // SMTPConfig agrupa as credenciais de envio de e-mail. Todos os campos são
@@ -77,6 +86,14 @@ func (n *logOnlyNotifier) EnviarPacoteEmpresa(ctx context.Context, processo *mod
 	return nil
 }
 
+func (n *logOnlyNotifier) EnviarResumoAlertas(ctx context.Context, destinatario, nomeDestinatario string, itens []ItemRadar) error {
+	slog.InfoContext(ctx, "[SMTP desabilitado] resumo de alertas seria enviado agora",
+		"destinatario", destinatario,
+		"quantidade_alertas", len(itens),
+	)
+	return nil
+}
+
 type smtpNotifier struct {
 	cfg SMTPConfig
 }
@@ -101,6 +118,29 @@ func (n *smtpNotifier) EnviarPacoteEmpresa(ctx context.Context, processo *models
 
 	if err := sendMailComTimeout(addr, n.cfg.Host, auth, n.cfg.From, []string{destinatario}, msg); err != nil {
 		return fmt.Errorf("service: falha ao enviar e-mail via SMTP: %w", err)
+	}
+
+	return nil
+}
+
+// EnviarResumoAlertas monta um e-mail simples (text/plain, sem anexos —
+// ao contrário de EnviarPacoteEmpresa) listando os alertas novos de
+// prazo/vencimento e envia via SMTP autenticado.
+func (n *smtpNotifier) EnviarResumoAlertas(ctx context.Context, destinatario, nomeDestinatario string, itens []ItemRadar) error {
+	if destinatario == "" {
+		return errors.New("service: destinatário sem e-mail cadastrado — não é possível enviar o resumo de alertas")
+	}
+	if len(itens) == 0 {
+		return nil
+	}
+
+	msg := montarMensagemResumoAlertas(n.cfg.From, destinatario, nomeDestinatario, itens)
+
+	auth := smtp.PlainAuth("", n.cfg.User, n.cfg.Password, n.cfg.Host)
+	addr := fmt.Sprintf("%s:%s", n.cfg.Host, n.cfg.Port)
+
+	if err := sendMailComTimeout(addr, n.cfg.Host, auth, n.cfg.From, []string{destinatario}, msg); err != nil {
+		return fmt.Errorf("service: falha ao enviar resumo de alertas via SMTP: %w", err)
 	}
 
 	return nil
@@ -173,6 +213,34 @@ func sendMailComTimeout(addr, host string, auth smtp.Auth, from string, to []str
 	}
 
 	return client.Quit()
+}
+
+// montarMensagemResumoAlertas monta um e-mail simples (headers + corpo
+// text/plain, sem multipart — não há anexo) listando os alertas novos de
+// prazo/vencimento de um usuário, um por linha.
+func montarMensagemResumoAlertas(from, destinatario, nomeDestinatario string, itens []ItemRadar) []byte {
+	saudacao := "Olá"
+	if nomeDestinatario != "" {
+		saudacao = fmt.Sprintf("Olá, %s", nomeDestinatario)
+	}
+
+	var corpo strings.Builder
+	fmt.Fprintf(&corpo, "%s,\r\n\r\nO Radar do Projeto Selene identificou %d alerta(s) novo(s) de prazo/vencimento:\r\n\r\n", saudacao, len(itens))
+	for _, item := range itens {
+		nivel := "Atenção"
+		if item.Nivel == NivelAlertaCritico {
+			nivel = "CRÍTICO"
+		}
+		fmt.Fprintf(&corpo, "- [%s] Contrato %s: %s\r\n", nivel, item.NumeroContrato, item.Mensagem)
+	}
+	corpo.WriteString("\r\nAcesse o Radar no Selene para mais detalhes.\r\n")
+
+	header := fmt.Sprintf(
+		"From: %s\r\nTo: %s\r\nSubject: Selene - %d novo(s) alerta(s) de prazo/vencimento\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=\"utf-8\"\r\n\r\n",
+		from, destinatario, len(itens),
+	)
+
+	return []byte(header + corpo.String())
 }
 
 // montarMensagem monta o e-mail completo (headers + corpo multipart/mixed)

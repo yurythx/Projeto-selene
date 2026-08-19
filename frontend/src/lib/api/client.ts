@@ -377,6 +377,26 @@ export function listarRadar(accessToken: string) {
   return apiFetch<ItemRadar[]>("/api/v1/radar", accessToken);
 }
 
+// --- Notificações in-app (prazos/vencimentos do Radar) ---
+
+export type Notificacao = components["schemas"]["Notificacao"];
+
+export function listarNotificacoes(accessToken: string) {
+  return apiFetch<Notificacao[]>("/api/v1/notificacoes", accessToken);
+}
+
+export function contarNotificacoesNaoLidas(accessToken: string) {
+  return apiFetch<{ total: number }>("/api/v1/notificacoes/nao-lidas", accessToken);
+}
+
+export function marcarNotificacaoLida(accessToken: string, id: string) {
+  return apiFetch<void>(`/api/v1/notificacoes/${id}/marcar-lida`, accessToken, { method: "POST" });
+}
+
+export function marcarTodasNotificacoesLidas(accessToken: string) {
+  return apiFetch<void>("/api/v1/notificacoes/marcar-todas-lidas", accessToken, { method: "POST" });
+}
+
 export function listarVistorias(accessToken: string, processoId: string) {
   return apiFetch<RegistroVistoria[]>(`/api/v1/processos/${processoId}/vistorias`, accessToken);
 }

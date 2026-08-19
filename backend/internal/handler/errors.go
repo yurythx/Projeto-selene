@@ -60,6 +60,7 @@ func respondError(c *gin.Context, err error) {
 		errors.Is(err, repository.ErrOcorrenciaNotFound),
 		errors.Is(err, repository.ErrModeloDocumentoNotFound),
 		errors.Is(err, repository.ErrModeloDocumentoVersaoNotFound),
+		errors.Is(err, repository.ErrNotificacaoNotFound),
 		errors.Is(err, service.ErrFornecedorNaoEncontrado):
 		c.JSON(http.StatusNotFound, gin.H{"error": "recurso não encontrado"})
 

@@ -256,6 +256,68 @@ paths:
                 items: { $ref: "#/components/schemas/ItemRadar" }
         "401": { $ref: "#/components/responses/NaoAutenticado" }
 
+  /api/v1/notificacoes:
+    get:
+      tags: [Notificações]
+      summary: Lista as notificações in-app do usuário autenticado (não-lidas primeiro)
+      description: >
+        Notificações de prazo/vencimento (Radar) entregues ao usuário —
+        geradas periodicamente por um processo em segundo plano (ver
+        NotificacaoService.GerarAlertas, backend), não por esta rota.
+        Sobre a PRÓPRIA conta, sem restrição de admin/fiscal.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Notificacao" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/notificacoes/nao-lidas:
+    get:
+      tags: [Notificações]
+      summary: Contagem de notificações não lidas do usuário autenticado
+      description: Pro badge de contagem da TopBar — mais barato que listar tudo.
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/notificacoes/marcar-todas-lidas:
+    post:
+      tags: [Notificações]
+      summary: Marca todas as notificações não lidas do usuário como lidas
+      responses:
+        "204": { description: Marcadas. }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+
+  /api/v1/notificacoes/{id}/marcar-lida:
+    post:
+      tags: [Notificações]
+      summary: Marca UMA notificação como lida
+      description: >
+        404 tanto pra ID inexistente quanto pra ID de outro usuário — as
+        duas situações são indistinguíveis de propósito (não vaza se um ID
+        de outro usuário existe).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Marcada. }
+        "400": { $ref: "#/components/responses/RequisicaoInvalida" }
+        "401": { $ref: "#/components/responses/NaoAutenticado" }
+        "404": { $ref: "#/components/responses/NaoEncontrado" }
+
   /api/v1/contratos:
     get:
       tags: [Contratos]
@@ -1655,6 +1717,20 @@ components:
         processo_id: { type: string, format: uuid, nullable: true, description: "Ausente pra alertas de tipo vigencia_contrato (o alerta é do contrato, não de um processo específico)." }
         mensagem: { type: string, example: "Faltam 25 dias para o fim da vigência do contrato" }
         dias_restantes: { type: integer, description: "Negativo quando o prazo já passou (vencido/parado há N dias)." }
+
+    Notificacao:
+      type: object
+      description: Uma notificação in-app de prazo/vencimento entregue a um usuário — ver GET /notificacoes.
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string, enum: [vigencia_contrato, certidao, processo_parado] }
+        nivel: { type: string, enum: [ATENCAO, CRITICO] }
+        contrato_id: { type: string, format: uuid }
+        numero_contrato: { type: string, example: "125/2026" }
+        processo_id: { type: string, format: uuid, nullable: true }
+        mensagem: { type: string }
+        lida: { type: boolean }
+        criada_em: { type: string, format: date-time }
 
     MinutaAditivoRequest:
       type: object

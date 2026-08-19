@@ -383,6 +383,165 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notificacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as notificações in-app do usuário autenticado (não-lidas primeiro)
+         * @description Notificações de prazo/vencimento (Radar) entregues ao usuário — geradas periodicamente por um processo em segundo plano (ver NotificacaoService.GerarAlertas, backend), não por esta rota. Sobre a PRÓPRIA conta, sem restrição de admin/fiscal.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Notificacao"][];
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificacoes/nao-lidas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Contagem de notificações não lidas do usuário autenticado
+         * @description Pro badge de contagem da TopBar — mais barato que listar tudo.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            total?: number;
+                        };
+                    };
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificacoes/marcar-todas-lidas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Marca todas as notificações não lidas do usuário como lidas */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Marcadas. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                401: components["responses"]["NaoAutenticado"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notificacoes/{id}/marcar-lida": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Marca UMA notificação como lida
+         * @description 404 tanto pra ID inexistente quanto pra ID de outro usuário — as duas situações são indistinguíveis de propósito (não vaza se um ID de outro usuário existe).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Marcada. */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["RequisicaoInvalida"];
+                401: components["responses"]["NaoAutenticado"];
+                404: components["responses"]["NaoEncontrado"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contratos": {
         parameters: {
             query?: never;
@@ -2846,6 +3005,25 @@ export interface components {
             mensagem?: string;
             /** @description Negativo quando o prazo já passou (vencido/parado há N dias). */
             dias_restantes?: number;
+        };
+        /** @description Uma notificação in-app de prazo/vencimento entregue a um usuário — ver GET /notificacoes. */
+        Notificacao: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            tipo?: "vigencia_contrato" | "certidao" | "processo_parado";
+            /** @enum {string} */
+            nivel?: "ATENCAO" | "CRITICO";
+            /** Format: uuid */
+            contrato_id?: string;
+            /** @example 125/2026 */
+            numero_contrato?: string;
+            /** Format: uuid */
+            processo_id?: string | null;
+            mensagem?: string;
+            lida?: boolean;
+            /** Format: date-time */
+            criada_em?: string;
         };
         MinutaAditivoRequest: {
             /** @enum {string} */

@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificacoesBell } from "@/components/notificacoes-bell";
 import { useSidebarContext } from "@/components/sidebar-context";
 
 /**
@@ -65,6 +66,7 @@ export function TopBar() {
 
       <div className="flex-1" />
 
+      {session?.user && <NotificacoesBell />}
       <ThemeToggle />
       {session?.user && (
         <DropdownMenu>

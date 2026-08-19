@@ -108,6 +108,7 @@ func main() {
 	modeloDocumentoVersaoRepo := repository.NewModeloDocumentoVersaoRepository(db)
 	keycloakConfigRepo := repository.NewKeycloakConfigRepository(db)
 	diarioOficialConfigRepo := repository.NewDiarioOficialConfigRepository(db)
+	notificacaoRepo := repository.NewNotificacaoRepository(db)
 
 	// Chave RSA do login local (usuário/senha) — gerada uma vez por
 	// processo, ver a "LIMITAÇÃO CONHECIDA" documentada em
@@ -141,6 +142,7 @@ func main() {
 	}
 
 	radarService := service.NewRadarService(contratoRepo, processoRepo, docRepo, logRepo)
+	notificacaoService := service.NewNotificacaoService(notificacaoRepo, radarService, contratoRepo, userRepo, notifier)
 
 	geradorDocumentosService := service.NewGeradorDocumentosService(contratoRepo, processoRepo, docEmitidoRepo, modeloDocumentoRepo, cfg.PublicURL)
 
@@ -230,6 +232,7 @@ func main() {
 	modeloDocumentoHandler := handler.NewModeloDocumentoHandler(modeloDocumentoService)
 	keycloakConfigHandler := handler.NewKeycloakConfigHandler(keycloakConfigService, cfg.InternalAPISecret)
 	diarioOficialHandler := handler.NewDiarioOficialHandler(diarioOficialService)
+	notificacaoHandler := handler.NewNotificacaoHandler(notificacaoService)
 
 	// gin.New() em vez de gin.Default(): montamos a cadeia de middlewares
 	// explicitamente (Recovery, RequestID, log estruturado, métricas,
@@ -315,6 +318,16 @@ func main() {
 		// propósito: é uma ação sobre a PRÓPRIA conta, não uma permissão
 		// de negócio.
 		api.POST("/auth/trocar-senha", authHandler.TrocarSenha)
+
+		// Notificações in-app de prazos/vencimentos (Radar) — sobre a
+		// PRÓPRIA conta, sem restrição de admin/fiscal (mesmo espírito
+		// de /auth/trocar-senha acima). Ver
+		// service.NotificacaoService.GerarAlertas pro gerador (roda numa
+		// goroutine própria, mais abaixo, não numa rota HTTP).
+		api.GET("/notificacoes", notificacaoHandler.Listar)
+		api.GET("/notificacoes/nao-lidas", notificacaoHandler.ContarNaoLidas)
+		api.POST("/notificacoes/marcar-todas-lidas", notificacaoHandler.MarcarTodasLidas)
+		api.POST("/notificacoes/:id/marcar-lida", notificacaoHandler.MarcarLida)
 
 		// Leitura: qualquer usuário autenticado pode consultar.
 		api.GET("/kanban/etapas", kanbanRefHandler.ListarEtapas)
@@ -415,6 +428,29 @@ func main() {
 			admin.GET("/diario-oficial/contratos", diarioOficialHandler.BuscarContratos)
 		}
 	}
+
+	// Gerador de alertas do Radar (prazos/vencimentos → notificações
+	// in-app + e-mail) — pedido explícito do usuário. Roda numa
+	// goroutine própria, independente do ciclo request/response HTTP,
+	// mesmo espírito de "ação assíncrona" já usado pro e-mail do pacote
+	// digital (ver KanbanService/Notifier) — mas aqui é PERIÓDICA
+	// (ticker), não disparada por uma ação de usuário. Uma execução
+	// extra no boot (antes do primeiro tick) evita ficar até
+	// NotificacoesIntervaloHoras sem nenhum alerta gerado logo depois de
+	// um deploy.
+	go func() {
+		intervalo := time.Duration(cfg.NotificacoesIntervaloHoras) * time.Hour
+		if err := notificacaoService.GerarAlertas(context.Background()); err != nil {
+			logger.Error("falha ao gerar alertas de notificação (execução inicial)", "erro", err)
+		}
+		ticker := time.NewTicker(intervalo)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := notificacaoService.GerarAlertas(context.Background()); err != nil {
+				logger.Error("falha ao gerar alertas de notificação", "erro", err)
+			}
+		}
+	}()
 
 	runWithGracefulShutdown(router, cfg.ServerPort, logger)
 }
