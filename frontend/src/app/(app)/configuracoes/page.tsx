@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileTextIcon, KeyRoundIcon, NewspaperIcon, ChevronRightIcon } from "lucide-react";
+import { FileTextIcon, KeyRoundIcon, NewspaperIcon, SearchIcon, ChevronRightIcon } from "lucide-react";
 import { auth } from "@/auth";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -16,11 +16,23 @@ const SECOES = [
     descricao: "Client ID, Client Secret e Issuer do login institucional — editável em runtime, sem reiniciar os containers.",
     Icon: KeyRoundIcon,
   },
+  // Diário Oficial em DUAS seções separadas no hub (pedido explícito do
+  // usuário) — antes era uma seção só, com a busca alcançável só por um
+  // link "Ir para a busca →" dentro da tela de configuração. Mesmo par
+  // de telas de antes (diario-oficial/page.tsx e .../buscar/page.tsx),
+  // só a entrada no hub que virou duas, cada uma indo direto pro seu
+  // destino — mesmo padrão das outras seções, que não se cruzam.
   {
     href: "/configuracoes/diario-oficial",
-    titulo: "Diário Oficial",
-    descricao: "Configure e teste a conexão com a API do Diário Oficial da cidade, e busque novos contratos publicados por nome, CPF e data.",
+    titulo: "Diário Oficial — Configuração",
+    descricao: "Cadastre e teste a conexão com a API do Diário Oficial da cidade (URL base + chave de API).",
     Icon: NewspaperIcon,
+  },
+  {
+    href: "/configuracoes/diario-oficial/buscar",
+    titulo: "Diário Oficial — Busca",
+    descricao: "Busque novos contratos publicados no Diário Oficial por nome, CPF e data.",
+    Icon: SearchIcon,
   },
 ];
 

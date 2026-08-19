@@ -15,7 +15,7 @@ test.describe("/configuracoes", () => {
     await expect(page.getByText("Keycloak / SSO")).not.toBeVisible();
   });
 
-  test("admin vê as duas seções e navega pra Keycloak/SSO", async ({ page, context }) => {
+  test("admin vê as seções do hub e navega pra Keycloak/SSO", async ({ page, context }) => {
     await injetarSessao(context, ADMIN);
     await page.goto("/configuracoes");
 
@@ -69,17 +69,24 @@ test.describe("/configuracoes", () => {
     await expect(page.getByText(/precisa ser uma URL válida/)).toBeVisible();
   });
 
-  test("Diário Oficial: configura, testa a conexão, e busca contratos por nome", async ({
+  test("Diário Oficial: configuração e busca são duas seções irmãs no hub", async ({
     page,
     context,
   }) => {
     await injetarSessao(context, ADMIN);
     await page.goto("/configuracoes");
 
-    const linkSecao = page.getByRole("link", { name: /Diário Oficial/ });
-    await expect(linkSecao).toBeVisible();
-    await linkSecao.click();
+    // Duas entradas separadas no hub — pedido explícito do usuário
+    // ("dividir em duas partes: configuração e teste, e busca"), não
+    // uma seção só com um link interno "Ir para a busca".
+    const linkConfig = page.getByRole("link", { name: "Diário Oficial — Configuração" });
+    const linkBusca = page.getByRole("link", { name: "Diário Oficial — Busca" });
+    await expect(linkConfig).toBeVisible();
+    await expect(linkBusca).toBeVisible();
+
+    await linkConfig.click();
     await expect(page).toHaveURL(/\/configuracoes\/diario-oficial$/);
+    await expect(page.getByRole("heading", { name: "Diário Oficial — Configuração" })).toBeVisible();
 
     // Sem configuração salva ainda.
     await expect(page.getByText("nenhuma ainda")).toBeVisible();
@@ -97,8 +104,12 @@ test.describe("/configuracoes", () => {
     await page.getByRole("button", { name: "Testar conexão" }).click();
     await expect(page.getByText("O servidor respondeu", { exact: true })).toBeVisible();
 
-    await page.getByRole("link", { name: "Ir para a busca →" }).click();
+    // Volta pro hub e entra pela seção de busca, não por um link interno.
+    await page.getByRole("link", { name: "← Configurações" }).click();
+    await expect(page).toHaveURL(/\/configuracoes$/);
+    await page.getByRole("link", { name: "Diário Oficial — Busca" }).click();
     await expect(page).toHaveURL(/\/configuracoes\/diario-oficial\/buscar$/);
+    await expect(page.getByRole("heading", { name: "Diário Oficial — Busca" })).toBeVisible();
 
     await page.getByLabel("Nome").fill("Fornecedora Teste Ltda");
     await page.getByRole("button", { name: "Buscar" }).click();
