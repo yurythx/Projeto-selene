@@ -6,6 +6,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  TouchSensor,
   KeyboardSensor,
   closestCenter,
   useDraggable,
@@ -269,7 +270,18 @@ export function KanbanBoard({
   const sensors = useSensors(
     // distance: 8 — um clique simples (sem mover o ponteiro) não deve
     // iniciar um arraste, senão o onClick de abrir o drawer nunca dispara.
+    // Cobre mouse/trackpad — em touch, o PointerSensor sozinho perde uma
+    // disputa constante com o scroll nativo da página (achado da revisão
+    // de mobile: o card não tem touch-action:none, então nem chegaria a
+    // competir de verdade). TouchSensor abaixo resolve isso.
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    // delay/tolerance — mesmo padrão recomendado pela própria
+    // documentação do dnd-kit pra item arrastável dentro de uma lista
+    // rolável em touch: um toque rápido continua rolando a página
+    // normalmente; segurar ~250ms sem mover mais que 8px é que inicia o
+    // arraste (igual à maioria dos apps estilo Trello no celular — tocar
+    // abre o card, segurar arrasta).
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
     useSensor(KeyboardSensor)
   );
 
