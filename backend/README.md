@@ -255,7 +255,7 @@ Adequação estrita a duas Instruções Normativas da Prefeitura de Rondonópoli
 - [x] Checklist de avanço de etapa cumulativo entre etapas (`RequisitosAcumulados`) — um documento obrigatório de uma etapa anterior, se excluído, volta a bloquear o avanço em qualquer etapa seguinte, não só a original; upload também rejeita (400) um tipo que ainda não faz parte do checklist até a etapa atual
 - [x] Configuração de Keycloak editável em runtime (Configurações → Keycloak/SSO no frontend) — `AuthMiddlewareState.Reload` troca a validação de token ativa sem reiniciar o processo; novo issuer/JWKS testado antes de persistir (fail-closed)
 - [x] Cache HTTP agressivo em documentos anexados (`ETag` do hash SHA-256 + `Cache-Control: immutable`, streaming direto do disco via `http.ServeContent`) — documentos são imutáveis por ID, então reabrir o mesmo arquivo não retransmite nada
-- [ ] `security-review` automatizado no CI (hoje depende de diff contra `origin/HEAD`, que só existe depois do primeiro push)
+- [x] `security-review` automatizado no CI — job `security-review` em `.github/workflows/ci.yml`, só em `pull_request` (a action oficial `anthropics/claude-code-security-review` faz diff contra o SHA base do PR, `fetch-depth: 2`; não depende de `origin/HEAD` já resolvido localmente como uma revisão manual antes do primeiro push dependeria). Exige o secret de repositório `CLAUDE_API_KEY` (Settings → Secrets and variables → Actions) — sem ele o job falha de propósito, em vez de pular a revisão silenciosamente.
 
 ---
 

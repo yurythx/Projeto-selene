@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
+import { assertDentroDoLimite } from "@/lib/rate-limit";
 import { novoProcessoSchema } from "@/lib/validation/bff-schemas";
 import { criarProcesso, listarProcessos, ApiError } from "@/lib/api/client";
 
@@ -43,6 +44,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const erroOrigem = assertOrigemSegura(request);
   if (erroOrigem) return erroOrigem;
+
+  const erroLimite = await assertDentroDoLimite(request);
+  if (erroLimite) return erroLimite;
 
   const session = await auth();
   const accessToken = await getAccessToken();

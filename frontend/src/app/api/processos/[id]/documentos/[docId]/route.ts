@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
+import { assertDentroDoLimite } from "@/lib/rate-limit";
 import { baixarDocumentoAnexo, excluirDocumento, ApiError } from "@/lib/api/client";
 
 /**
@@ -59,6 +60,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string; docId: string }> }) {
   const erroOrigem = assertOrigemSegura(request);
   if (erroOrigem) return erroOrigem;
+
+  const erroLimite = await assertDentroDoLimite(request);
+  if (erroLimite) return erroLimite;
 
   const session = await auth();
   const accessToken = await getAccessToken();

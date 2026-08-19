@@ -78,6 +78,7 @@ npm test
 - `src/components/kanban/*.test.tsx` — documentos, e principalmente o fluxo de checklist incompleto (422 → mostra `documentos_pendentes`).
 - `src/components/contratos/encerrar-contrato-button.test.tsx`, `src/components/admin/editar-usuario-dialog.test.tsx`.
 - `src/lib/verify-origin.test.ts` — o helper de defesa contra CSRF.
+- `src/lib/rate-limit.test.ts` — o helper de rate limit do BFF (fail-open sem Redis configurado, contagem/TTL, 429 acima do limite, fail-open em erro do Redis), com `ioredis` mockado.
 
 ### E2E (Playwright)
 
@@ -182,13 +183,13 @@ Adequação às IN SCL 01/2019 e 04/2021 (ver `backend/README.md` para a Matriz 
 - [x] Defesa em profundidade contra CSRF nos 27 Route Handlers de mutação (checagem de Origin vs Host, além do SameSite=Lax do cookie de sessão) — ver `lib/verify-origin.ts`
 - [x] Security headers: CSP com nonce via `src/proxy.ts` (por requisição); X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy via `next.config.ts` (estáticos, não dependem de nonce)
 - [x] `loading.tsx` (streaming) e `error.tsx`/`global-error.tsx` (boundary de erro amigável) nas rotas principais
-- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check) — 51 testes unitários/componente + 42 E2E (Playwright)
+- [x] Testes automatizados (client de API, formulários, fluxo de checklist incompleto, origin check, rate limit) — 56 testes unitários/componente + 42 E2E (Playwright)
 - [x] CI (lint + testes unitários + testes E2E + build + imagem Docker), mesmo pipeline do backend
 - [x] Imagem Docker multi-stage, `output: standalone`, usuário não-root
 - [x] Tipos gerados a partir do OpenAPI do backend (`openapi-typescript`) — sem duplicar contratos de API à mão
 - [x] CSP com nonce em `script-src` (`'nonce-x' 'strict-dynamic'`, sem `'unsafe-inline'`) — gerado por requisição em `src/proxy.ts`, viável porque toda página já é dinamicamente renderizada (confirmado no output de `next build`: nenhuma rota estática). `style-src` mantém `'unsafe-inline'` de propósito — nonce não cobre o atributo `style="..."` inline que o base-ui usa pra posicionar Select/Dialog/Popover; confirmado empiricamente (`e2e/csp.spec.ts`, não só por dedução) que apertar sem isso quebra esses componentes.
 - [x] Paginação de verdade na listagem de contratos (Anterior/Próxima dirigido pela URL, `components/paginacao.tsx`) e nas colunas do Kanban (botão "Carregar mais" por coluna, acumula páginas de 100 em 100 — `kanban-board.tsx`)
-- [ ] Rate limiting nos Route Handlers do BFF — hoje só existe no backend Go (que já rate-limita as rotas de escrita por usuário); redundante mas não coberto no lado do Next
+- [x] Rate limiting nos 27 Route Handlers de mutação (`lib/rate-limit.ts`) — Redis compartilhado com o backend (mesmo `REDIS_ADDR`/`REDIS_PASSWORD`, DB lógico separado), fixed-window por IP, fail-open se o Redis estiver indisponível ou não configurado (ex.: dev local sem o serviço `redis`). Redundante de propósito com o limite por usuário que já existe no backend Go — cobre o BFF mesmo se algum handler, por bug, nunca chegasse a acionar o limite de lá.
 
 ## Limitações conhecidas
 

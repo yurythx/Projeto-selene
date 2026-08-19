@@ -93,7 +93,10 @@ services:
     build: ./frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
@@ -119,6 +122,10 @@ services:
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-dev-internal-secret-troque-em-producao}
       # Rede interna do compose — nunca o host/porta publicado pro browser.
       API_URL: http://backend:8080
+      # Rate limiting nos Route Handlers de mutação (lib/rate-limit.ts) —
+      # mesmo Redis do backend acima, sem senha aqui em dev (mesma
+      # configuração do serviço redis).
+      REDIS_ADDR: redis:6379
 
 volumes:
   postgres_data:

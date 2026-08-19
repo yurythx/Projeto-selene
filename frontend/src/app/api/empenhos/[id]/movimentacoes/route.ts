@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
+import { assertDentroDoLimite } from "@/lib/rate-limit";
 import { registrarMovimentacaoSchema } from "@/lib/validation/bff-schemas";
 import { registrarMovimentacaoEmpenho, ApiError } from "@/lib/api/client";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const erroOrigem = assertOrigemSegura(request);
   if (erroOrigem) return erroOrigem;
+
+  const erroLimite = await assertDentroDoLimite(request);
+  if (erroLimite) return erroLimite;
 
   const session = await auth();
   const accessToken = await getAccessToken();

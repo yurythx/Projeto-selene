@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAccessToken } from "@/lib/auth-token";
 import { assertOrigemSegura } from "@/lib/verify-origin";
+import { assertDentroDoLimite } from "@/lib/rate-limit";
 import { categoriaModeloSchema, gatilhoModeloSchema } from "@/lib/validation/bff-schemas";
 import { criarModeloDocumento, ApiError } from "@/lib/api/client";
 
@@ -19,6 +20,9 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 export async function POST(request: Request) {
   const erroOrigem = assertOrigemSegura(request);
   if (erroOrigem) return erroOrigem;
+
+  const erroLimite = await assertDentroDoLimite(request);
+  if (erroLimite) return erroLimite;
 
   const session = await auth();
   const accessToken = await getAccessToken();

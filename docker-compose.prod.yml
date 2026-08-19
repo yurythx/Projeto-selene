@@ -111,7 +111,10 @@ services:
     build: ./frontend
     restart: always
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-3010}:3000"
     environment:
@@ -140,6 +143,13 @@ services:
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
       # Rede interna do compose — nunca o host/porta publicado pro browser.
       API_URL: http://backend:8080
+      # Rate limiting nos Route Handlers de mutação (lib/rate-limit.ts) —
+      # MESMO Redis do backend acima, DB lógico separado (1, ver o
+      # comentário no arquivo). Sem estas duas variáveis o helper cai em
+      # fail-open (sem rate limit no BFF, não sem app) — aqui em produção
+      # sempre devem estar definidas.
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
 
 volumes:
   postgres_data:
