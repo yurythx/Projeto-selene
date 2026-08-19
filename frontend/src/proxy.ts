@@ -135,5 +135,12 @@ export default await auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  // "icon" (gerado por app/icon.tsx, ver ACHADO DE REVISÃO ali) precisa
+  // estar aqui do mesmo jeito que "favicon.ico" já estava — sem essa
+  // exclusão, todo pedido do favicon do navegador batia neste middleware,
+  // era tratado como rota autenticada e vinha 307 pro /login (setando
+  // cookie de CSRF à toa a cada carregamento de página, sem nem servir o
+  // ícone). "favicon.ico" continua na lista por segurança mesmo não
+  // existindo mais o arquivo estático — não custa nada manter.
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icon).*)"],
 };

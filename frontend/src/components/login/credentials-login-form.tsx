@@ -93,7 +93,11 @@ export function CredentialsLoginForm({ callbackUrl }: { callbackUrl: string }) {
         )}
       </div>
 
-      <Button type="submit" variant="outline" className="w-full" disabled={enviando}>
+      {/* variant default (não outline) — este é o caminho PRIMÁRIO de
+          login agora, mesmo padrão visual da tela real de
+          papermoon.cloud (botão cheio pro formulário de e-mail/senha,
+          Keycloak como secundário abaixo — ver login/page.tsx). */}
+      <Button type="submit" className="w-full" disabled={enviando}>
         {enviando ? "Entrando..." : "Entrar com e-mail e senha"}
       </Button>
     </form>

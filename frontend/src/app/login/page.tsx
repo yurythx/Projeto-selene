@@ -33,16 +33,13 @@ export default async function LoginPage({
           </p>
         </div>
 
-        <form
-          action={async () => {
-            "use server";
-            await signIn("keycloak", { redirectTo: destino });
-          }}
-        >
-          <Button type="submit" className="w-full">
-            Entrar com Keycloak
-          </Button>
-        </form>
+        {/* Ordem e ênfase iguais à tela de login real de papermoon.cloud
+            (confirmado via screenshot, não só CSS): login por e-mail é o
+            caminho PRIMÁRIO (botão cheio, em cima), Keycloak é a opção
+            SECUNDÁRIA logo abaixo, separada por "ou" — antes aqui era o
+            oposto (Keycloak em cima com destaque de botão primário,
+            e-mail embaixo como outline), invertido do padrão real deles. */}
+        <CredentialsLoginForm callbackUrl={destino} />
 
         <div className="flex items-center gap-3">
           <Separator className="flex-1" />
@@ -50,7 +47,16 @@ export default async function LoginPage({
           <Separator className="flex-1" />
         </div>
 
-        <CredentialsLoginForm callbackUrl={destino} />
+        <form
+          action={async () => {
+            "use server";
+            await signIn("keycloak", { redirectTo: destino });
+          }}
+        >
+          <Button type="submit" variant="secondary" className="w-full">
+            Entrar com Keycloak
+          </Button>
+        </form>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import { Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,7 +82,12 @@ export function TopBar() {
               </Button>
             }
           />
-          <DropdownMenuContent align="end" side="bottom">
+          {/* w-64 — o resumo antigo cabia no min-w-32 padrão do menu
+              (128px), estourava nome/e-mail longos em "..." ilegível e
+              não tinha nenhuma hierarquia visual (só duas linhas de
+              texto cru). Pedido explícito do usuário: "aparece um
+              resumo muito ruim". */}
+          <DropdownMenuContent align="end" side="bottom" className="w-64">
             {/* DropdownMenuLabel (Menu.GroupLabel do base-ui) exige um
                 Menu.Group ancestral — sem ele, useMenuGroupRootContext()
                 lança "Base UI error #31: MenuGroupContext is missing" e
@@ -90,11 +96,38 @@ export function TopBar() {
                 nesta sessão — não reintroduzir. */}
             <DropdownMenuGroup>
               <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{session.user.name}</p>
-                  <p className="text-muted-foreground text-xs leading-none">
-                    {session.user.email}
-                  </p>
+                <div className="flex items-center gap-3 py-1">
+                  {/* Mesmo gradiente âmbar do selo da marca (ver
+                      sidebar.tsx) — antes o avatar aqui dentro era um
+                      círculo neutro sem nenhuma relação visual com o
+                      resto da navegação. */}
+                  <Avatar className="size-10 shrink-0">
+                    <AvatarFallback className="bg-gradient-to-br from-amber-300 to-amber-500 font-semibold text-slate-900">
+                      {iniciais}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="truncate text-sm font-semibold leading-none">
+                      {session.user.name}
+                    </p>
+                    <p className="text-muted-foreground truncate text-xs leading-none">
+                      {session.user.email}
+                    </p>
+                    {(session.user.isAdmin || session.user.isFiscal) && (
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {session.user.isAdmin && (
+                          <Badge variant="secondary" className="h-4.5 px-1.5 text-[10px]">
+                            Admin
+                          </Badge>
+                        )}
+                        {session.user.isFiscal && (
+                          <Badge variant="outline" className="h-4.5 px-1.5 text-[10px]">
+                            Fiscal
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </DropdownMenuLabel>
             </DropdownMenuGroup>
@@ -102,8 +135,15 @@ export function TopBar() {
             {/* onClick, não onSelect — @base-ui/react/menu (não Radix): a
                 prop que existe de verdade é onClick; onSelect é ignorado
                 (não é um evento nativo de clique). Mesmo bug já corrigido
-                uma vez nesta sessão — não reintroduzir. */}
-            <DropdownMenuItem onClick={() => signOut({ redirectTo: "/login" })}>
+                uma vez nesta sessão — não reintroduzir. variant
+                "destructive" (suportado nativamente por
+                ui/dropdown-menu.tsx) deixa "Sair" com o mesmo peso visual
+                de uma ação irreversível, em vez de um item neutro igual
+                a qualquer outro. */}
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => signOut({ redirectTo: "/login" })}
+            >
               <LogOut />
               Sair
             </DropdownMenuItem>
